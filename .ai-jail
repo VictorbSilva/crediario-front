@@ -1,0 +1,16 @@
+# Configuração do ai-jail para o crediario-front
+
+command = [
+    "claude"
+]
+
+bind_rw = [
+    ".",
+    "~/.claude",
+    "~/.claude.json"
+]
+
+bind_ro = [
+    "/etc/resolv.conf",
+    "~/.config/opencode"
+]
