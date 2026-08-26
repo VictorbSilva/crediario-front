@@ -7,7 +7,6 @@ export type NavItem = {
   icon: LucideIcon
 }
 
-/** Fonte única de navegação — consumida pela Sidebar e pela BottomNav. */
 export const navItems: NavItem[] = [
   { to: '/clientes', label: 'Clientes', icon: Users },
   { to: '/rotas', label: 'Rotas', icon: RouteIcon },
