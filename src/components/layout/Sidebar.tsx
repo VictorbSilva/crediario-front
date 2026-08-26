@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { BrandMark } from '@/components/BrandMark'
 import { navItems } from './navItems'
+import { SignOutButton } from './SignOutButton'
 
 export function Sidebar() {
   return (
@@ -18,7 +19,7 @@ export function Sidebar() {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-brand-50 text-brand-700'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -30,6 +31,10 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      <div className="mt-auto flex flex-col gap-2 border-t border-slate-200 p-3">
+        <SignOutButton className="w-full" />
+      </div>
     </aside>
   )
 }
