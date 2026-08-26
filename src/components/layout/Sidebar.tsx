@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { BrandMark } from '@/components/BrandMark'
 import { navItems } from './navItems'
 import { SignOutButton } from './SignOutButton'
+import { SyncBadge } from './SyncBadge'
 
 export function Sidebar() {
   return (
@@ -33,6 +34,7 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-slate-200 p-3">
+        <SyncBadge estado="nao-configurado" className="w-full" />
         <SignOutButton className="w-full" />
       </div>
     </aside>
