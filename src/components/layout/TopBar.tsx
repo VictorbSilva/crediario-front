@@ -1,5 +1,6 @@
 import { BrandMark } from '@/components/BrandMark'
 import { SignOutButton } from './SignOutButton'
+import { SyncBadge } from './SyncBadge'
 
 export function TopBar() {
   return (
@@ -8,7 +9,8 @@ export function TopBar() {
       <span className="text-base font-semibold tracking-tight text-slate-900">
         Crediário
       </span>
-      <SignOutButton className="ml-auto" />
+      <SyncBadge estado="nao-configurado" className="ml-auto max-w-[9rem]" />
+      <SignOutButton />
     </header>
   )
 }
