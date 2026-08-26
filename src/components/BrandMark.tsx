@@ -2,10 +2,6 @@ type BrandMarkProps = {
   className?: string
 }
 
-/**
- * Marca da loja: silhueta de casa com um "H" formado pelas paredes internas.
- * Desenhada em código (stroke = currentColor) para não depender de assets.
- */
 export function BrandMark({ className }: BrandMarkProps) {
   return (
     <svg
