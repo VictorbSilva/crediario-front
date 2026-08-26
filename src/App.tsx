@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
+import { PwaPrompt } from '@/components/pwa/PwaPrompt'
 import { ClientesPage } from '@/pages/ClientesPage'
 import { FinanceiroPage } from '@/pages/FinanceiroPage'
 import { RotasPage } from '@/pages/RotasPage'
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/clientes" replace />} />
         </Route>
       </Routes>
+      <PwaPrompt />
     </BrowserRouter>
   )
 }
