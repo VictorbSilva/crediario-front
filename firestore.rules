@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function ehDono() {
+      return autenticado() && request.auth.uid == 'B3HGx0RggpXWzy400742432aLw72';
+    }
+
+    function pertenceAEmpresa(businessId) {
+      return autenticado() && request.auth.token.businessId == businessId;
+    }
+
+    function podeAcessar(businessId) {
+      return ehDono() || pertenceAEmpresa(businessId);
+    }
+
+    match /businesses/{businessId} {
+      allow read: if podeAcessar(businessId);
+      allow write: if ehDono();
+
+      match /{documento=**} {
+        allow read, write: if podeAcessar(businessId);
+      }
+    }
+  }
+}
