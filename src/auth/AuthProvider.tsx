@@ -80,8 +80,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const token = await u.getIdTokenResult()
           const claim = token.claims.businessId
-          bid = typeof claim === 'string' && claim ? claim : businessIdPadrao()
-          salvarBusinessId(u.uid, bid)
+          const doClaim = typeof claim === 'string' && claim ? claim : null
+
+          // Só o claim é verdade sobre este usuário. A env é fallback de
+          // bootstrap: cachear o valor dela como "último businessId conhecido"
+          // faria o catch abaixo devolver a empresa errada para outro usuário.
+          // Sem claim, a entrada é apagada — senão um claim revogado sobrevive
+          // no cache e volta a valer no primeiro erro de rede.
+          salvarBusinessId(u.uid, doClaim)
+          bid = doClaim ?? businessIdPadrao()
         } catch {
           bid = lerBusinessIdSalvo(u.uid) ?? businessIdPadrao()
         }
