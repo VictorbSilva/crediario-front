@@ -10,6 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Service worker de desenvolvimento do vite-plugin-pwa (criado se devOptions
+# for ligado no vite.config.ts)
+dev-dist
 *.local
 
 # Variáveis de ambiente (credenciais do Firebase)
