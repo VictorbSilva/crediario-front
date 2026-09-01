@@ -20,6 +20,28 @@ const formatadorSemCentavos = new Intl.NumberFormat('pt-BR', {
   roundingMode: 'halfEven',
 })
 
+/** Convenção de tabela para "não há valor aqui" — travessão, não "R$ NaN". */
+const SEM_VALOR = '—'
+
+/**
+ * `NaN` e `Infinity` são do tipo `number`, e o `Intl` formata os dois sem
+ * reclamar: hoje a tela mostraria "R$ NaN" ou "R$ ∞" para o cobrador em campo.
+ * Eles aparecem quando uma conta encosta em campo ausente (`valor - undefined`,
+ * comum ao ler do cache um documento gravado por versão anterior do app) ou
+ * divide por zero (`total / parcelas` com `parcelas` ainda vazio).
+ *
+ * Devolver o travessão evita a tela quebrada sem derrubar o app — que em um app
+ * offline-first é o pior desfecho possível. Mas esconder sem registrar faz o
+ * defeito passar por "campo não preenchido" e sobreviver meses, então o valor
+ * também vai para o console. Quando a coleção `erros` existir (etapa 6), é este
+ * o ponto que passa a gravar nela.
+ */
+function conferirFinito(centavos: number): boolean {
+  if (Number.isFinite(centavos)) return true
+  console.error('dinheiro: valor não finito chegou à formatação:', centavos)
+  return false
+}
+
 /**
  * `centavos` deve ser inteiro. Um valor fracionário não é rejeitado aqui, mas
  * significa que alguma conta a montante multiplicou dinheiro sem arredondar
@@ -28,10 +50,12 @@ const formatadorSemCentavos = new Intl.NumberFormat('pt-BR', {
  * determinística enquanto essa regra não existe.
  */
 export function formatarCentavos(centavos: number): string {
+  if (!conferirFinito(centavos)) return SEM_VALOR
   return formatadorCompleto.format(centavos / 100)
 }
 
 export function formatarCentavosCurto(centavos: number): string {
+  if (!conferirFinito(centavos)) return SEM_VALOR
   return centavos % 100 === 0
     ? formatadorSemCentavos.format(centavos / 100)
     : formatadorCompleto.format(centavos / 100)
