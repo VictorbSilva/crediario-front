@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   formatarCentavos,
   formatarCentavosCurto,
@@ -58,6 +58,24 @@ describe('formatarCentavosCurto', () => {
 
   it('mantém o separador de milhar', () => {
     expect(semNbsp(formatarCentavosCurto(1234500))).toBe('R$ 12.345')
+  })
+})
+
+describe('valores não finitos', () => {
+  it('devolve travessão e registra o erro, em vez de exibir "R$ NaN"', () => {
+    // NaN e Infinity são `number` e o Intl formata os dois sem reclamar. O
+    // travessão evita a tela quebrada; o console.error evita que o defeito
+    // passe por "campo não preenchido" e sobreviva meses sem ninguém ver.
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect(formatarCentavos(NaN)).toBe('—')
+      expect(formatarCentavos(Infinity)).toBe('—')
+      expect(formatarCentavos(-Infinity)).toBe('—')
+      expect(formatarCentavosCurto(NaN)).toBe('—')
+      expect(erro).toHaveBeenCalledTimes(4)
+    } finally {
+      erro.mockRestore()
+    }
   })
 })
 
