@@ -30,6 +30,17 @@ describe('formatarCentavos', () => {
   it('formata valor negativo', () => {
     expect(semNbsp(formatarCentavos(-2550))).toBe('-R$ 25,50')
   })
+
+  it('arredonda o empate para o centavo par', () => {
+    // Meio-par: o empate vai para o centavo par em vez de sempre para cima.
+    // Chegar aqui com valor fracionário já é sintoma de conta feita sem
+    // arredondar antes de gravar; o que este teste garante é que, quando isso
+    // acontecer, a tela seja determinística e o erro não se acumule sempre na
+    // mesma direção.
+    expect(semNbsp(formatarCentavos(100.5))).toBe('R$ 1,00')
+    expect(semNbsp(formatarCentavos(101.5))).toBe('R$ 1,02')
+    expect(semNbsp(formatarCentavos(102.5))).toBe('R$ 1,02')
+  })
 })
 
 describe('formatarCentavosCurto', () => {

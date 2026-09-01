@@ -1,6 +1,15 @@
+// `roundingMode` meio-par: quando o valor cai exatamente no meio, o empate vai
+// para o centavo par em vez de sempre para cima. O padrão do Intl é arredondar
+// o empate para longe do zero, o que numa coluna longa empurra o total sempre
+// na mesma direção; com meio-par os empates se cancelam entre si.
+//
+// Isto é rede de segurança de exibição, não a regra de arredondamento do
+// negócio: um valor fracionário aqui já é sintoma de conta feita sem arredondar
+// antes de gravar. Ver o comentário em `formatarCentavos`.
 const formatadorCompleto = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
+  roundingMode: 'halfEven',
 })
 
 const formatadorSemCentavos = new Intl.NumberFormat('pt-BR', {
@@ -8,8 +17,16 @@ const formatadorSemCentavos = new Intl.NumberFormat('pt-BR', {
   currency: 'BRL',
   minimumFractionDigits: 0,
   maximumFractionDigits: 0,
+  roundingMode: 'halfEven',
 })
 
+/**
+ * `centavos` deve ser inteiro. Um valor fracionário não é rejeitado aqui, mas
+ * significa que alguma conta a montante multiplicou dinheiro sem arredondar
+ * antes de gravar — o arredondamento correto pertence ao cálculo, não à
+ * exibição. O meio-par dos formatadores apenas garante que a tela fique
+ * determinística enquanto essa regra não existe.
+ */
 export function formatarCentavos(centavos: number): string {
   return formatadorCompleto.format(centavos / 100)
 }
