@@ -105,6 +105,18 @@ describe('parseReaisParaCentavos', () => {
     expect(parseReaisParaCentavos('R$')).toBeNull()
   })
 
+  it('devolve null para pontuação sem nenhum dígito', () => {
+    // Regressão: antes da guarda de dígito, "," e "R$," devolviam 0. Como o
+    // valor pago é campo digitado, uma vírgula solta virava um pagamento de
+    // R$ 0,00 aceito em silêncio — pior que recusar o campo, porque some.
+    expect(parseReaisParaCentavos(',')).toBeNull()
+    expect(parseReaisParaCentavos('R$,')).toBeNull()
+    expect(parseReaisParaCentavos('.')).toBeNull()
+    expect(parseReaisParaCentavos(',,')).toBeNull()
+    expect(parseReaisParaCentavos('.,')).toBeNull()
+    expect(parseReaisParaCentavos('-')).toBeNull()
+  })
+
   it('devolve null para entrada inválida', () => {
     expect(parseReaisParaCentavos('abc')).toBeNull()
     expect(parseReaisParaCentavos('12,34abc')).toBeNull()

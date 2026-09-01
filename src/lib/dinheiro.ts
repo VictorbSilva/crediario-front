@@ -43,7 +43,11 @@ function milharValido(inteiros: string, separador: string): boolean {
  */
 export function parseReaisParaCentavos(entrada: string): number | null {
   const limpo = entrada.replace(/\s/g, '').replace(/r\$/gi, '')
-  if (!limpo) return null
+  // Sem ao menos um dígito não há valor nenhum. Além do campo vazio, isso pega
+  // "," e "R$,", que senão cairiam no ramo da vírgula decimal com inteiros e
+  // centavos ambos vazios, virariam "0" e "00" mais abaixo e devolveriam 0 —
+  // uma vírgula solta registraria um pagamento de R$ 0,00 sem nenhum aviso.
+  if (!/\d/.test(limpo)) return null
 
   const ultimoPonto = limpo.lastIndexOf('.')
   const ultimaVirgula = limpo.lastIndexOf(',')
