@@ -1,3 +1,20 @@
+// Dados falsos para as três telas enquanto nada persiste. Este arquivo e o
+// `DemoBanner` saem juntos, no commit em que os dados reais entrarem.
+//
+// ⚠️ NÃO usar este arquivo como referência do modelo de domínio. Ele foi escrito
+// em 08/08/2026 e duas decisões posteriores o contradizem:
+//
+//   R2 (26/08) — rota é indexada por DIA DO MÊS (1–31), com seleção estilo
+//   calendário recorrente. Aqui a rota é nomeada por bairro ("Rota Centro") e
+//   `RotaDemo` não tem campo de dia nenhum. A tela de Rotas herdou o modelo
+//   errado e será reescrita junto com a integração do Firestore.
+//
+//   R4 + decisão de 01/09 — o cliente tem `numero` de cadastro imutável, digitado
+//   pelo dono a partir da lista de papel dele. `ClienteDemo` não tem `numero`.
+//
+// O modelo válido está em `firestore.rules` (campos de `clients`) e na seção 6 do
+// documento de progresso.
+
 export type SituacaoCliente = 'em-dia' | 'atrasado' | 'sem-rota'
 
 export type ClienteDemo = {

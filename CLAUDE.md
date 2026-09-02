@@ -55,7 +55,7 @@ Vitest has its own `vitest.config.ts`, separate from `vite.config.ts`, so the te
 - Data/Auth: Firebase — Firestore with offline persistence + Firebase Auth.
 - Key libraries: firebase, @dnd-kit/core (drag-and-drop route assignment/reordering), vite-plugin-pwa.
 - Hosting/CI: Vercel with Git integration (automatic deploys).
-- One-off data load: a local Python/Pandas script imports the initial ~700 clients from an Excel spreadsheet directly into Firestore (runs locally, not part of the app).
+- No bulk data load. The owner declined importing the spreadsheet (decided 01/09/2026): the ~700 existing clients are entered by hand through the app, one at a time, as visits happen. Two consequences drive prioritisation — the client-creation form is the adoption path for the whole product, and the export feature is the only backup of data that will exist nowhere else.
 
 ## Domain Notes
 
