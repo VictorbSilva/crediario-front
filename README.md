@@ -38,8 +38,10 @@ explicando o que fazer.
 
 Esses valores **não são segredo** — a config web do Firebase vai no bundle e é pública por
 design. Quem protege os dados são as regras de segurança do Firestore. O `.env.local` fica
-fora do Git por higiene, não por sigilo. A credencial que **é** segredo é a service account
-do script de importação em Python, que nunca entra no repositório.
+fora do Git por higiene, não por sigilo. **Não existe credencial administrativa neste
+projeto**: não há script de importação nem service account, e os clientes são cadastrados
+pelo próprio app. Isso torna `firestore.rules` a validação única e completa — não há
+caminho de escrita que passe por fora dela.
 
 ### Persistência e offline
 

@@ -360,8 +360,17 @@ Consequência prática: **nada impede dois clientes com o mesmo número.** É ex
 buraco que a decisão de alocação do `numero` (etapa 3) precisa fechar, e é por isso que
 `max(numero) + 1` está descartado.
 
-Enquanto a decisão não vem, o dono do invariante é o script de importação — que preserva
-os números da planilha e não inventa nenhum.
+**Dono decidido em 01/09/2026:** o caminho de escrita do app. Como não haverá importação
+— o dono digita o número que o cliente já tem na lista de papel dele —, o formulário de
+cadastro consulta os clientes que o listener já mantém em cache e **recusa um número que
+já exista**, com mensagem explícita. É verificação local, não garantia distribuída; mas com
+um usuário num dispositivo é o que dá para ter, e num cadastro manual de centenas de
+registros o erro de digitação é o caso comum, não a borda.
+
+> ⚠️ **A checagem tem que ignorar `arquivado: true`.** Corrigir número digitado errado é
+> arquivar e recadastrar (ver o comentário do `allow delete: if false`). Se o registro
+> arquivado continuar ocupando o número, um erro de digitação **queima aquele número para
+> sempre** — e o cliente real que o tem nunca mais consegue ser cadastrado.
 
 ## 2. `nomeBusca` ser de fato `normalizar(nome)` — 🟡 dono frágil
 
@@ -371,7 +380,7 @@ decomposição NFD nem remoção de diacríticos. `lower()` existe; tirar acento
 
 Dono: o caminho de escrita da aplicação, que deve derivar `nomeBusca` de `nome` num
 lugar só. **Todo caminho de escrita alternativo quebra isso em silêncio** — edição pelo
-console do Firebase, script Python, correção manual. O sintoma não é erro: é o cliente
+console do Firebase, correção manual, qualquer ferramenta administrativa futura. O sintoma não é erro: é o cliente
 sumir da busca.
 
 ## 3. `atualizadoPor` ser mesmo o dispositivo que escreveu — 🟢 aceito
@@ -397,22 +406,26 @@ Dono: a função pura que gera o carnê (`gerarParcelas()`, etapa 5) e os testes
 Registrar aqui porque isso significa que **o teste unitário da função é a única barreira**
 entre um carnê torto e o Firestore — não há segunda linha de defesa.
 
-## 5. O Admin SDK ignora as regras por completo — 🔴 estrutural
+## 5. O Admin SDK ignora as regras por completo — 🟢 sem objeto hoje
 
-O script de importação (etapa 2) usa service account. Service account **bypassa as
-Security Rules**: nenhuma validação deste arquivo se aplica a ele.
+Registrado como princípio, não como risco corrente. Service account **bypassa as Security
+Rules**: nenhuma validação deste arquivo se aplica a ela.
 
-Consequência: toda validação que importa precisa existir **duas vezes** — uma nas regras,
-para o aplicativo, e outra em Python, para a importação. Um schema validado só nas regras
-é um schema que os 700 registros iniciais nunca viram.
+Isto valia para o script de importação em Python, **que deixou de existir em 01/09/2026** —
+o dono preferiu não mexer na planilha e cadastrar à mão pelo app. Hoje não há nenhum caminho
+de escrita com service account, e por isso `firestore.rules` é a validação única e completa
+do projeto.
+
+Volta a valer no instante em que qualquer ferramenta administrativa for escrita. Se isso
+acontecer, toda validação que importa passa a precisar existir **duas vezes**.
 
 ## 6. Dígito verificador de CPF — 🟢 aceito
 
 Regras não têm laço nem aritmética suficiente para calcular dígito verificador. A regra
 limita tamanho de `cpfDigits` e nada mais.
 
-Dono: o formulário, e o relatório da importação (etapa 2), que deve listar os CPFs
-malformados **para o dono decidir** o que fazer — não para o script consertar sozinho.
+Dono: o formulário. Sem importação, todo CPF entra digitado pelo dono, um a um — o que
+faz da validação no formulário a única que existe.
 
 ## 7. O que É exprimível e ainda não foi feito
 
@@ -420,10 +433,10 @@ Para não confundir "impossível" com "ainda não":
 
 - **Formato por regex.** `string.matches()` existe. `telefoneDigits` só com dígitos e
   `cpfDigits` com exatamente 11 dígitos são perfeitamente exprimíveis. Ficaram de fora
-  de propósito: o relatório da importação (etapa 2) é que vai dizer quais formatos os
-  700 registros reais têm. Apertar a regra antes disso é recusar dado verdadeiro.
-- **Faixa de `numero`.** Hoje só `> 0`. Um teto (`<= 10000`) é trivial e vale quando a
-  planilha disser qual é o N real.
+  de propósito: sem importação, os formatos reais aparecem aos poucos, conforme o dono
+  cadastra. Apertar a regra antes de ver dado verdadeiro é recusar dado verdadeiro.
+- **Faixa de `numero`.** Hoje só `> 0`. Um teto (`<= 10000`) é trivial e vale a partir do
+  momento em que o dono disser até que número a lista dele vai.
 
 ## 8. O curinga `{documento=**}` anulava tudo isto
 
