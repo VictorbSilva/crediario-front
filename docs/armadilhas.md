@@ -390,7 +390,29 @@ lugar só. **Todo caminho de escrita alternativo quebra isso em silêncio** — 
 console do Firebase, correção manual, qualquer ferramenta administrativa futura. O sintoma não é erro: é o cliente
 sumir da busca.
 
-## 3. `atualizadoPor` ser mesmo o dispositivo que escreveu — 🟢 aceito
+## 3. `criadoEm` significa "quando sincronizou", não "quando cadastrei" — 🟡 a decidir na etapa 3
+
+A regra exige `dados().criadoEm == request.time`, e `request.time` é o relógio do
+**servidor** no instante em que a escrita é processada. Isso é deliberado: impede um
+aparelho com relógio errado — ou mexido de propósito — de antedatar um registro.
+
+O preço aparece na fila offline. O carimbo nasce quando a fila sobe, não quando foi
+enfileirada:
+
+> O dono cadastra a Dona Maria numa **terça**, na casa dela, sem sinal. O celular só volta
+> a ter internet no **sábado**. `criadoEm` fica sábado. Não há aviso, e a diferença não é
+> recuperável depois.
+
+Como o cadastro das ~700 linhas do caderno vai acontecer durante visitas, possivelmente
+sem sinal, esse desvio não é borda: é o caso comum. Consequência: **`criadoEm` não
+responde "quantos clientes entraram em setembro"**. Se essa pergunta importar, precisa de
+um campo separado escrito pelo dispositivo — e aí volta o problema do relógio, porque
+regra nenhuma consegue validá-lo (mesma natureza da armadilha #4).
+
+Nada a fazer hoje. Fica registrado para ser decidido de olhos abertos na etapa 3, e não
+descoberto meses depois num relatório.
+
+## 4. `atualizadoPor` ser mesmo o dispositivo que escreveu — 🟢 aceito
 
 É uma string autodeclarada. Regra nenhuma verifica a origem dela.
 
@@ -399,7 +421,7 @@ tornar diagnosticável a perda de campo sob last-write-wins. **Nunca usar `atual
 numa condição de regra** — seria autorização baseada em algo que o próprio cliente
 escreve.
 
-## 4. Coerência entre documentos — 🔴 vai doer nas etapas 4 e 5
+## 5. Coerência entre documentos — 🔴 vai doer nas etapas 4 e 5
 
 Regras avaliam **cada escrita isoladamente**, inclusive dentro de um `writeBatch`. Não
 existe "valide o lote inteiro". Portanto nada disto é exprimível:
@@ -413,7 +435,7 @@ Dono: a função pura que gera o carnê (`gerarParcelas()`, etapa 5) e os testes
 Registrar aqui porque isso significa que **o teste unitário da função é a única barreira**
 entre um carnê torto e o Firestore — não há segunda linha de defesa.
 
-## 5. O Admin SDK ignora as regras por completo — 🟢 sem objeto hoje
+## 6. O Admin SDK ignora as regras por completo — 🟢 sem objeto hoje
 
 Registrado como princípio, não como risco corrente. Service account **bypassa as Security
 Rules**: nenhuma validação deste arquivo se aplica a ela.
@@ -426,7 +448,7 @@ do projeto.
 Volta a valer no instante em que qualquer ferramenta administrativa for escrita. Se isso
 acontecer, toda validação que importa passa a precisar existir **duas vezes**.
 
-## 6. Dígito verificador de CPF — 🟢 aceito
+## 7. Dígito verificador de CPF — 🟢 aceito
 
 Regras não têm laço nem aritmética suficiente para calcular dígito verificador. A regra
 limita tamanho de `cpfDigits` e nada mais.
@@ -434,7 +456,7 @@ limita tamanho de `cpfDigits` e nada mais.
 Dono: o formulário. Sem importação, todo CPF entra digitado pelo dono, um a um — o que
 faz da validação no formulário a única que existe.
 
-## 7. O que É exprimível e ainda não foi feito
+## 8. O que É exprimível e ainda não foi feito
 
 Para não confundir "impossível" com "ainda não":
 
@@ -445,7 +467,7 @@ Para não confundir "impossível" com "ainda não":
 - **Faixa de `numero`.** Hoje só `> 0`. Um teto (`<= 10000`) é trivial e vale a partir do
   momento em que o dono disser até que número a lista dele vai.
 
-## 8. O curinga `{documento=**}` anulava tudo isto
+## 9. O curinga `{documento=**}` anulava tudo isto
 
 Até 28/08/2026 o `firestore.rules` terminava com:
 
