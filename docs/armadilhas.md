@@ -360,12 +360,19 @@ Consequência prática: **nada impede dois clientes com o mesmo número.** É ex
 buraco que a decisão de alocação do `numero` (etapa 3) precisa fechar, e é por isso que
 `max(numero) + 1` está descartado.
 
-**Dono decidido em 01/09/2026:** o caminho de escrita do app. Como não haverá importação
-— o dono digita o número que o cliente já tem na lista de papel dele —, o formulário de
-cadastro consulta os clientes que o listener já mantém em cache e **recusa um número que
-já exista**, com mensagem explícita. É verificação local, não garantia distribuída; mas com
-um usuário num dispositivo é o que dá para ter, e num cadastro manual de centenas de
-registros o erro de digitação é o caso comum, não a borda.
+**Dono decidido em 01/09/2026, confirmado pelo dono do negócio em 03/09/2026:** o caminho
+de escrita do app. O cliente cadastrado fica com **o mesmo número que já tem no papel**, e
+quem digita é o dono — **o app nunca aloca número**, nem para cliente que nunca esteve na
+lista (ele continua a sequência de cabeça). Por isso `max(numero) + 1`, contador
+transacionado e reserva de bloco estão todos descartados, e não existe "maior número do
+caderno" que o app precise conhecer.
+
+Sendo assim, o formulário de cadastro consulta os clientes que o listener já mantém em
+cache e **recusa um número que já exista**, com mensagem explícita. É verificação local,
+não garantia distribuída; mas com um usuário num dispositivo é o que dá para ter, e num
+cadastro manual de centenas de registros o erro de digitação é o caso comum, não a borda.
+Como nada mais guarda esse invariante, a checagem é **implementação obrigatória da etapa
+3**, não melhoria.
 
 > ⚠️ **A checagem tem que ignorar `arquivado: true`.** Corrigir número digitado errado é
 > arquivar e recadastrar (ver o comentário do `allow delete: if false`). Se o registro
