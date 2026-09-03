@@ -334,3 +334,135 @@ O `<SyncBadge />` na Sidebar e na TopBar está fixo em `estado="nao-configurado"
 propósito. Ele já aceita todos os estados exigidos (`sincronizado`, `sincronizando`,
 `pendente`, `offline`, `erro`), mas ligá-lo a um estado otimista antes de existir
 Firestore mostraria "Sincronizado" para dados que nunca saíram do aparelho.
+
+---
+
+# Invariantes sem dono — o que as Security Rules não expressam (28/08/2026)
+
+Escrito na etapa 1, junto com a primeira regra por-coleção (`clients`).
+
+Este projeto não tem Cloud Functions e não vai ter — o plano Spark não as inclui.
+Isso faz do `firestore.rules` a **única** validação de schema que os dados vão ter.
+As regras cobrem bastante: tipo de campo, obrigatoriedade, tamanho, lista fechada de
+campos, imutabilidade e carimbo de tempo do servidor. O que segue é o que elas **não**
+alcançam. Cada item aqui é um invariante que, se ninguém assumir explicitamente, não
+tem dono nenhum.
+
+## 1. Unicidade de `numero` — 🔴 sem dono hoje
+
+Uma regra enxerga o documento sendo escrito e nada mais. Para saber se já existe outro
+cliente com `numero: 7` seria preciso varrer a coleção, e regra não varre. `get()` lê um
+documento de caminho conhecido, custa uma leitura faturada, e não resolve o caso real:
+**dois dispositivos offline podem criar o número 7 ao mesmo tempo e ambos passam**, cada
+um contra um cache que não conhece o outro.
+
+Consequência prática: **nada impede dois clientes com o mesmo número.** É exatamente o
+buraco que a decisão de alocação do `numero` (etapa 3) precisa fechar, e é por isso que
+`max(numero) + 1` está descartado.
+
+**Dono decidido em 01/09/2026, confirmado pelo dono do negócio em 03/09/2026:** o caminho
+de escrita do app. O cliente cadastrado fica com **o mesmo número que já tem no papel**, e
+quem digita é o dono — **o app nunca aloca número**, nem para cliente que nunca esteve na
+lista (ele continua a sequência de cabeça). Por isso `max(numero) + 1`, contador
+transacionado e reserva de bloco estão todos descartados, e não existe "maior número do
+caderno" que o app precise conhecer.
+
+Sendo assim, o formulário de cadastro consulta os clientes que o listener já mantém em
+cache e **recusa um número que já exista**, com mensagem explícita. É verificação local,
+não garantia distribuída; mas com um usuário num dispositivo é o que dá para ter, e num
+cadastro manual de centenas de registros o erro de digitação é o caso comum, não a borda.
+Como nada mais guarda esse invariante, a checagem é **implementação obrigatória da etapa
+3**, não melhoria.
+
+> ⚠️ **A checagem tem que ignorar `arquivado: true`.** Corrigir número digitado errado é
+> arquivar e recadastrar (ver o comentário do `allow delete: if false`). Se o registro
+> arquivado continuar ocupando o número, um erro de digitação **queima aquele número para
+> sempre** — e o cliente real que o tem nunca mais consegue ser cadastrado.
+
+## 2. `nomeBusca` ser de fato `normalizar(nome)` — 🟡 dono frágil
+
+A regra verifica que `nomeBusca` existe, é string e tem tamanho plausível. Ela **não tem
+como** verificar que é a normalização de `nome`: a linguagem das regras não faz
+decomposição NFD nem remoção de diacríticos. `lower()` existe; tirar acento, não.
+
+Dono: o caminho de escrita da aplicação, que deve derivar `nomeBusca` de `nome` num
+lugar só. **Todo caminho de escrita alternativo quebra isso em silêncio** — edição pelo
+console do Firebase, correção manual, qualquer ferramenta administrativa futura. O sintoma não é erro: é o cliente
+sumir da busca.
+
+## 3. `atualizadoPor` ser mesmo o dispositivo que escreveu — 🟢 aceito
+
+É uma string autodeclarada. Regra nenhuma verifica a origem dela.
+
+Isso é aceitável **porque o campo é diagnóstico, não autorização**: ele existe para
+tornar diagnosticável a perda de campo sob last-write-wins. **Nunca usar `atualizadoPor`
+numa condição de regra** — seria autorização baseada em algo que o próprio cliente
+escreve.
+
+## 4. Coerência entre documentos — 🔴 vai doer nas etapas 4 e 5
+
+Regras avaliam **cada escrita isoladamente**, inclusive dentro de um `writeBatch`. Não
+existe "valide o lote inteiro". Portanto nada disto é exprimível:
+
+- a soma das parcelas ser igual ao valor da venda;
+- o número de parcelas gravadas bater com `numeroParcelas`;
+- `emAbertoCentavos` do cliente bater com as vendas dele;
+- uma parcela pertencer a uma venda que existe.
+
+Dono: a função pura que gera o carnê (`gerarParcelas()`, etapa 5) e os testes dela.
+Registrar aqui porque isso significa que **o teste unitário da função é a única barreira**
+entre um carnê torto e o Firestore — não há segunda linha de defesa.
+
+## 5. O Admin SDK ignora as regras por completo — 🟢 sem objeto hoje
+
+Registrado como princípio, não como risco corrente. Service account **bypassa as Security
+Rules**: nenhuma validação deste arquivo se aplica a ela.
+
+Isto valia para o script de importação em Python, **que deixou de existir em 01/09/2026** —
+o dono preferiu não mexer na planilha e cadastrar à mão pelo app. Hoje não há nenhum caminho
+de escrita com service account, e por isso `firestore.rules` é a validação única e completa
+do projeto.
+
+Volta a valer no instante em que qualquer ferramenta administrativa for escrita. Se isso
+acontecer, toda validação que importa passa a precisar existir **duas vezes**.
+
+## 6. Dígito verificador de CPF — 🟢 aceito
+
+Regras não têm laço nem aritmética suficiente para calcular dígito verificador. A regra
+limita tamanho de `cpfDigits` e nada mais.
+
+Dono: o formulário. Sem importação, todo CPF entra digitado pelo dono, um a um — o que
+faz da validação no formulário a única que existe.
+
+## 7. O que É exprimível e ainda não foi feito
+
+Para não confundir "impossível" com "ainda não":
+
+- **Formato por regex.** `string.matches()` existe. `telefoneDigits` só com dígitos e
+  `cpfDigits` com exatamente 11 dígitos são perfeitamente exprimíveis. Ficaram de fora
+  de propósito: sem importação, os formatos reais aparecem aos poucos, conforme o dono
+  cadastra. Apertar a regra antes de ver dado verdadeiro é recusar dado verdadeiro.
+- **Faixa de `numero`.** Hoje só `> 0`. Um teto (`<= 10000`) é trivial e vale a partir do
+  momento em que o dono disser até que número a lista dele vai.
+
+## 8. O curinga `{documento=**}` anulava tudo isto
+
+Até 28/08/2026 o `firestore.rules` terminava com:
+
+```
+match /{documento=**} {
+  allow read, write: if podeAcessar(businessId);
+}
+```
+
+> **AVISO**
+> No Firestore, basta **uma** regra casada permitir para o acesso ser concedido. As
+> regras são combinadas por OU, não por E. Uma regra por-coleção estrita escrita ao lado
+> desse curinga seria **inerte**: o curinga também casa com `clients/{clientId}` e
+> autoriza a escrita que a regra estrita acabou de recusar.
+
+Por isso o curinga foi removido inteiro, e não apenas complementado. O efeito colateral é
+proposital e vale escrito: **uma coleção nova agora é ingravável até a regra dela existir
+neste arquivo.** É o que dá dente à regra do `CLAUDE.md` de que toda coleção nasce com
+sua regra e seu teste no mesmo commit. `tests/regras/acesso.test.ts` tem os testes que
+impedem o curinga de voltar sem que alguém perceba.

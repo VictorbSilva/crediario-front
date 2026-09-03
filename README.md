@@ -38,8 +38,10 @@ explicando o que fazer.
 
 Esses valores **não são segredo** — a config web do Firebase vai no bundle e é pública por
 design. Quem protege os dados são as regras de segurança do Firestore. O `.env.local` fica
-fora do Git por higiene, não por sigilo. A credencial que **é** segredo é a service account
-do script de importação em Python, que nunca entra no repositório.
+fora do Git por higiene, não por sigilo. **Não existe credencial administrativa neste
+projeto**: não há script de importação nem service account, e os clientes são cadastrados
+pelo próprio app. Isso torna `firestore.rules` a validação única e completa — não há
+caminho de escrita que passe por fora dela.
 
 ### Persistência e offline
 
@@ -82,9 +84,15 @@ ler um caminho inválido.
 As regras ficam em `firestore.rules` (versionado). Elas negam tudo por padrão e liberam
 apenas: o UID do dono, ou quem tiver o claim da empresa correspondente.
 
-> **Antes de publicar as regras**, substitua `COLE_AQUI_O_UID_DO_DONO` pelo UID real
-> (Firebase → Authentication → Users → coluna *Identificador do usuário*). Enquanto o
-> placeholder estiver lá, tudo é negado — que é o lado seguro de errar.
+> O UID do dono fica fixo em `firestore.rules`, na função `ehDono()`. Ao publicar as
+> regras contra um projeto Firebase diferente do atual, troque esse UID pelo do dono de
+> lá (Firebase → Authentication → Users → coluna *Identificador do usuário*). Com o UID
+> errado o dono real perde o acesso e nenhuma escrita passa.
+
+Cada coleção nasce com a sua própria regra. **Não** existe `match /{documento=**}` no
+arquivo: as regras se combinam por *ou*, então um curinga permissivo anula qualquer regra
+estrita escrita depois. O efeito colateral é que uma coleção ainda sem regra própria fica
+inacessível — que é o lado seguro de errar.
 
 ```bash
 npx firebase-tools deploy --only firestore:rules
@@ -94,6 +102,9 @@ npx firebase-tools deploy --only firestore:rules
 
 - Node.js 20 ou superior (exigido pelo Vite 8)
 - npm
+- JDK **21 ou superior**, apenas para rodar o emulador do Firestore (`npm run emu` e
+  `npm run test:rules`). O `firebase-tools` 15 recusa o JDK 17 com
+  `no longer supports Java version before 21` — o 17 ser LTS engana.
 
 ## Instalação
 
@@ -111,9 +122,27 @@ npm install
 | `npm run build` | Verifica os tipos (`tsc -b`) e gera o build de produção em `dist/` |
 | `npm run lint` | Roda o ESLint em todo o repositório |
 | `npm run preview` | Serve localmente o build de produção |
+| `npm test` | Roda a suíte de testes unitários uma vez (Vitest) |
+| `npm run test:watch` | A mesma suíte em modo *watch* |
+| `npm run test:rules` | Sobe o emulador do Firestore e roda os testes das regras de segurança |
+| `npm run emu` | Sobe os emuladores de Firestore e Auth para desenvolvimento local |
 | `npm run generate-pwa-assets` | Regera os ícones do PWA a partir de `public/favicon.svg` |
 
-Ainda não há script nem framework de testes configurado.
+### Testes
+
+São duas suítes separadas, cada uma com a sua configuração:
+
+- **`vitest.config.ts`** — testes unitários de `src/**/*.test.ts`. Hoje cobrem
+  `src/lib/dinheiro.ts` e `src/lib/texto.ts`. `globals` está desligado de propósito:
+  importar `describe`/`it`/`expect` explicitamente é o que mantém o `tsc -b` passando sem
+  configuração de tipos extra.
+- **`vitest.rules.config.ts`** — testes de `tests/regras/`, que exercitam o
+  `firestore.rules` de verdade contra o emulador, via `@firebase/rules-unit-testing`.
+  Rodam por `npm run test:rules`, que sobe e derruba o emulador sozinho.
+
+Toda coleção nova nasce com a sua regra **e** com o teste de regra correspondente, no
+mesmo commit. Sem Cloud Functions (plano Spark), a regra é a única validação de schema que
+este projeto vai ter.
 
 ## PWA
 

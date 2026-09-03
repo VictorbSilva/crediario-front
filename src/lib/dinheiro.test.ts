@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   formatarCentavos,
   formatarCentavosCurto,
@@ -30,6 +30,17 @@ describe('formatarCentavos', () => {
   it('formata valor negativo', () => {
     expect(semNbsp(formatarCentavos(-2550))).toBe('-R$ 25,50')
   })
+
+  it('arredonda o empate para o centavo par', () => {
+    // Meio-par: o empate vai para o centavo par em vez de sempre para cima.
+    // Chegar aqui com valor fracionário já é sintoma de conta feita sem
+    // arredondar antes de gravar; o que este teste garante é que, quando isso
+    // acontecer, a tela seja determinística e o erro não se acumule sempre na
+    // mesma direção.
+    expect(semNbsp(formatarCentavos(100.5))).toBe('R$ 1,00')
+    expect(semNbsp(formatarCentavos(101.5))).toBe('R$ 1,02')
+    expect(semNbsp(formatarCentavos(102.5))).toBe('R$ 1,02')
+  })
 })
 
 describe('formatarCentavosCurto', () => {
@@ -47,6 +58,24 @@ describe('formatarCentavosCurto', () => {
 
   it('mantém o separador de milhar', () => {
     expect(semNbsp(formatarCentavosCurto(1234500))).toBe('R$ 12.345')
+  })
+})
+
+describe('valores não finitos', () => {
+  it('devolve travessão e registra o erro, em vez de exibir "R$ NaN"', () => {
+    // NaN e Infinity são `number` e o Intl formata os dois sem reclamar. O
+    // travessão evita a tela quebrada; o console.error evita que o defeito
+    // passe por "campo não preenchido" e sobreviva meses sem ninguém ver.
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect(formatarCentavos(NaN)).toBe('—')
+      expect(formatarCentavos(Infinity)).toBe('—')
+      expect(formatarCentavos(-Infinity)).toBe('—')
+      expect(formatarCentavosCurto(NaN)).toBe('—')
+      expect(erro).toHaveBeenCalledTimes(4)
+    } finally {
+      erro.mockRestore()
+    }
   })
 })
 
@@ -103,6 +132,18 @@ describe('parseReaisParaCentavos', () => {
     expect(parseReaisParaCentavos('')).toBeNull()
     expect(parseReaisParaCentavos('   ')).toBeNull()
     expect(parseReaisParaCentavos('R$')).toBeNull()
+  })
+
+  it('devolve null para pontuação sem nenhum dígito', () => {
+    // Regressão: antes da guarda de dígito, "," e "R$," devolviam 0. Como o
+    // valor pago é campo digitado, uma vírgula solta virava um pagamento de
+    // R$ 0,00 aceito em silêncio — pior que recusar o campo, porque some.
+    expect(parseReaisParaCentavos(',')).toBeNull()
+    expect(parseReaisParaCentavos('R$,')).toBeNull()
+    expect(parseReaisParaCentavos('.')).toBeNull()
+    expect(parseReaisParaCentavos(',,')).toBeNull()
+    expect(parseReaisParaCentavos('.,')).toBeNull()
+    expect(parseReaisParaCentavos('-')).toBeNull()
   })
 
   it('devolve null para entrada inválida', () => {
