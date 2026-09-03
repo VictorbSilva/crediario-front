@@ -1,5 +1,23 @@
 rules_version = '2';
 
+// Regras do Crediário.
+//
+// POSTURA: negar por padrão. Uma coleção só se torna gravável depois que a
+// regra dela existe aqui. Não há curinga `{documento=**}` de propósito — ele
+// existia até 28/08/2026 e tornava inerte qualquer regra por-coleção, porque
+// no Firestore basta UMA regra casada permitir para o acesso ser concedido.
+//
+// Este projeto não tem Cloud Functions e não vai ter (plano Spark), nem
+// service account: não existe credencial administrativa que ignore estas
+// regras. Elas são a validação completa dos dados, não a primeira de várias
+// camadas.
+//
+// ACESSO, HOJE: só o dono usa o app, e `ehDono()` é a única porta que abre.
+// `pertenceAEmpresa()` depende do custom claim `businessId`, e custom claim só
+// o Admin SDK grava — que este projeto não tem. O caminho do funcionário está
+// escrito e testado (o emulador forja o claim à vontade), mas não tem como
+// existir em produção. Múltiplos usuários são atualização pós-MVP.
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -23,8 +41,112 @@ service cloud.firestore {
       allow read: if podeAcessar(businessId);
       allow write: if ehDono();
 
-      match /{documento=**} {
-        allow read, write: if podeAcessar(businessId);
+      // ----------------------------------------------------------------
+      // clients — primeira coleção com regra própria
+      // ----------------------------------------------------------------
+      match /clients/{clientId} {
+
+        function dados() {
+          return request.resource.data;
+        }
+
+        function anterior() {
+          return resource.data;
+        }
+
+        // A lista fechada é o que transforma um campo digitado errado em erro
+        // de escrita em vez de um documento silenciosamente torto. O preço é
+        // que campo novo exige mexer aqui e no teste — que é exatamente a
+        // regra do CLAUDE.md, não um efeito colateral dela.
+        function camposConhecidos() {
+          return dados().keys().hasOnly([
+            'numero', 'nome', 'nomeBusca',
+            'telefone', 'telefoneDigits',
+            'cpf', 'cpfDigits',
+            'endereco', 'rotaId', 'observacao', 'arquivado',
+            'criadoEm', 'atualizadoEm', 'atualizadoPor'
+          ]);
+        }
+
+        function obrigatoriosPresentes() {
+          return dados().keys().hasAll([
+            'numero', 'nome', 'nomeBusca',
+            'criadoEm', 'atualizadoEm', 'atualizadoPor'
+          ]);
+        }
+
+        function tiposValidos() {
+          return dados().numero is int
+            && dados().numero > 0
+            && dados().nome is string
+            && dados().nome.size() > 0
+            && dados().nome.size() <= 120
+            && dados().nomeBusca is string
+            && dados().nomeBusca.size() > 0
+            && dados().nomeBusca.size() <= 120
+            && dados().atualizadoPor is string
+            && dados().atualizadoPor.size() > 0
+            && dados().atualizadoPor.size() <= 64
+            && (!('telefone' in dados())
+                || (dados().telefone is string && dados().telefone.size() <= 40))
+            && (!('telefoneDigits' in dados())
+                || (dados().telefoneDigits is string && dados().telefoneDigits.size() <= 20))
+            && (!('cpf' in dados())
+                || (dados().cpf is string && dados().cpf.size() <= 20))
+            && (!('cpfDigits' in dados())
+                || (dados().cpfDigits is string && dados().cpfDigits.size() <= 11))
+            && (!('endereco' in dados())
+                || (dados().endereco is string && dados().endereco.size() <= 200))
+            && (!('rotaId' in dados())
+                || dados().rotaId == null
+                || (dados().rotaId is string && dados().rotaId.size() <= 64))
+            && (!('observacao' in dados())
+                || (dados().observacao is string && dados().observacao.size() <= 500))
+            && (!('arquivado' in dados())
+                || dados().arquivado is bool);
+        }
+
+        // serverTimestamp() é resolvido pelo servidor no instante em que a
+        // escrita é processada — o mesmo valor de request.time. Exigir a
+        // igualdade impede o dispositivo de escolher a própria data. Continua
+        // valendo para escrita offline: o carimbo nasce quando a fila sobe,
+        // não quando foi enfileirada.
+        function carimboDeCriacao() {
+          return dados().criadoEm == request.time
+            && dados().atualizadoEm == request.time;
+        }
+
+        function carimboDeEdicao() {
+          return dados().atualizadoEm == request.time;
+        }
+
+        // `numero` é fixo por decisão do dono: a planilha lista de 1 a N e essa
+        // ordem não muda. `criadoEm` é fato histórico.
+        function imutaveisPreservados() {
+          return dados().numero == anterior().numero
+            && dados().criadoEm == anterior().criadoEm;
+        }
+
+        allow read: if podeAcessar(businessId);
+
+        allow create: if podeAcessar(businessId)
+          && camposConhecidos()
+          && obrigatoriosPresentes()
+          && tiposValidos()
+          && carimboDeCriacao();
+
+        allow update: if podeAcessar(businessId)
+          && camposConhecidos()
+          && obrigatoriosPresentes()
+          && tiposValidos()
+          && carimboDeEdicao()
+          && imutaveisPreservados();
+
+        // Sem delete pelo app. Um handler com bug apaga sem perguntar, e o
+        // histórico do cliente é o ativo mais caro deste sistema. Cadastro
+        // errado se resolve com `arquivado: true`. Exclusão de titular (LGPD)
+        // é operação do dono pelo console, não da interface.
+        allow delete: if false;
       }
     }
   }
