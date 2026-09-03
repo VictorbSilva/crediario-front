@@ -7,13 +7,16 @@ rules_version = '2';
 // existia até 28/08/2026 e tornava inerte qualquer regra por-coleção, porque
 // no Firestore basta UMA regra casada permitir para o acesso ser concedido.
 //
-// Este projeto não tem Cloud Functions e não vai ter (plano Spark). Estas
-// regras são, portanto, a ÚNICA validação de schema que os dados vão ter.
+// Este projeto não tem Cloud Functions e não vai ter (plano Spark), nem
+// service account: não existe credencial administrativa que ignore estas
+// regras. Elas são a validação completa dos dados, não a primeira de várias
+// camadas.
 //
-// > AVISO
-// > O script de importação usa o Admin SDK com service account, que ignora
-// > estas regras por completo. Nada aqui protege os dados contra o script.
-// > Ver docs/armadilhas.md.
+// ACESSO, HOJE: só o dono usa o app, e `ehDono()` é a única porta que abre.
+// `pertenceAEmpresa()` depende do custom claim `businessId`, e custom claim só
+// o Admin SDK grava — que este projeto não tem. O caminho do funcionário está
+// escrito e testado (o emulador forja o claim à vontade), mas não tem como
+// existir em produção. Múltiplos usuários são atualização pós-MVP.
 
 service cloud.firestore {
   match /databases/{database}/documents {
