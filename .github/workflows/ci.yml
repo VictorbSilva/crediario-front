@@ -1,0 +1,49 @@
+name: CI
+
+# O deploy das regras continua manual (firebase deploy --only firestore:rules).
+# Este workflow só verifica; ele nunca publica nada.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # O emulador do Firestore roda em Java, e o firebase-tools 15 recusa
+      # qualquer coisa abaixo de 21. Sem este passo, test:rules falha com
+      # "no longer supports Java version before 21" e nada mais explica.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # O .jar do emulador tem ~60 MB e é baixado na primeira execução.
+      # Guardá-lo entre execuções evita repetir o download a cada push.
+      - name: Cache do emulador
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: emuladores-${{ runner.os }}
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # build = tsc -b && vite build, então cobre o type-check junto.
+      - run: npm run build
+
+      - run: npm test
+
+      - run: npm run test:rules
