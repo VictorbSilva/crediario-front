@@ -31,11 +31,20 @@ jobs:
 
       # O .jar do emulador tem ~60 MB e é baixado na primeira execução.
       # Guardá-lo entre execuções evita repetir o download a cada push.
+      #
+      # A chave inclui o hash do package-lock porque o cache só é REGRAVADO
+      # quando a chave muda. Com chave fixa, o dia em que o firebase-tools
+      # subir a versão do emulador seria o dia em que o .jar novo passa a ser
+      # baixado em toda execução e nunca mais entra no cache — sem erro
+      # nenhum, só o CI ficando lento sem explicação. O restore-keys mantém o
+      # aproveitamento parcial do cache anterior nesse momento.
       - name: Cache do emulador
         uses: actions/cache@v4
         with:
           path: ~/.cache/firebase/emulators
-          key: emuladores-${{ runner.os }}
+          key: emuladores-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            emuladores-${{ runner.os }}-
 
       - run: npm ci
 
