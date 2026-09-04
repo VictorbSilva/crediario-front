@@ -3,7 +3,13 @@ import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing'
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing'
 import { deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
-import { UID_DONO, caminhoCliente, clienteValido, criarAmbiente } from './ambiente.ts'
+import {
+  UID_DONO,
+  caminhoCliente,
+  clienteComoOAppEscreve,
+  clienteValido,
+  criarAmbiente,
+} from './ambiente.ts'
 
 let ambiente: RulesTestEnvironment
 
@@ -20,12 +26,9 @@ afterAll(async () => {
 })
 
 function bancoDono(): Firestore {
-  // O contexto devolve a instancia do SDK compat; em tempo de execucao e a
-  // mesma, mas os tipos vem de caminhos de modulo diferentes.
   return ambiente.authenticatedContext(UID_DONO).firestore() as unknown as Firestore
 }
 
-/** Grava direto, sem passar pelas regras, para montar o estado de partida. */
 async function semear(clientId: string, dados: Record<string, unknown>) {
   await ambiente.withSecurityRulesDisabled(async (contexto) => {
     await setDoc(
@@ -65,10 +68,39 @@ describe('clients — criação válida', () => {
       setDoc(doc(bancoDono(), caminhoCliente('c1')), clienteValido({ rotaId: null })),
     )
   })
+
+  it('aceita o documento que o formulário monta com tudo preenchido', async () => {
+    await assertSucceeds(
+      setDoc(doc(bancoDono(), caminhoCliente('c1')), clienteComoOAppEscreve()),
+    )
+  })
+
+  it('aceita o documento que o formulário monta com só o obrigatório', async () => {
+    await assertSucceeds(
+      setDoc(doc(bancoDono(), caminhoCliente('c1')), {
+        numero: 138,
+        nome: 'João Batista Lima',
+        nomeBusca: 'joao batista lima',
+        arquivado: false,
+        cadastradoEm: '2026-09-03',
+        criadoEm: serverTimestamp(),
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: 'a3f91c07',
+      }),
+    )
+  })
 })
 
 describe('clients — campos obrigatórios', () => {
-  const obrigatorios = ['numero', 'nome', 'nomeBusca', 'criadoEm', 'atualizadoEm', 'atualizadoPor']
+  const obrigatorios = [
+    'numero',
+    'nome',
+    'nomeBusca',
+    'cadastradoEm',
+    'criadoEm',
+    'atualizadoEm',
+    'atualizadoPor',
+  ]
 
   for (const campo of obrigatorios) {
     it(`recusa criação sem ${campo}`, async () => {
@@ -135,10 +167,83 @@ describe('clients — tipos', () => {
   })
 })
 
+describe('clients — cadastradoEm', () => {
+  it('aceita datas de calendário bem formadas', async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        clienteValido({ cadastradoEm: '2026-01-01' }),
+      ),
+    )
+    await assertSucceeds(
+      setDoc(
+        doc(bancoDono(), caminhoCliente('c2')),
+        clienteValido({ cadastradoEm: '2026-12-31' }),
+      ),
+    )
+  })
+
+  it('recusa cadastradoEm que não é string', async () => {
+    await assertFails(
+      setDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        clienteValido({ cadastradoEm: new Date('2026-09-03') }),
+      ),
+    )
+    await assertFails(
+      setDoc(
+        doc(bancoDono(), caminhoCliente('c2')),
+        clienteValido({ cadastradoEm: serverTimestamp() }),
+      ),
+    )
+  })
+
+  const malFormadas = [
+    '',
+    '2026-9-3',
+    '03/09/2026',
+    '2026/09/03',
+    '2026-09-03T00:00:00Z',
+    '2026-09-03 ',
+    '26-09-03',
+  ]
+
+  for (const valor of malFormadas) {
+    it(`recusa cadastradoEm fora do formato: ${JSON.stringify(valor)}`, async () => {
+      await assertFails(
+        setDoc(
+          doc(bancoDono(), caminhoCliente('c1')),
+          clienteValido({ cadastradoEm: valor }),
+        ),
+      )
+    })
+  }
+
+  const foraDoCalendario = ['2026-00-10', '2026-13-01', '2026-01-00', '2026-01-32', '9999-99-99']
+
+  for (const valor of foraDoCalendario) {
+    it(`recusa cadastradoEm impossível: ${valor}`, async () => {
+      await assertFails(
+        setDoc(
+          doc(bancoDono(), caminhoCliente('c1')),
+          clienteValido({ cadastradoEm: valor }),
+        ),
+      )
+    })
+  }
+
+  it('aceita 30 de fevereiro — a regra não tem calendário, o dono disso é o formulário', async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        clienteValido({ cadastradoEm: '2026-02-30' }),
+      ),
+    )
+  })
+})
+
 describe('clients — campos desconhecidos', () => {
   it('recusa um campo que ninguém declarou', async () => {
-    // Sem Cloud Functions, esta lista fechada é a única coisa entre um typo
-    // de campo e 700 documentos tortos.
     await assertFails(
       setDoc(doc(bancoDono(), caminhoCliente('c1')), clienteValido({ nomeCompleto: 'Maria' })),
     )
@@ -180,13 +285,14 @@ describe('clients — edição', () => {
       numero: 7,
       nome: 'Maria Aparecida Santos',
       nomeBusca: 'maria aparecida santos',
+      cadastradoEm: '2026-01-01',
       criadoEm: new Date('2026-01-01'),
       atualizadoEm: new Date('2026-01-01'),
       atualizadoPor: 'importacao',
     })
   }
 
-  it('aceita alterar o nome mantendo numero e criadoEm', async () => {
+  it('aceita alterar o nome mantendo numero, criadoEm e cadastradoEm', async () => {
     await semearValido('c1')
     await assertSucceeds(
       updateDoc(doc(bancoDono(), caminhoCliente('c1')), {
@@ -218,6 +324,16 @@ describe('clients — edição', () => {
     )
   })
 
+  it('recusa reescrever cadastradoEm', async () => {
+    await semearValido('c1')
+    await assertFails(
+      updateDoc(doc(bancoDono(), caminhoCliente('c1')), {
+        cadastradoEm: '2026-09-03',
+        atualizadoEm: serverTimestamp(),
+      }),
+    )
+  })
+
   it('recusa edição que não atualiza atualizadoEm', async () => {
     await semearValido('c1')
     await assertFails(
@@ -235,6 +351,45 @@ describe('clients — edição', () => {
       }),
     )
   })
+
+  it('aceita desarquivar — o toggle é reversível nos dois sentidos', async () => {
+    await semear('c1', {
+      numero: 7,
+      nome: 'Maria Aparecida Santos',
+      nomeBusca: 'maria aparecida santos',
+      arquivado: true,
+      cadastradoEm: '2026-01-01',
+      criadoEm: new Date('2026-01-01'),
+      atualizadoEm: new Date('2026-01-01'),
+      atualizadoPor: 'importacao',
+    })
+    await assertSucceeds(
+      updateDoc(doc(bancoDono(), caminhoCliente('c1')), {
+        arquivado: false,
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: 'celular-do-dono',
+      }),
+    )
+  })
+
+  it('recusa edição de documento sem cadastradoEm', async () => {
+    await semear('c1', {
+      numero: 7,
+      nome: 'Maria Aparecida Santos',
+      nomeBusca: 'maria aparecida santos',
+      criadoEm: new Date('2026-01-01'),
+      atualizadoEm: new Date('2026-01-01'),
+      atualizadoPor: 'importacao',
+    })
+    await assertFails(
+      updateDoc(doc(bancoDono(), caminhoCliente('c1')), {
+        nome: 'Maria A. Santos',
+        nomeBusca: 'maria a. santos',
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: 'celular-do-dono',
+      }),
+    )
+  })
 })
 
 describe('clients — exclusão', () => {
@@ -243,6 +398,7 @@ describe('clients — exclusão', () => {
       numero: 7,
       nome: 'Maria',
       nomeBusca: 'maria',
+      cadastradoEm: '2026-01-01',
       criadoEm: new Date('2026-01-01'),
       atualizadoEm: new Date('2026-01-01'),
       atualizadoPor: 'importacao',
