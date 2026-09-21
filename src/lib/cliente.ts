@@ -1,3 +1,4 @@
+import { situacaoCpf } from './cpf'
 import { dataLocalISO } from './data'
 import type { ConfiancaDaLista } from './sync'
 import { normalizar, somenteDigitos } from './texto'
@@ -113,8 +114,13 @@ export function validarCliente(
   const cpf = entrada.cpf.trim()
   if (cpf.length > LIMITES_CLIENTE.cpf) {
     erros.cpf = `CPF muito longo: máximo ${LIMITES_CLIENTE.cpf} caracteres.`
-  } else if (somenteDigitos(cpf).length > LIMITES_CLIENTE.cpfDigits) {
-    erros.cpf = `CPF com dígitos demais: máximo ${LIMITES_CLIENTE.cpfDigits}.`
+  } else {
+    const situacao = situacaoCpf(somenteDigitos(cpf))
+    if (situacao === 'incompleto') {
+      erros.cpf = 'CPF incompleto: faltam dígitos.'
+    } else if (situacao === 'invalido') {
+      erros.cpf = 'Digite um CPF válido.'
+    }
   }
 
   const endereco = entrada.endereco.trim()

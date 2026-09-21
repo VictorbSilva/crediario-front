@@ -112,16 +112,31 @@ describe('validarCliente', () => {
     )
   })
 
-  it('recusa CPF com mais dígitos do que cpfDigits aceita', () => {
-    expect(validarCliente(entrada({ cpf: '123456789012' }), lista, 'confiavel').cpf).toBeTypeOf(
-      'string',
+  it('aceita CPF vazio, porque o campo é opcional', () => {
+    expect(validarCliente(entrada({ cpf: '' }), lista, 'confiavel').cpf).toBeUndefined()
+  })
+
+  it('aceita CPF com dígito verificador correto, formatado ou cru', () => {
+    expect(validarCliente(entrada({ cpf: '529.982.247-25' }), lista, 'confiavel').cpf).toBeUndefined()
+    expect(validarCliente(entrada({ cpf: '52998224725' }), lista, 'confiavel').cpf).toBeUndefined()
+  })
+
+  it('bloqueia CPF com dígito verificador errado', () => {
+    expect(validarCliente(entrada({ cpf: '529.982.247-24' }), lista, 'confiavel').cpf).toBe(
+      'Digite um CPF válido.',
     )
   })
 
-  it('não bloqueia CPF com dígito verificador errado, que é aviso e não erro', () => {
-    expect(
-      validarCliente(entrada({ cpf: '529.982.247-24' }), lista, 'confiavel').cpf,
-    ).toBeUndefined()
+  it('bloqueia CPF incompleto com mensagem própria', () => {
+    expect(validarCliente(entrada({ cpf: '529.982.247' }), lista, 'confiavel').cpf).toBe(
+      'CPF incompleto: faltam dígitos.',
+    )
+  })
+
+  it('bloqueia CPF com mais dígitos do que cpfDigits aceita', () => {
+    expect(validarCliente(entrada({ cpf: '123456789012' }), lista, 'confiavel').cpf).toBeTypeOf(
+      'string',
+    )
   })
 
   it('recusa endereço e observação acima do limite da regra', () => {
