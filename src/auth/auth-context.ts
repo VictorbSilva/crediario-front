@@ -6,6 +6,7 @@ export type AuthContextValue = {
   businessId: string | null
   carregando: boolean
   entrar: (email: string, senha: string) => Promise<void>
+  recuperarSenha: (email: string) => Promise<void>
   sair: () => Promise<void>
 }
 

@@ -1,10 +1,36 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import {
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth'
 import type { User } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { AuthContext } from './auth-context'
 import type { AuthContextValue } from './auth-context'
+
+function codigoDe(erro: unknown): string {
+  return typeof erro === 'object' && erro !== null && 'code' in erro
+    ? String((erro as { code: unknown }).code)
+    : ''
+}
+
+function mensagemDeRecuperacao(codigo: string): string {
+  switch (codigo) {
+    case 'auth/invalid-email':
+      return 'E-mail inválido.'
+    case 'auth/missing-email':
+      return 'Digite o e-mail para receber o link.'
+    case 'auth/too-many-requests':
+      return 'Muitos pedidos seguidos. Aguarde alguns minutos e tente de novo.'
+    case 'auth/network-request-failed':
+      return 'Sem conexão. É preciso estar online para pedir o link.'
+    default:
+      return 'Não foi possível enviar o link agora. Tente de novo em instantes.'
+  }
+}
 
 function mensagemDeErro(codigo: string): string {
   if (codigo.startsWith('auth/api-key-not-valid') || codigo === 'auth/invalid-api-key') {
@@ -114,11 +140,16 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
         try {
           await signInWithEmailAndPassword(auth, email, senha)
         } catch (erro) {
-          const codigo =
-            typeof erro === 'object' && erro !== null && 'code' in erro
-              ? String((erro as { code: unknown }).code)
-              : ''
-          throw new Error(mensagemDeErro(codigo), { cause: erro })
+          throw new Error(mensagemDeErro(codigoDe(erro)), { cause: erro })
+        }
+      },
+      async recuperarSenha(email) {
+        try {
+          await sendPasswordResetEmail(auth, email)
+        } catch (erro) {
+          const codigo = codigoDe(erro)
+          if (codigo === 'auth/user-not-found') return
+          throw new Error(mensagemDeRecuperacao(codigo), { cause: erro })
         }
       },
       async sair() {
