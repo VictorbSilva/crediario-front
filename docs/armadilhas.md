@@ -92,6 +92,53 @@ Os dois testes `aceita o documento que o formulário monta` não checam um campo
 
 ---
 
+## src/data/ClientesProvider.tsx
+
+O único `onSnapshot` do app. Montado no `AppShell`, para que a lista, o formulário e o selo
+de sincronização compartilhem a mesma assinatura — é o que mantém o projeto dentro do plano
+Spark. `orderBy('numero')` usa o índice automático de campo único; `firestore.indexes.json`
+continua vazio de propósito.
+
+> **AVISO**
+> `{ includeMetadataChanges: true }` **não é opcional**. Sem ele o snapshot não dispara
+> quando a única mudança é `hasPendingWrites` virando `false`, e o selo fica preso em
+> "Alterações pendentes" para sempre depois de sincronizar. O bug não aparece online e
+> rápido: aparece depois de uma escrita offline que sincroniza mais tarde.
+
+> **AVISO**
+> **Nunca `await` num `setDoc`/`updateDoc` deste projeto.** Offline a Promise fica pendente
+> por tempo indeterminado — ela não rejeita, só não resolve —, e `await` trava o formulário
+> sem mensagem nenhuma. O cache local já foi atualizado de forma síncrona antes disso, então
+> a tela pode fechar na hora. Chamar sem `await`, com `.catch()`.
+
+> **AVISO**
+> A rejeição chega tarde e faz **rollback silencioso**: se o servidor recusar a escrita
+> (regra), o SDK desfaz o documento no cache e o cliente some da lista dias depois, sem
+> aviso. Por isso o `.catch()` empilha em `falhas`, que a tela renderiza.
+>
+> **O `falhas` só cobre o caso de app aberto.** Cadastro offline com o app fechado antes da
+> sincronização tem a rejeição processada sem ninguém escutando: o documento é revertido e
+> nem o `.catch()` roda. Isso fica invisível até a coleção `erros` da etapa 6.
+
+`serverTimestamp()` materializa como `null` no cache local até o servidor confirmar — por
+isso `criadoEm` e `atualizadoEm` são `Timestamp | null` no tipo `Cliente`. Tratar como
+`Timestamp` puro quebra na primeira escrita offline.
+
+`id` e `pendente` no tipo `Cliente` são derivados do snapshot, não campos do documento:
+`pendente` é `metadata.hasPendingWrites`, e é o que a lista usa para marcar o que ainda não
+subiu.
+
+A chave `crediario:sincronizou:<businessId>` no `localStorage` é a memória de já ter lido do
+servidor neste aparelho, gravada na primeira vez que chega um snapshot com
+`fromCache: false`. É o que alimenta `confiancaDaLista` — ver a armadilha do
+`src/lib/sync.ts` para por que `fromCache` sozinho não basta.
+
+O efeito não chama `setState` de forma síncrona: `carregando` já nasce `true` e
+`jaSincronizou` é lido no inicializador do `useState`. Além de satisfazer o
+`react-hooks/set-state-in-effect`, evita um passe de render extra a cada montagem.
+
+— referente a src/data/ClientesProvider.tsx, arquivo inteiro
+
 ## src/lib/cliente.ts
 
 `LIMITES_CLIENTE` existe para que o `maxLength` do formulário e o limite da regra saiam do
