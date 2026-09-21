@@ -5,14 +5,16 @@ import { BrandMark } from '@/components/BrandMark'
 import { useAuth } from '@/auth/useAuth'
 
 export function LoginPage() {
-  const { usuario, carregando, entrar } = useAuth()
+  const { usuario, carregando, entrar, recuperarSenha } = useAuth()
   const navegar = useNavigate()
   const local = useLocation()
 
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
+  const [recuperando, setRecuperando] = useState(false)
 
   const destino = (local.state as { de?: string } | null)?.de ?? '/clientes'
 
@@ -22,6 +24,7 @@ export function LoginPage() {
   async function aoEnviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault()
     setErro(null)
+    setAviso(null)
     setEnviando(true)
     try {
       await entrar(email.trim(), senha)
@@ -30,6 +33,29 @@ export function LoginPage() {
       setErro(e instanceof Error ? e.message : 'Não foi possível entrar.')
     } finally {
       setEnviando(false)
+    }
+  }
+
+  async function aoRecuperar() {
+    const endereco = email.trim()
+    setErro(null)
+    setAviso(null)
+
+    if (!endereco) {
+      setErro('Digite o e-mail primeiro e clique de novo.')
+      return
+    }
+
+    setRecuperando(true)
+    try {
+      await recuperarSenha(endereco)
+      setAviso(
+        'Se existir uma conta com esse e-mail, o link para criar uma senha nova já foi enviado. Confira também a caixa de spam.',
+      )
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível enviar o link.')
+    } finally {
+      setRecuperando(false)
     }
   }
 
@@ -84,12 +110,27 @@ export function LoginPage() {
             </p>
           )}
 
+          {aviso && (
+            <p role="status" className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">
+              {aviso}
+            </p>
+          )}
+
           <button
             type="submit"
             disabled={enviando}
             className="min-h-11 rounded-lg bg-brand-600 px-4 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {enviando ? 'Entrando…' : 'Entrar'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void aoRecuperar()}
+            disabled={recuperando}
+            className="-mb-1 self-center rounded px-2 py-1 text-sm font-medium text-brand-700 underline underline-offset-2 transition-colors hover:text-brand-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {recuperando ? 'Enviando…' : 'Esqueci minha senha'}
           </button>
         </form>
       </div>
