@@ -675,13 +675,17 @@ campos, imutabilidade e carimbo de tempo do servidor. O que segue é o que elas 
 alcançam. Cada item aqui é um invariante que, se ninguém assumir explicitamente, não
 tem dono nenhum.
 
-## 1. Unicidade de `numero` — 🔴 sem dono hoje
+## 1. Unicidade de `numero` — 🟢 com dono desde 21/09/2026
 
 Uma regra enxerga o documento sendo escrito e nada mais. Para saber se já existe outro
 cliente com `numero: 7` seria preciso varrer a coleção, e regra não varre. `get()` lê um
 documento de caminho conhecido, custa uma leitura faturada, e não resolve o caso real:
 **dois dispositivos offline podem criar o número 7 ao mesmo tempo e ambos passam**, cada
 um contra um cache que não conhece o outro.
+
+**Implementado em 21/09/2026** em `clienteComNumero` (`src/lib/cliente.ts`), consumido por
+`validarCliente` e exibido ao vivo no campo de número do formulário. Verificado no roteiro
+de aceite do mesmo dia: número repetido recusa, número de arquivado aceita.
 
 Consequência prática: **nada impede dois clientes com o mesmo número.** É exatamente o
 buraco que a decisão de alocação do `numero` (etapa 3) precisa fechar, e é por isso que
