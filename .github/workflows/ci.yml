@@ -18,7 +18,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Fonte única da versão do Node: o .nvmrc, que o nvm local também lê.
+          node-version-file: .nvmrc
           cache: npm
 
       # O emulador do Firestore roda em Java, e o firebase-tools 15 recusa
