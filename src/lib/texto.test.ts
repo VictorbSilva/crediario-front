@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizar } from './texto'
+import { iniciaisDe, normalizar, somenteDigitos } from './texto'
 
 describe('normalizar', () => {
   it('remove acentos', () => {
@@ -55,5 +55,36 @@ describe('normalizar', () => {
     // decompõe e ele sobrevive à normalização. Endereço é campo de busca,
     // então vale ter isso escrito.
     expect(normalizar('Rua 7, nº 120')).toBe('rua 7, nº 120')
+  })
+})
+
+describe('somenteDigitos', () => {
+  it('tira tudo que não for dígito', () => {
+    expect(somenteDigitos('(62) 98114-2270')).toBe('62981142270')
+    expect(somenteDigitos('529.982.247-25')).toBe('52998224725')
+  })
+
+  it('devolve string vazia quando não há dígito nenhum', () => {
+    expect(somenteDigitos('sem número')).toBe('')
+    expect(somenteDigitos('')).toBe('')
+  })
+})
+
+describe('iniciaisDe', () => {
+  it('usa a primeira letra do primeiro e do último nome', () => {
+    expect(iniciaisDe('Maria Aparecida Santos')).toBe('MS')
+    expect(iniciaisDe('João Batista Lima')).toBe('JL')
+  })
+
+  it('devolve uma letra só para nome único', () => {
+    expect(iniciaisDe('Maria')).toBe('M')
+  })
+
+  it('não carrega acento para dentro do avatar', () => {
+    expect(iniciaisDe('Ântônio Ávila')).toBe('AA')
+  })
+
+  it('devolve interrogação em vez de string vazia', () => {
+    expect(iniciaisDe('   ')).toBe('?')
   })
 })

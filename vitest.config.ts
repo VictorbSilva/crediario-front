@@ -13,5 +13,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // O runner do CI roda em UTC e a máquina do dono, em UTC-3. Sem fixar o
+    // fuso, o teste que prova que `dataLocalISO` não usa `toISOString()`
+    // passaria em UTC por acidente — é justamente em fuso negativo que as
+    // duas respostas divergem.
+    env: { TZ: 'America/Sao_Paulo' },
   },
 })

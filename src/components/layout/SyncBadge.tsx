@@ -1,10 +1,4 @@
-export type EstadoSync =
-  | 'sincronizado'
-  | 'sincronizando'
-  | 'pendente'
-  | 'offline'
-  | 'erro'
-  | 'nao-configurado'
+import type { EstadoSync } from '@/lib/sync'
 
 type Aparencia = { rotulo: string; caixa: string; ponto: string; pulsa: boolean }
 
