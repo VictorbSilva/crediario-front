@@ -10,8 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-crediario \"vitest run --config vitest.rules.config.ts\"",
-    "emu": "firebase emulators:start --only firestore,auth --project demo-crediario",
+    "test:rules": "node scripts/firebase-com-jdk.mjs emulators:exec --only firestore --project demo-crediario \"vitest run --config vitest.rules.config.ts\"",
+    "emu": "node scripts/firebase-com-jdk.mjs emulators:start --only firestore,auth --project demo-crediario",
     "generate-pwa-assets": "pwa-assets-generator"
   },
   "dependencies": {

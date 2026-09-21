@@ -92,6 +92,28 @@ Os dois testes `aceita o documento que o formulário monta` não checam um campo
 
 ---
 
+## scripts/firebase-com-jdk.mjs
+
+Os scripts `test:rules` e `emu` não chamam o `firebase` direto: passam por este wrapper, que
+põe o `bin` do `JAVA_HOME` na frente do `PATH` antes de invocar o `firebase-tools`.
+
+> **AVISO**
+> O emulador do Firestore roda em Java e o `firebase-tools` 15 recusa qualquer versão
+> anterior à 21. **O `firebase-tools` resolve `java` pelo `PATH`, não pelo `JAVA_HOME`** —
+> então ter o `JAVA_HOME` apontando para um JDK 21 não basta, e foi exatamente isso que
+> aconteceu em 21/09/2026: um instalador automático pôs um Java 8 da Oracle em
+> `C:\Program Files (x86)\Common Files\Oracle\Java\java8path`, à frente do JDK 21 no PATH da
+> máquina. `JAVA_HOME` continuava correto; `npm run test:rules` morria mesmo assim, com uma
+> mensagem que não sugere a causa. Consertar o PATH da máquina exige privilégio de
+> administrador e vale só para aquela máquina; o wrapper vale para todas, inclusive o runner
+> do CI.
+
+Quando nem o `JAVA_HOME` nem o `PATH` oferecem um JDK 21+, o wrapper falha com as duas
+versões impressas em vez de deixar o `firebase-tools` falhar sozinho — a mensagem original
+não diz qual `java` ele encontrou nem de onde.
+
+— referente a scripts/firebase-com-jdk.mjs, arquivo inteiro
+
 ## pwa-assets.config.ts
 
 Geração dos ícones do PWA a partir de UM único arquivo: `public/favicon.svg`. Rode `npm run generate-pwa-assets` depois de alterar o SVG da marca.
