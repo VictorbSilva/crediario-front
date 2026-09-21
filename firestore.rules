@@ -12,7 +12,9 @@ service cloud.firestore {
     }
 
     function pertenceAEmpresa(businessId) {
-      return autenticado() && request.auth.token.businessId == businessId;
+      return autenticado()
+        && 'businessId' in request.auth.token
+        && request.auth.token.businessId == businessId;
     }
 
     function podeAcessar(businessId) {

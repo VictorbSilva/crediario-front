@@ -55,6 +55,23 @@ O regex `^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$` recusa a classe grosseir
 
 — referente a firestore.rules, `tiposValidos()` e `imutaveisPreservados()`
 
+> **AVISO**
+> `pertenceAEmpresa()` confere `'businessId' in request.auth.token` **antes** de ler a
+> propriedade. Sem esse passo, um usuário autenticado sem o claim faz a expressão **dar
+> erro** em vez de devolver `false` — descoberto em 21/09/2026 no simulador do console, que
+> reportou *"Property businessId is undefined on object"*.
+>
+> O acesso era negado do mesmo jeito, porque erro em regra nega. Mas negar por acidente é
+> diferente de negar por decisão, e a fragilidade é concreta: `podeAcessar()` é
+> `ehDono() || pertenceAEmpresa(...)`, e o `||` da linguagem de regras faz curto-circuito.
+> Hoje o dono passa porque `ehDono()` resolve primeiro e o segundo operando nunca roda.
+> **Inverter a ordem dos dois operandos — mudança que parece inofensiva — faria o erro
+> disparar antes e trancaria o dono para fora dos próprios dados.**
+>
+> O teste `o dono lê sem ter claim nenhum` existe para quebrar nessa inversão. Ele descreve
+> a situação real: nenhum usuário deste projeto tem claim, porque só o Admin SDK grava claim
+> e o projeto não tem Admin SDK.
+
 ## tests/regras/ambiente.ts
 
 Projeto com prefixo `demo-`: o SDK reconhece esse prefixo como projeto de emulador e recusa qualquer chamada de rede para produção. É a garantia de que um teste de regra nunca escreve na base real.
@@ -91,6 +108,217 @@ Os dois testes `aceita o documento que o formulário monta` não checam um campo
 — referente a tests/regras/clients.test.ts, `describe('clients — criação válida')`
 
 ---
+
+## src/pages/ClientesPage.tsx
+
+Primeira tela do projeto lendo dado real. `DemoBanner` e `clientesDemo` saíram daqui, mas o
+`src/demo/` **continua existindo** para Rotas e Financeiro: a invariante é por tela — nenhuma
+tela mostra dado falso sem o banner, nem dado real com ele —, então apagar o módulo inteiro
+quebraria duas telas fora do escopo desta etapa.
+
+Os KPIs **"Com atraso" e "Sem rota" sumiram**, e não é esquecimento. `situacao` e
+`emAbertoCentavos` não existem no modelo: nascem nas etapas 4 e 5, com as regras financeiras.
+Mostrar "Em dia" ou "R$ 0,00" para todo mundo seria inventar número, que é o que o
+`CLAUDE.md` proíbe. "Sem rota" daria 100% enquanto não houver rotas, o que não informa nada.
+O KPI de arquivados só aparece quando há algum, para não ensinar um zero permanente.
+
+A busca é em memória, sobre o que o listener já trouxe. Termo com dígitos casa `numero` por
+**prefixo** e `telefoneDigits`/`cpfDigits` por trecho — buscar "137" tem que achar o cliente
+137 antes de achar quem tem 137 no meio do telefone.
+
+O botão de arquivar **não tem diálogo de confirmação**, de propósito: é alternância, desfaz
+num clique, e confirmação para ação reversível é ruído. O contrário — botão só de ida —
+esconderia o cliente sem caminho de volta.
+
+> **AVISO**
+> O painel de detalhe **não avisa sobre CPF com dígito inconsistente.** Desde 21/09 o
+> formulário bloqueia, e a coleção nasceu vazia, então não existe caminho no app que grave um
+> CPF inválido. Se um aparecer — edição pelo console, ou uma futura tela de edição que
+> esqueça de validar —, ele fica invisível aqui. É dívida consciente: a rede de segunda
+> instância custaria cinco linhas e hoje não teria o que pegar.
+
+— referente a src/pages/ClientesPage.tsx, arquivo inteiro
+
+## src/components/clientes/FormularioCliente.tsx
+
+Usa `<dialog>` com `showModal()`, que entrega de graça o que daria um bom punhado de
+código: armadilha de foco, `Esc` para fechar, fundo inerte e `::backdrop`. Não entra
+biblioteca de modal no projeto por causa disto.
+
+O componente **não tem prop `aberto`**: quem chama monta e desmonta. O estado do formulário
+zera porque o componente morre, não por um efeito de reset — e efeito de reset seria
+`setState` síncrono dentro de `useEffect`, que o `react-hooks/set-state-in-effect` recusa e
+que custa um render a mais por abertura.
+
+> **AVISO**
+> O campo de número usa `inputMode="numeric"`, **nunca `type="number"`**. O `type="number"`
+> aceita `e`, `+` e `-` como conteúdo válido, muda de valor com a roda do mouse por cima do
+> campo, e ainda assim entrega uma string no `value`. Nada disso é o que se quer de um campo
+> que é a identidade do cliente e é imutável depois de gravado.
+
+Quando cada erro aparece não é detalhe de gosto:
+
+- **Número** mostra erro assim que o campo tem conteúdo. É a única checagem cujo valor está
+  em falhar cedo — descobrir a duplicata no primeiro campo poupa preencher o resto para
+  levar o bloqueio no fim.
+- **Os outros campos** só mostram erro depois do `blur` ou de uma tentativa de salvar.
+- **O CPF depende disso.** `situacaoCpf` devolve `incompleto` com menos de 11 dígitos, então
+  erro ao vivo gritaria "CPF incompleto" desde o primeiro número digitado — que é o
+  comportamento que ensina qualquer usuário a ignorar aviso.
+
+O `maxLength` de cada campo sai de `LIMITES_CLIENTE`, a mesma constante que a validação usa,
+que por sua vez espelha `firestore.rules`. Estourar limite offline não dá erro na hora, dá
+rollback silencioso dias depois.
+
+Salvar chama `criarCliente` e fecha na mesma linha, sem `await` — ver o AVISO do
+`ClientesProvider` sobre Promise que não resolve offline.
+
+— referente a src/components/clientes/FormularioCliente.tsx, arquivo inteiro
+
+## src/data/ClientesProvider.tsx
+
+O único `onSnapshot` do app. Montado no `AppShell`, para que a lista, o formulário e o selo
+de sincronização compartilhem a mesma assinatura — é o que mantém o projeto dentro do plano
+Spark. `orderBy('numero')` usa o índice automático de campo único; `firestore.indexes.json`
+continua vazio de propósito.
+
+> **AVISO**
+> `{ includeMetadataChanges: true }` **não é opcional**. Sem ele o snapshot não dispara
+> quando a única mudança é `hasPendingWrites` virando `false`, e o selo fica preso em
+> "Alterações pendentes" para sempre depois de sincronizar. O bug não aparece online e
+> rápido: aparece depois de uma escrita offline que sincroniza mais tarde.
+
+> **AVISO**
+> **Nunca `await` num `setDoc`/`updateDoc` deste projeto.** Offline a Promise fica pendente
+> por tempo indeterminado — ela não rejeita, só não resolve —, e `await` trava o formulário
+> sem mensagem nenhuma. O cache local já foi atualizado de forma síncrona antes disso, então
+> a tela pode fechar na hora. Chamar sem `await`, com `.catch()`.
+
+> **AVISO**
+> A rejeição chega tarde e faz **rollback silencioso**: se o servidor recusar a escrita
+> (regra), o SDK desfaz o documento no cache e o cliente some da lista dias depois, sem
+> aviso. Por isso o `.catch()` empilha em `falhas`, que a tela renderiza.
+>
+> **O `falhas` só cobre o caso de app aberto.** Cadastro offline com o app fechado antes da
+> sincronização tem a rejeição processada sem ninguém escutando: o documento é revertido e
+> nem o `.catch()` roda. Isso fica invisível até a coleção `erros` da etapa 6.
+
+`serverTimestamp()` materializa como `null` no cache local até o servidor confirmar — por
+isso `criadoEm` e `atualizadoEm` são `Timestamp | null` no tipo `Cliente`. Tratar como
+`Timestamp` puro quebra na primeira escrita offline.
+
+`id` e `pendente` no tipo `Cliente` são derivados do snapshot, não campos do documento:
+`pendente` é `metadata.hasPendingWrites`, e é o que a lista usa para marcar o que ainda não
+subiu.
+
+A chave `crediario:sincronizou:<businessId>` no `localStorage` é a memória de já ter lido do
+servidor neste aparelho, gravada na primeira vez que chega um snapshot com
+`fromCache: false`. É o que alimenta `confiancaDaLista` — ver a armadilha do
+`src/lib/sync.ts` para por que `fromCache` sozinho não basta.
+
+O efeito não chama `setState` de forma síncrona: `carregando` já nasce `true` e
+`jaSincronizou` é lido no inicializador do `useState`. Além de satisfazer o
+`react-hooks/set-state-in-effect`, evita um passe de render extra a cada montagem.
+
+— referente a src/data/ClientesProvider.tsx, arquivo inteiro
+
+## src/lib/cliente.ts
+
+`LIMITES_CLIENTE` existe para que o `maxLength` do formulário e o limite da regra saiam do
+mesmo lugar. Estourar um limite offline não dá erro na hora: a escrita entra no cache, a
+tela diz que salvou, e a rejeição chega dias depois com rollback silencioso. Barrar na
+digitação é a única defesa útil, e ela só funciona enquanto os dois números forem o mesmo
+número — se `firestore.rules` mudar um limite, este arquivo muda junto.
+
+`parseNumeroCadastro` recusa em vez de truncar. `parseInt('12abc')` devolve `12`, e um
+cliente cadastrado com o número errado é irreversível: `numero` é imutável e `delete` é
+proibido, então o conserto é arquivar e recadastrar.
+
+> **AVISO**
+> `validarCliente` **bloqueia** CPF com dígito verificador errado, com a mensagem *"Digite
+> um CPF válido."* — decidido pelo Victor em 21/09/2026, revertendo a postura de 03/09 que
+> só avisava.
+>
+> O caso que manda é o CPF digitado errado **sem ninguém perceber**: meses depois o dono
+> precisa do CPF na hora e descobre que o que está gravado não serve, e aí tem que procurar
+> o cliente de novo para pedir a mesma informação. Erro visível no instante da digitação,
+> com o cliente ainda na frente dele, custa um segundo; erro silencioso custa uma visita.
+>
+> **Campo vazio continua aceito** — `cpf` é opcional. Essa é a saída para o caso em que o
+> papel traz um CPF que de fato não fecha: deixar em branco de propósito é diferente de
+> gravar errado sem saber. CPF incompleto tem mensagem própria, para não mandar o dono
+> procurar um dígito trocado quando o que falta é dígito.
+
+O guarda de `nomeBusca` vazio parece paranoia e não é: `normalizar()` aplica NFD e remove a
+faixa de diacríticos, então um nome feito só de marcas de combinação vira string vazia, e a
+regra exige `nomeBusca.size() > 0`. Sem o guarda, a rejeição acontece no servidor, offline,
+dias depois.
+
+`montarCamposCliente` estoura em vez de montar documento com entrada inválida. Não é
+caminho de usuário — o formulário valida antes —, então falhar alto é melhor que gravar
+torto.
+
+— referente a src/lib/cliente.ts, arquivo inteiro
+
+## src/lib/sync.ts
+
+`confiancaDaLista` é o que separa *"conferi e o número não existe"* de *"ainda não sei
+nada"*. A checagem de número repetido vale exatamente o quanto a lista estiver completa, e
+o Firestore não tem como dizer se o cache local está completo ou vazio.
+
+> **AVISO**
+> O caso perigoso é o aparelho que **nunca sincronizou** esta coleção: celular novo,
+> armazenamento limpo, primeiro login. O listener emite um snapshot vindo do cache, com zero
+> clientes, e toda checagem de duplicata passa no vácuo. O número repetido desce depois, e
+> aí já existem dois clientes ativos com o mesmo número — irreversível, porque `numero` é
+> imutável e `delete` é proibido.
+>
+> `fromCache: true` sozinho **não** serve de alarme: offline é o caso comum deste produto e
+> o aviso viraria ruído permanente, ignorado no dia em que importasse. O que distingue os
+> dois é a memória de já ter sincronizado alguma vez neste aparelho, que o provider grava em
+> `localStorage` na primeira vez que recebe um snapshot confirmado pelo servidor — mesmo
+> padrão que o `AuthProvider` já usa para o `businessId`.
+
+Por isso a confiança tem três estados e não dois: `desconhecida` bloqueia o salvamento,
+`parcial` deixa salvar com aviso, `confiavel` não diz nada. Bloquear em `parcial` impediria
+cadastrar offline num aparelho novo, que é pior do que o risco que evita.
+
+— referente a src/lib/sync.ts, arquivo inteiro
+
+## src/lib/data.ts
+
+> **AVISO**
+> `dataLocalISO` usa `getFullYear`/`getMonth`/`getDate` e **nunca `toISOString()`**. Em
+> UTC-3, às 21h de uma terça o `toISOString()` já devolve a quarta-feira — o cadastro feito
+> à noite na casa do cliente ficaria com a data do dia seguinte, que é exatamente o desvio
+> que o campo `cadastradoEm` existe para corrigir.
+>
+> O teste que prova isso só falha em fuso negativo. Por isso o `vitest.config.ts` fixa
+> `TZ: 'America/Sao_Paulo'`: o runner do CI roda em UTC e o teste passaria por acidente.
+
+— referente a src/lib/data.ts e vitest.config.ts
+
+## src/lib/cpf.ts
+
+`situacaoCpf` separa `incompleto` de `invalido` porque menos de 11 dígitos é digitação em
+andamento, não erro: avisar enquanto a pessoa digita treina todo mundo a ignorar o aviso.
+
+A sequência de dígitos repetidos (`11111111111`) **passa na conta do dígito verificador** e
+precisa de teste próprio. É a única família de CPF inválido que o algoritmo aceita.
+
+— referente a src/lib/cpf.ts
+
+## src/lib/dispositivo.ts
+
+`atualizadoPor` é diagnóstico de dispositivo, nunca autorização — ver a armadilha do
+`atualizadoPor` mais abaixo. Oito caracteres hexadecimais cabem folgado no limite de 64 da
+regra.
+
+O `localStorage` pode estourar (aba anônima, armazenamento bloqueado), então há fallback em
+memória: o id deixa de sobreviver ao recarregamento, mas o cadastro não para. Perder a
+continuidade do diagnóstico é aceitável; travar o cadastro do dono, não.
+
+— referente a src/lib/dispositivo.ts
 
 ## scripts/firebase-com-jdk.mjs
 
@@ -447,13 +675,17 @@ campos, imutabilidade e carimbo de tempo do servidor. O que segue é o que elas 
 alcançam. Cada item aqui é um invariante que, se ninguém assumir explicitamente, não
 tem dono nenhum.
 
-## 1. Unicidade de `numero` — 🔴 sem dono hoje
+## 1. Unicidade de `numero` — 🟢 com dono desde 21/09/2026
 
 Uma regra enxerga o documento sendo escrito e nada mais. Para saber se já existe outro
 cliente com `numero: 7` seria preciso varrer a coleção, e regra não varre. `get()` lê um
 documento de caminho conhecido, custa uma leitura faturada, e não resolve o caso real:
 **dois dispositivos offline podem criar o número 7 ao mesmo tempo e ambos passam**, cada
 um contra um cache que não conhece o outro.
+
+**Implementado em 21/09/2026** em `clienteComNumero` (`src/lib/cliente.ts`), consumido por
+`validarCliente` e exibido ao vivo no campo de número do formulário. Verificado no roteiro
+de aceite do mesmo dia: número repetido recusa, número de arquivado aceita.
 
 Consequência prática: **nada impede dois clientes com o mesmo número.** É exatamente o
 buraco que a decisão de alocação do `numero` (etapa 3) precisa fechar, e é por isso que
@@ -562,13 +794,15 @@ do projeto.
 Volta a valer no instante em que qualquer ferramenta administrativa for escrita. Se isso
 acontecer, toda validação que importa passa a precisar existir **duas vezes**.
 
-## 7. Dígito verificador de CPF — 🟢 aceito
+## 7. Dígito verificador de CPF — 🟢 com dono desde 21/09/2026
 
 Regras não têm laço nem aritmética suficiente para calcular dígito verificador. A regra
 limita tamanho de `cpfDigits` e nada mais.
 
-Dono: o formulário. Sem importação, todo CPF entra digitado pelo dono, um a um — o que
-faz da validação no formulário a única que existe.
+Dono: `situacaoCpf` em `src/lib/cpf.ts`, consumida por `validarCliente`, que **bloqueia o
+salvamento** quando o dígito não fecha. Sem importação, todo CPF entra digitado pelo dono,
+um a um — o que faz da validação no formulário a única que vai existir. Ver o AVISO na
+seção do `src/lib/cliente.ts` para o porquê de bloquear em vez de avisar.
 
 ## 8. O que É exprimível e ainda não foi feito
 

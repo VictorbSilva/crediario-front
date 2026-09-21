@@ -3,8 +3,11 @@ import { BrandMark } from '@/components/BrandMark'
 import { navItems } from './navItems'
 import { SignOutButton } from './SignOutButton'
 import { SyncBadge } from './SyncBadge'
+import { useClientes } from '@/data/useClientes'
 
 export function Sidebar() {
+  const { estadoSync } = useClientes()
+
   return (
     <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-white md:sticky md:top-0 md:flex md:h-dvh md:flex-col">
       <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4">
@@ -34,7 +37,7 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-slate-200 p-3">
-        <SyncBadge estado="nao-configurado" className="w-full" />
+        <SyncBadge estado={estadoSync} className="w-full" />
         <SignOutButton className="w-full" />
       </div>
     </aside>
