@@ -92,6 +92,36 @@ Os dois testes `aceita o documento que o formulário monta` não checam um campo
 
 ---
 
+## src/pages/ClientesPage.tsx
+
+Primeira tela do projeto lendo dado real. `DemoBanner` e `clientesDemo` saíram daqui, mas o
+`src/demo/` **continua existindo** para Rotas e Financeiro: a invariante é por tela — nenhuma
+tela mostra dado falso sem o banner, nem dado real com ele —, então apagar o módulo inteiro
+quebraria duas telas fora do escopo desta etapa.
+
+Os KPIs **"Com atraso" e "Sem rota" sumiram**, e não é esquecimento. `situacao` e
+`emAbertoCentavos` não existem no modelo: nascem nas etapas 4 e 5, com as regras financeiras.
+Mostrar "Em dia" ou "R$ 0,00" para todo mundo seria inventar número, que é o que o
+`CLAUDE.md` proíbe. "Sem rota" daria 100% enquanto não houver rotas, o que não informa nada.
+O KPI de arquivados só aparece quando há algum, para não ensinar um zero permanente.
+
+A busca é em memória, sobre o que o listener já trouxe. Termo com dígitos casa `numero` por
+**prefixo** e `telefoneDigits`/`cpfDigits` por trecho — buscar "137" tem que achar o cliente
+137 antes de achar quem tem 137 no meio do telefone.
+
+O botão de arquivar **não tem diálogo de confirmação**, de propósito: é alternância, desfaz
+num clique, e confirmação para ação reversível é ruído. O contrário — botão só de ida —
+esconderia o cliente sem caminho de volta.
+
+> **AVISO**
+> O painel de detalhe **não avisa sobre CPF com dígito inconsistente.** Desde 21/09 o
+> formulário bloqueia, e a coleção nasceu vazia, então não existe caminho no app que grave um
+> CPF inválido. Se um aparecer — edição pelo console, ou uma futura tela de edição que
+> esqueça de validar —, ele fica invisível aqui. É dívida consciente: a rede de segunda
+> instância custaria cinco linhas e hoje não teria o que pegar.
+
+— referente a src/pages/ClientesPage.tsx, arquivo inteiro
+
 ## src/components/clientes/FormularioCliente.tsx
 
 Usa `<dialog>` com `showModal()`, que entrega de graça o que daria um bom punhado de

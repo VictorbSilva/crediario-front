@@ -10,23 +10,11 @@
 //   errado e será reescrita junto com a integração do Firestore.
 //
 //   R4 + decisão de 01/09 — o cliente tem `numero` de cadastro imutável, digitado
-//   pelo dono a partir da lista de papel dele. `ClienteDemo` não tem `numero`.
+//   pelo dono a partir da lista de papel dele. Os clientes de demonstração saíram daqui
+//   em 21/09/2026, quando a tela de Clientes passou a ler o Firestore.
 //
 // O modelo válido está em `firestore.rules` (campos de `clients`) e na seção 6 do
 // documento de progresso.
-
-export type SituacaoCliente = 'em-dia' | 'atrasado' | 'sem-rota'
-
-export type ClienteDemo = {
-  id: string
-  nome: string
-  iniciais: string
-  telefone: string
-  endereco: string
-  rota: string | null
-  emAbertoCentavos: number
-  situacao: SituacaoCliente
-}
 
 export type SituacaoParada = 'cobrar' | 'pago' | 'ausente' | 'atrasado'
 
@@ -57,69 +45,6 @@ export type ParcelaDemo = {
   valorCentavos: number
   situacao: SituacaoParcela
 }
-
-export const clientesDemo: ClienteDemo[] = [
-  {
-    id: 'c1',
-    nome: 'Maria Aparecida Santos',
-    iniciais: 'MA',
-    telefone: '(11) 98421-0075',
-    endereco: 'Rua das Flores 120, Centro',
-    rota: 'Rota Centro',
-    emAbertoCentavos: 32000,
-    situacao: 'atrasado',
-  },
-  {
-    id: 'c2',
-    nome: 'João Batista Lima',
-    iniciais: 'JB',
-    telefone: '(11) 99640-3312',
-    endereco: 'Av. Brasil 455, Bairro Alto',
-    rota: 'Rota Bairro Alto',
-    emAbertoCentavos: 18000,
-    situacao: 'em-dia',
-  },
-  {
-    id: 'c3',
-    nome: 'Ana Paula Ferreira',
-    iniciais: 'AP',
-    telefone: '(11) 97155-8890',
-    endereco: 'Sítio Boa Vista, Interior',
-    rota: null,
-    emAbertoCentavos: 0,
-    situacao: 'sem-rota',
-  },
-  {
-    id: 'c4',
-    nome: 'Mercado São José',
-    iniciais: 'MS',
-    telefone: '(11) 3312-4400',
-    endereco: 'Praça Central 22, Centro',
-    rota: 'Rota Centro',
-    emAbertoCentavos: 26000,
-    situacao: 'em-dia',
-  },
-  {
-    id: 'c5',
-    nome: 'Carlos Roberto',
-    iniciais: 'CR',
-    telefone: '(11) 98800-1122',
-    endereco: 'Rua Projetada 8, Centro',
-    rota: 'Rota Centro',
-    emAbertoCentavos: 9000,
-    situacao: 'atrasado',
-  },
-  {
-    id: 'c6',
-    nome: 'Dona Lúcia',
-    iniciais: 'DL',
-    telefone: '(11) 99012-7745',
-    endereco: 'Travessa Azul 45, Bairro Alto',
-    rota: 'Rota Bairro Alto',
-    emAbertoCentavos: 18000,
-    situacao: 'atrasado',
-  },
-]
 
 export const rotasDemo: RotaDemo[] = [
   {
