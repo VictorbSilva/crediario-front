@@ -105,11 +105,19 @@ cliente cadastrado com o número errado é irreversível: `numero` é imutável 
 proibido, então o conserto é arquivar e recadastrar.
 
 > **AVISO**
-> `validarCliente` **não** trata CPF com dígito verificador errado como erro — é aviso, por
-> decisão do dono. Bloquear não produz um CPF correto: produz um CPF **vazio**, porque o
-> dono apaga o campo para conseguir salvar, e os dígitos que estavam no papel se perdem.
-> Como `cpf` é mutável (não está em `imutaveisPreservados()`), errado-e-presente é sempre
-> mais recuperável que ausente.
+> `validarCliente` **bloqueia** CPF com dígito verificador errado, com a mensagem *"Digite
+> um CPF válido."* — decidido pelo Victor em 21/09/2026, revertendo a postura de 03/09 que
+> só avisava.
+>
+> O caso que manda é o CPF digitado errado **sem ninguém perceber**: meses depois o dono
+> precisa do CPF na hora e descobre que o que está gravado não serve, e aí tem que procurar
+> o cliente de novo para pedir a mesma informação. Erro visível no instante da digitação,
+> com o cliente ainda na frente dele, custa um segundo; erro silencioso custa uma visita.
+>
+> **Campo vazio continua aceito** — `cpf` é opcional. Essa é a saída para o caso em que o
+> papel traz um CPF que de fato não fecha: deixar em branco de propósito é diferente de
+> gravar errado sem saber. CPF incompleto tem mensagem própria, para não mandar o dono
+> procurar um dígito trocado quando o que falta é dígito.
 
 O guarda de `nomeBusca` vazio parece paranoia e não é: `normalizar()` aplica NFD e remove a
 faixa de diacríticos, então um nome feito só de marcas de combinação vira string vazia, e a
@@ -652,13 +660,15 @@ do projeto.
 Volta a valer no instante em que qualquer ferramenta administrativa for escrita. Se isso
 acontecer, toda validação que importa passa a precisar existir **duas vezes**.
 
-## 7. Dígito verificador de CPF — 🟢 aceito
+## 7. Dígito verificador de CPF — 🟢 com dono desde 21/09/2026
 
 Regras não têm laço nem aritmética suficiente para calcular dígito verificador. A regra
 limita tamanho de `cpfDigits` e nada mais.
 
-Dono: o formulário. Sem importação, todo CPF entra digitado pelo dono, um a um — o que
-faz da validação no formulário a única que existe.
+Dono: `situacaoCpf` em `src/lib/cpf.ts`, consumida por `validarCliente`, que **bloqueia o
+salvamento** quando o dígito não fecha. Sem importação, todo CPF entra digitado pelo dono,
+um a um — o que faz da validação no formulário a única que vai existir. Ver o AVISO na
+seção do `src/lib/cliente.ts` para o porquê de bloquear em vez de avisar.
 
 ## 8. O que É exprimível e ainda não foi feito
 
