@@ -55,6 +55,23 @@ O regex `^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$` recusa a classe grosseir
 
 — referente a firestore.rules, `tiposValidos()` e `imutaveisPreservados()`
 
+> **AVISO**
+> `pertenceAEmpresa()` confere `'businessId' in request.auth.token` **antes** de ler a
+> propriedade. Sem esse passo, um usuário autenticado sem o claim faz a expressão **dar
+> erro** em vez de devolver `false` — descoberto em 21/09/2026 no simulador do console, que
+> reportou *"Property businessId is undefined on object"*.
+>
+> O acesso era negado do mesmo jeito, porque erro em regra nega. Mas negar por acidente é
+> diferente de negar por decisão, e a fragilidade é concreta: `podeAcessar()` é
+> `ehDono() || pertenceAEmpresa(...)`, e o `||` da linguagem de regras faz curto-circuito.
+> Hoje o dono passa porque `ehDono()` resolve primeiro e o segundo operando nunca roda.
+> **Inverter a ordem dos dois operandos — mudança que parece inofensiva — faria o erro
+> disparar antes e trancaria o dono para fora dos próprios dados.**
+>
+> O teste `o dono lê sem ter claim nenhum` existe para quebrar nessa inversão. Ele descreve
+> a situação real: nenhum usuário deste projeto tem claim, porque só o Admin SDK grava claim
+> e o projeto não tem Admin SDK.
+
 ## tests/regras/ambiente.ts
 
 Projeto com prefixo `demo-`: o SDK reconhece esse prefixo como projeto de emulador e recusa qualquer chamada de rede para produção. É a garantia de que um teste de regra nunca escreve na base real.
