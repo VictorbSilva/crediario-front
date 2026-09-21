@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Archive, ArchiveRestore, MapPin, Phone, Plus } from 'lucide-react'
+import { Archive, ArchiveRestore, Download, MapPin, Phone, Plus } from 'lucide-react'
+import { ExportarClientes } from '@/components/clientes/ExportarClientes'
 import { FormularioCliente } from '@/components/clientes/FormularioCliente'
 import { Avatar } from '@/components/ui/Avatar'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -41,6 +42,7 @@ export function ClientesPage() {
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null)
   const [mostrarArquivados, setMostrarArquivados] = useState(false)
   const [cadastrando, setCadastrando] = useState(false)
+  const [exportando, setExportando] = useState(false)
 
   const visiveis = mostrarArquivados ? clientes : ativos
 
@@ -63,14 +65,24 @@ export function ClientesPage() {
             Cadastro, contato e situação dos clientes do crediário.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCadastrando(true)}
-          className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
-        >
-          <Plus size={17} aria-hidden />
-          <span className="hidden sm:inline">Novo cliente</span>
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExportando(true)}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+          >
+            <Download size={17} aria-hidden />
+            <span className="hidden sm:inline">Exportar</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCadastrando(true)}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+          >
+            <Plus size={17} aria-hidden />
+            <span className="hidden sm:inline">Novo cliente</span>
+          </button>
+        </div>
       </div>
 
       {erro ? (
@@ -276,6 +288,7 @@ export function ClientesPage() {
       </div>
 
       {cadastrando ? <FormularioCliente aoFechar={() => setCadastrando(false)} /> : null}
+      {exportando ? <ExportarClientes aoFechar={() => setExportando(false)} /> : null}
     </div>
   )
 }
