@@ -222,6 +222,47 @@ O efeito não chama `setState` de forma síncrona: `carregando` já nasce `true`
 
 — referente a src/data/ClientesProvider.tsx, arquivo inteiro
 
+## src/lib/exportacao.ts
+
+A exportação **não é conveniência: é o único backup que os dados vão ter.** Não há
+importação de planilha, não há credencial administrativa, e os ~700 clientes do caderno vão
+existir só no Firestore. Tratar este arquivo como acessório é o caminho para descobrir, no
+pior dia possível, que não havia backup nenhum.
+
+> **AVISO**
+> `situacaoExportacao` **bloqueia** quando a confiança da lista é `desconhecida` e **grita**
+> quando é `parcial`. É a mesma `ConfiancaDaLista` do formulário, e aqui ela pesa mais:
+> exportar de um aparelho que nunca sincronizou produz um arquivo com 3 dos 700 clientes,
+> com cara de backup completo. **Backup silenciosamente incompleto é pior que backup
+> nenhum**, porque a pessoa para de procurar.
+
+Dois detalhes do CSV que parecem frescura e não são:
+
+- **BOM UTF-8 (`﻿`) no início.** Sem ele o Excel em pt-BR abre o arquivo em ANSI e
+  "João" vira "JoÃ£o" em toda a planilha.
+- **Separador `;`, não vírgula.** O Excel configurado em pt-BR usa ponto e vírgula como
+  separador de lista; com vírgula ele joga a linha inteira numa coluna só.
+
+`arquivado` sai como `sim`/`não` no CSV porque quem lê é o dono. Isso torna o CSV um
+documento de leitura, não fonte de restauração — para restaurar é o JSON, e a tela diz isso.
+
+O JSON monta o objeto **campo a campo em vez de espalhar o cliente**. O tipo `Cliente` carrega
+`pendente`, que é estado de tela derivado de `metadata.hasPendingWrites` e não tem o que
+fazer dentro de um backup. O `id` entra de propósito: é o identificador do documento, e uma
+restauração futura precisa dele. O envelope tem `versao` para que um formato novo seja um
+ramo na leitura, não uma adivinhação.
+
+`criadoEm` e `atualizadoEm` viram `null` quando a escrita ainda não subiu — é o mesmo
+`serverTimestamp()` que só materializa no servidor. O arquivo registra `null` em vez de
+inventar data, e a tela avisa quantos cadastros estão nessa situação.
+
+— referente a src/lib/exportacao.ts e src/components/clientes/ExportarClientes.tsx
+
+> **AVISO**
+> O `URL.revokeObjectURL` do download roda com atraso de propósito. Revogar na mesma volta
+> do `click()` cancela o download antes de começar em alguns navegadores — o link fica
+> válido por um segundo e só então é liberado.
+
 ## src/lib/cliente.ts
 
 `LIMITES_CLIENTE` existe para que o `maxLength` do formulário e o limite da regra saiam do
