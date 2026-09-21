@@ -60,7 +60,18 @@ Vitest has its own `vitest.config.ts`, separate from `vite.config.ts`, so the te
 ## Domain Notes
 
 - Core entities include clients, collection routes (with drag-and-drop ordering), and installment-based finances (installments, due dates, late-payment processing computed on demand).
-- Financial rules (interest, penalties, rounding, payment states) are NOT fully specified yet — when implementing financial logic, state assumptions explicitly and ask before inventing business rules.
+
+### Financial rules — answered by the owner on 21/09/2026 (voice note)
+
+These were the last open questions in the project. They are decided; do not re-derive or re-ask them. Quotes below are his.
+
+- **There is no renegotiation feature and none will be built.** Renegotiation is verbal and never recorded: *"geralmente é mais só boca a boca… não formaliza nada"*. The installment plan stays exactly as issued. A R$ 300 sale in 3×100 whose client starts paying 50 at a time **remains a 3×100 plan** — the balance runs 300 → 250 → 200 and the overdue count keeps running against the **original** due dates: *"vai ficar atrasado e eu vou dando baixa… e sempre contando o atraso"*.
+- **A payment is an arbitrary amount against a sale — never "installment N is paid".** Payments are an append-only ledger; installment status is *derived* by allocating payments oldest-first, so a partially covered installment stays overdue for the remainder, and "late since" is the due date of the oldest uncovered installment. This is the same shape C3 already forced: cancelling a payment is a new event with its own date, never a deletion, and the installment returns to overdue counted from its original due date.
+- **Interest and penalty are a simulation, not a charge.** The owner does not collect them — *"eu não cobro, geralmente eu não cobro"*. They exist behind a toggle he switches on to show the client what the debt *would* be, as leverage: *"se eu fosse cobrar juros e multa ia dar 200 reais a mais, mas eu não estou nem cobrando isso… vai ajudar a dar uma pressão na cobrança"*. **The toggle defaults to OFF, and what is owed is the plain agreed amount.** Never show an inflated balance by default — the collector would ask for the wrong number at the door.
+- **Penalty behaves like a boleto: one-off, applied once when the installment goes overdue. Interest is PER DAY — never per month.** His words and his reason: a daily figure visibly grows and pressures, where a monthly one does nothing for 30 days. **Do not build a per-month option.**
+- **Because nothing is ever charged, no rate is frozen onto the installment.** The simulation is recomputed from the current rates and the days overdue, so there is no historical charge to preserve and `versaoCalculo` is not needed for this. If he ever does collect interest, it arrives as an ordinary payment of a larger amount — the ledger records what was received, not how it was split.
+- Rates are **data the owner types** (penalty as % or fixed amount; interest as % per day), never rules in code. Rounding: nearest centavo, ties to even — the rule `src/lib/dinheiro.ts` already implements.
+- **Late from the first day after the due date.** No grace period, and no grace-period field.
 
 ## Working Rules for Claude Code
 
@@ -75,5 +86,5 @@ Vitest has its own `vitest.config.ts`, separate from `vite.config.ts`, so the te
 - **Every new collection is born with its own per-collection rule and the matching rule test, in the same commit.** The `match /{documento=**}` wildcard does not count as write authorization: with no Cloud Functions, the rule is the only schema validation this project will ever have.
 - **Money is always integer centavos.** Never `parseFloat` a money string — use `parseReaisParaCentavos` from `src/lib/dinheiro.ts`.
 - **Test PWA and offline behaviour on the production build only** (`npm run build` then `npm run preview`). `npm run dev` proves nothing: `devOptions` is off, so no service worker is registered.
-- **Read `docs/armadilhas.md` before touching `vite.config.ts`, `src/lib/firebase.ts` or `pwa-assets.config.ts`.** It records traps already paid for — bugs that do not show up in the build and only appear in production, offline, or on a specific platform.
+- **Read `docs/armadilhas.md` before touching `vite.config.ts`, `src/lib/firebase.ts`, `pwa-assets.config.ts` or `firestore.rules`.** It records traps already paid for — bugs that do not show up in the build and only appear in production, offline, or on a specific platform.
 - **When a modelling decision depends on an answer from the owner, first check whether it is reversible by construction.** If it is, implement the reversible path and move on instead of blocking. The general shape: store what the user typed *and* the derived result *and* a `versaoCalculo`, so that a later rule change is a recomputation of new records rather than a migration of old ones.

@@ -9,11 +9,110 @@ Este documento reúne os comentários explicativos que antes viviam no código-f
 > viver no mesmo commit que o código. Diferente do documento de progresso, aqui não
 > há nada pessoal: só invariante técnica por arquivo.
 
-**Leia isto antes de alterar `vite.config.ts`, `src/lib/firebase.ts` e `pwa-assets.config.ts`.** Vários dos comentários abaixo, especialmente os destacados como `> **AVISO**`, registram armadilhas já pagas — bugs que não aparecem no build e que só se manifestam em produção, offline, ou em plataformas específicas (Android, iOS).
+**Leia isto antes de alterar `vite.config.ts`, `src/lib/firebase.ts`, `pwa-assets.config.ts` e `firestore.rules`.** Vários dos comentários abaixo, especialmente os destacados como `> **AVISO**`, registram armadilhas já pagas — bugs que não aparecem no build e que só se manifestam em produção, offline, ou em plataformas específicas (Android, iOS).
 
-Os comentários estão agrupados por arquivo, em ordem alfabética de caminho. Cada entrada termina com a referência ao trecho de código de origem (linhas do arquivo antes da remoção dos comentários).
+Os comentários estão agrupados por arquivo, em ordem alfabética de caminho. Cada entrada termina com a referência ao trecho de código de origem (linhas do arquivo antes da remoção dos comentários, ou o nome da função quando a referência por linha envelheceria rápido).
 
 ---
+
+## firestore.rules
+
+> **AVISO**
+> **POSTURA: negar por padrão.** Uma coleção só se torna gravável depois que a regra dela existe neste arquivo. Não há curinga `{documento=**}` de propósito — ele existia até 28/08/2026 e tornava inerte qualquer regra por-coleção, porque no Firestore basta UMA regra casada permitir para o acesso ser concedido. Ver o item 9 mais abaixo.
+
+Este projeto não tem Cloud Functions e não vai ter (plano Spark), nem service account: não existe credencial administrativa que ignore estas regras. Elas são a validação completa dos dados, não a primeira de várias camadas.
+
+**ACESSO, HOJE:** só o dono usa o app, e `ehDono()` é a única porta que abre. `pertenceAEmpresa()` depende do custom claim `businessId`, e custom claim só o Admin SDK grava — que este projeto não tem. O caminho do funcionário está escrito e testado (o emulador forja o claim à vontade), mas não tem como existir em produção. Múltiplos usuários são atualização pós-MVP.
+
+— referente ao cabeçalho de firestore.rules
+
+A lista fechada de `camposConhecidos()` é o que transforma um campo digitado errado em erro de escrita, em vez de um documento silenciosamente torto. O preço é que campo novo exige mexer na regra e no teste — que é exatamente a regra do `CLAUDE.md`, não um efeito colateral dela.
+
+— referente a firestore.rules, `camposConhecidos()`
+
+`serverTimestamp()` é resolvido pelo servidor no instante em que a escrita é processada — o mesmo valor de `request.time`. Exigir a igualdade impede o dispositivo de escolher a própria data. Continua valendo para escrita offline: o carimbo nasce quando a fila sobe, não quando foi enfileirada.
+
+— referente a firestore.rules, `carimboDeCriacao()`
+
+`numero` é fixo por decisão do dono: a lista de papel vai de 1 a N e essa ordem não muda. `criadoEm` e `cadastradoEm` são fatos históricos — um diz quando sincronizou, o outro quando o dono estava lá.
+
+— referente a firestore.rules, `imutaveisPreservados()`
+
+Sem `delete` pelo app. Um handler com bug apaga sem perguntar, e o histórico do cliente é o ativo mais caro deste sistema. Cadastro errado se resolve com `arquivado: true`. Exclusão de titular (LGPD) é operação do dono pelo console, não da interface.
+
+— referente a firestore.rules, `allow delete: if false`
+
+### `cadastradoEm` — acrescentado na etapa 3 (03/09/2026)
+
+`cadastradoEm` é a data em que o dono **estava na casa do cliente**, lida do relógio do aparelho. Existe porque `criadoEm` não responde isso: ele é `request.time`, o instante em que a fila offline subiu. Cadastro feito numa terça sem sinal que só sincroniza no sábado tem `criadoEm` = sábado, e a diferença não é recuperável depois. É a resolução da armadilha #3.
+
+**String `'YYYY-MM-DD'` e não `Timestamp`:** o que se registra é uma data de calendário no fuso local, não um instante. `Timestamp` obrigaria a escolher uma hora e reintroduziria fuso numa pergunta que não tem fuso. Mesma convenção já decidida para vencimento de parcela.
+
+> **AVISO**
+> **Nasceu obrigatório, e essa janela não volta.** O app é o único escritor e sempre preenche o campo; campo que existe em alguns documentos e falta em outros obriga toda consulta futura a tratar o buraco. Só foi possível porque a coleção em produção estava **vazia** em 03/09/2026 (verificado no console). Tornar um campo obrigatório **depois** que existe dado é porta de mão única: `obrigatoriosPresentes()` também vale no `update`, então todo documento antigo sem o campo fica **inatualizável** — e como `delete` é proibido, fica encalhado para sempre. O teste `recusa edição de documento sem cadastradoEm` existe para deixar essa consequência visível.
+
+O regex `^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$` recusa a classe grosseira de lixo (`2026-9-3`, `03/09/2026`, `2026-13-01`, `9999-99-99`) a custo zero. Ele **não** valida 30 de fevereiro — regra não tem calendário, e há um teste afirmando que `2026-02-30` passa. O dono desse resto é o formulário.
+
+— referente a firestore.rules, `tiposValidos()` e `imutaveisPreservados()`
+
+## tests/regras/ambiente.ts
+
+Projeto com prefixo `demo-`: o SDK reconhece esse prefixo como projeto de emulador e recusa qualquer chamada de rede para produção. É a garantia de que um teste de regra nunca escreve na base real.
+
+— referente a tests/regras/ambiente.ts, `PROJETO`
+
+`UID_DONO` é o UID real do dono, o mesmo que está literal em `firestore.rules`.
+
+— referente a tests/regras/ambiente.ts, `UID_DONO`
+
+`clienteValido()` é o documento que passa em todas as validações. Os testes de schema partem daqui e estragam **um campo por vez** — assim a causa da recusa é sempre o campo em questão, e não uma segunda coisa errada que ninguém percebeu.
+
+— referente a tests/regras/ambiente.ts, `clienteValido()`
+
+> **AVISO**
+> `clienteComoOAppEscreve()` é o documento **literal** que o formulário de cadastro monta (`src/lib/cliente.ts`). É **cópia manual**, e de propósito: `vitest.rules.config.ts` não tem o alias `@` porque estes testes exercitam a fronteira, não o código da aplicação. O preço da cópia é que os dois lados podem divergir — e os testes que usam esse helper são o **único** lugar que percebe quando divergem. Ao mexer nos campos que o formulário grava, mexer aqui também.
+>
+> Repare no que **não** está lá: `rotaId`. A coleção `routes/` ainda não tem regra, então é ingravável, e o formulário não oferece o campo.
+
+— referente a tests/regras/ambiente.ts, `clienteComoOAppEscreve()`
+
+## tests/regras/clients.test.ts
+
+`semear()` grava direto, com as regras desligadas, para montar o estado de partida dos testes de edição.
+
+— referente a tests/regras/clients.test.ts, `semear()`
+
+A lista fechada de campos é a única coisa entre um typo de campo e 700 documentos tortos — daí os dois testes de campo desconhecido, um deles com valor monetário em string, que é a forma mais provável de o erro aparecer.
+
+— referente a tests/regras/clients.test.ts, `describe('clients — campos desconhecidos')`
+
+Os dois testes `aceita o documento que o formulário monta` não checam um campo isolado: checam a **forma inteira** que o app grava de verdade, cheia e mínima. É o teste de deriva entre formulário e regra. Se alguém acrescentar um campo no formulário sem abrir o arquivo de regras, é ali que aparece — e não meses depois, num rollback silencioso em produção.
+
+— referente a tests/regras/clients.test.ts, `describe('clients — criação válida')`
+
+---
+
+## scripts/firebase-com-jdk.mjs
+
+Os scripts `test:rules` e `emu` não chamam o `firebase` direto: passam por este wrapper, que
+põe o `bin` do `JAVA_HOME` na frente do `PATH` antes de invocar o `firebase-tools`.
+
+> **AVISO**
+> O emulador do Firestore roda em Java e o `firebase-tools` 15 recusa qualquer versão
+> anterior à 21. **O `firebase-tools` resolve `java` pelo `PATH`, não pelo `JAVA_HOME`** —
+> então ter o `JAVA_HOME` apontando para um JDK 21 não basta, e foi exatamente isso que
+> aconteceu em 21/09/2026: um instalador automático pôs um Java 8 da Oracle em
+> `C:\Program Files (x86)\Common Files\Oracle\Java\java8path`, à frente do JDK 21 no PATH da
+> máquina. `JAVA_HOME` continuava correto; `npm run test:rules` morria mesmo assim, com uma
+> mensagem que não sugere a causa. Consertar o PATH da máquina exige privilégio de
+> administrador e vale só para aquela máquina; o wrapper vale para todas, inclusive o runner
+> do CI.
+
+Quando nem o `JAVA_HOME` nem o `PATH` oferecem um JDK 21+, o wrapper falha com as duas
+versões impressas em vez de deixar o `firebase-tools` falhar sozinho — a mensagem original
+não diz qual `java` ele encontrou nem de onde.
+
+— referente a scripts/firebase-com-jdk.mjs, arquivo inteiro
 
 ## pwa-assets.config.ts
 
@@ -390,7 +489,7 @@ lugar só. **Todo caminho de escrita alternativo quebra isso em silêncio** — 
 console do Firebase, correção manual, qualquer ferramenta administrativa futura. O sintoma não é erro: é o cliente
 sumir da busca.
 
-## 3. `criadoEm` significa "quando sincronizou", não "quando cadastrei" — 🟡 a decidir na etapa 3
+## 3. `criadoEm` significa "quando sincronizou", não "quando cadastrei" — 🟢 resolvida em 03/09/2026
 
 A regra exige `dados().criadoEm == request.time`, e `request.time` é o relógio do
 **servidor** no instante em que a escrita é processada. Isso é deliberado: impede um
@@ -409,8 +508,23 @@ responde "quantos clientes entraram em setembro"**. Se essa pergunta importar, p
 um campo separado escrito pelo dispositivo — e aí volta o problema do relógio, porque
 regra nenhuma consegue validá-lo (mesma natureza da armadilha #4).
 
-Nada a fazer hoje. Fica registrado para ser decidido de olhos abertos na etapa 3, e não
-descoberto meses depois num relatório.
+~~Nada a fazer hoje. Fica registrado para ser decidido de olhos abertos na etapa 3, e não
+descoberto meses depois num relatório.~~
+
+**Decidido na etapa 3, em 03/09/2026: existe o campo separado.** `cadastradoEm` é uma
+string `'YYYY-MM-DD'` escrita pelo relógio do aparelho, **obrigatória** e imutável — ver a
+seção `firestore.rules` no topo deste arquivo para o porquê da obrigatoriedade e da forma.
+
+`criadoEm` **continua sendo a data da sincronização** e não muda de significado. Os dois
+campos convivem e respondem perguntas diferentes: `cadastradoEm` responde "em que dia eu
+estava na casa do cliente", `criadoEm` responde "quando isso chegou ao servidor". Quem
+quiser contar quantos clientes entraram em setembro usa `cadastradoEm`.
+
+O problema do relógio, levantado acima, não foi resolvido e **não tem como ser**: regra
+nenhuma valida o relógio de quem escreve (mesma natureza da armadilha #4). O que se ganhou
+é que o dado agora é *autodeclarado e plausível* em vez de *sistematicamente errado*. O
+regex barra lixo grosseiro; um aparelho com a data trocada continua podendo mentir, e isso
+é aceito conscientemente — o campo é para relatório do dono, nunca para autorização.
 
 ## 4. `atualizadoPor` ser mesmo o dispositivo que escreveu — 🟢 aceito
 
