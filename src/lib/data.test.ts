@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dataLocalISO } from './data'
+import { dataBonita, dataLocalISO } from './data'
 
 describe('dataLocalISO', () => {
   it('formata uma data comum', () => {
@@ -23,5 +23,16 @@ describe('dataLocalISO', () => {
 
   it('recusa uma data inválida em vez de devolver NaN-NaN-NaN', () => {
     expect(() => dataLocalISO(new Date('não é data'))).toThrow(TypeError)
+  })
+})
+
+describe('dataBonita', () => {
+  it('mostra a data do jeito que o dono lê', () => {
+    expect(dataBonita('2026-09-21')).toBe('21/09/2026')
+  })
+
+  it('devolve a entrada intacta quando não é uma data ISO', () => {
+    expect(dataBonita('')).toBe('')
+    expect(dataBonita('21/09/2026')).toBe('21/09/2026')
   })
 })
