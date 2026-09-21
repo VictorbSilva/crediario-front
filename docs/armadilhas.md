@@ -92,6 +92,42 @@ Os dois testes `aceita o documento que o formulário monta` não checam um campo
 
 ---
 
+## src/components/clientes/FormularioCliente.tsx
+
+Usa `<dialog>` com `showModal()`, que entrega de graça o que daria um bom punhado de
+código: armadilha de foco, `Esc` para fechar, fundo inerte e `::backdrop`. Não entra
+biblioteca de modal no projeto por causa disto.
+
+O componente **não tem prop `aberto`**: quem chama monta e desmonta. O estado do formulário
+zera porque o componente morre, não por um efeito de reset — e efeito de reset seria
+`setState` síncrono dentro de `useEffect`, que o `react-hooks/set-state-in-effect` recusa e
+que custa um render a mais por abertura.
+
+> **AVISO**
+> O campo de número usa `inputMode="numeric"`, **nunca `type="number"`**. O `type="number"`
+> aceita `e`, `+` e `-` como conteúdo válido, muda de valor com a roda do mouse por cima do
+> campo, e ainda assim entrega uma string no `value`. Nada disso é o que se quer de um campo
+> que é a identidade do cliente e é imutável depois de gravado.
+
+Quando cada erro aparece não é detalhe de gosto:
+
+- **Número** mostra erro assim que o campo tem conteúdo. É a única checagem cujo valor está
+  em falhar cedo — descobrir a duplicata no primeiro campo poupa preencher o resto para
+  levar o bloqueio no fim.
+- **Os outros campos** só mostram erro depois do `blur` ou de uma tentativa de salvar.
+- **O CPF depende disso.** `situacaoCpf` devolve `incompleto` com menos de 11 dígitos, então
+  erro ao vivo gritaria "CPF incompleto" desde o primeiro número digitado — que é o
+  comportamento que ensina qualquer usuário a ignorar aviso.
+
+O `maxLength` de cada campo sai de `LIMITES_CLIENTE`, a mesma constante que a validação usa,
+que por sua vez espelha `firestore.rules`. Estourar limite offline não dá erro na hora, dá
+rollback silencioso dias depois.
+
+Salvar chama `criarCliente` e fecha na mesma linha, sem `await` — ver o AVISO do
+`ClientesProvider` sobre Promise que não resolve offline.
+
+— referente a src/components/clientes/FormularioCliente.tsx, arquivo inteiro
+
 ## src/data/ClientesProvider.tsx
 
 O único `onSnapshot` do app. Montado no `AppShell`, para que a lista, o formulário e o selo
