@@ -92,6 +92,96 @@ Os dois testes `aceita o documento que o formulário monta` não checam um campo
 
 ---
 
+## src/lib/cliente.ts
+
+`LIMITES_CLIENTE` existe para que o `maxLength` do formulário e o limite da regra saiam do
+mesmo lugar. Estourar um limite offline não dá erro na hora: a escrita entra no cache, a
+tela diz que salvou, e a rejeição chega dias depois com rollback silencioso. Barrar na
+digitação é a única defesa útil, e ela só funciona enquanto os dois números forem o mesmo
+número — se `firestore.rules` mudar um limite, este arquivo muda junto.
+
+`parseNumeroCadastro` recusa em vez de truncar. `parseInt('12abc')` devolve `12`, e um
+cliente cadastrado com o número errado é irreversível: `numero` é imutável e `delete` é
+proibido, então o conserto é arquivar e recadastrar.
+
+> **AVISO**
+> `validarCliente` **não** trata CPF com dígito verificador errado como erro — é aviso, por
+> decisão do dono. Bloquear não produz um CPF correto: produz um CPF **vazio**, porque o
+> dono apaga o campo para conseguir salvar, e os dígitos que estavam no papel se perdem.
+> Como `cpf` é mutável (não está em `imutaveisPreservados()`), errado-e-presente é sempre
+> mais recuperável que ausente.
+
+O guarda de `nomeBusca` vazio parece paranoia e não é: `normalizar()` aplica NFD e remove a
+faixa de diacríticos, então um nome feito só de marcas de combinação vira string vazia, e a
+regra exige `nomeBusca.size() > 0`. Sem o guarda, a rejeição acontece no servidor, offline,
+dias depois.
+
+`montarCamposCliente` estoura em vez de montar documento com entrada inválida. Não é
+caminho de usuário — o formulário valida antes —, então falhar alto é melhor que gravar
+torto.
+
+— referente a src/lib/cliente.ts, arquivo inteiro
+
+## src/lib/sync.ts
+
+`confiancaDaLista` é o que separa *"conferi e o número não existe"* de *"ainda não sei
+nada"*. A checagem de número repetido vale exatamente o quanto a lista estiver completa, e
+o Firestore não tem como dizer se o cache local está completo ou vazio.
+
+> **AVISO**
+> O caso perigoso é o aparelho que **nunca sincronizou** esta coleção: celular novo,
+> armazenamento limpo, primeiro login. O listener emite um snapshot vindo do cache, com zero
+> clientes, e toda checagem de duplicata passa no vácuo. O número repetido desce depois, e
+> aí já existem dois clientes ativos com o mesmo número — irreversível, porque `numero` é
+> imutável e `delete` é proibido.
+>
+> `fromCache: true` sozinho **não** serve de alarme: offline é o caso comum deste produto e
+> o aviso viraria ruído permanente, ignorado no dia em que importasse. O que distingue os
+> dois é a memória de já ter sincronizado alguma vez neste aparelho, que o provider grava em
+> `localStorage` na primeira vez que recebe um snapshot confirmado pelo servidor — mesmo
+> padrão que o `AuthProvider` já usa para o `businessId`.
+
+Por isso a confiança tem três estados e não dois: `desconhecida` bloqueia o salvamento,
+`parcial` deixa salvar com aviso, `confiavel` não diz nada. Bloquear em `parcial` impediria
+cadastrar offline num aparelho novo, que é pior do que o risco que evita.
+
+— referente a src/lib/sync.ts, arquivo inteiro
+
+## src/lib/data.ts
+
+> **AVISO**
+> `dataLocalISO` usa `getFullYear`/`getMonth`/`getDate` e **nunca `toISOString()`**. Em
+> UTC-3, às 21h de uma terça o `toISOString()` já devolve a quarta-feira — o cadastro feito
+> à noite na casa do cliente ficaria com a data do dia seguinte, que é exatamente o desvio
+> que o campo `cadastradoEm` existe para corrigir.
+>
+> O teste que prova isso só falha em fuso negativo. Por isso o `vitest.config.ts` fixa
+> `TZ: 'America/Sao_Paulo'`: o runner do CI roda em UTC e o teste passaria por acidente.
+
+— referente a src/lib/data.ts e vitest.config.ts
+
+## src/lib/cpf.ts
+
+`situacaoCpf` separa `incompleto` de `invalido` porque menos de 11 dígitos é digitação em
+andamento, não erro: avisar enquanto a pessoa digita treina todo mundo a ignorar o aviso.
+
+A sequência de dígitos repetidos (`11111111111`) **passa na conta do dígito verificador** e
+precisa de teste próprio. É a única família de CPF inválido que o algoritmo aceita.
+
+— referente a src/lib/cpf.ts
+
+## src/lib/dispositivo.ts
+
+`atualizadoPor` é diagnóstico de dispositivo, nunca autorização — ver a armadilha do
+`atualizadoPor` mais abaixo. Oito caracteres hexadecimais cabem folgado no limite de 64 da
+regra.
+
+O `localStorage` pode estourar (aba anônima, armazenamento bloqueado), então há fallback em
+memória: o id deixa de sobreviver ao recarregamento, mas o cadastro não para. Perder a
+continuidade do diagnóstico é aceitável; travar o cadastro do dono, não.
+
+— referente a src/lib/dispositivo.ts
+
 ## scripts/firebase-com-jdk.mjs
 
 Os scripts `test:rules` e `emu` não chamam o `firebase` direto: passam por este wrapper, que
