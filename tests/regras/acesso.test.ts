@@ -58,6 +58,12 @@ describe('acesso — o dono', () => {
     await assertSucceeds(setDoc(doc(banco, caminhoCliente('c1')), clienteValido()))
   })
 
+  it('lê sem ter claim nenhum, que é a situação real dele em produção', async () => {
+    await semearCliente('c1')
+    const banco = bancoDe(ambiente.authenticatedContext(UID_DONO, {}))
+    await assertSucceeds(getDoc(doc(banco, caminhoCliente('c1'))))
+  })
+
   it('escreve no documento da própria empresa', async () => {
     const banco = bancoDe(ambiente.authenticatedContext(UID_DONO))
     await assertSucceeds(setDoc(doc(banco, `businesses/${EMPRESA}`), { nome: 'Loja' }))
