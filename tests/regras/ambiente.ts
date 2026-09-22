@@ -22,6 +22,24 @@ export function criarAmbiente(): Promise<RulesTestEnvironment> {
   })
 }
 
+export type Veredito = 'permitido' | 'negado'
+
+export async function veredito(operacao: Promise<unknown>): Promise<Veredito> {
+  try {
+    await operacao
+    return 'permitido'
+  } catch (erro) {
+    const codigo =
+      typeof erro === 'object' && erro !== null && 'code' in erro
+        ? String((erro as { code: unknown }).code)
+        : ''
+    const mensagem = erro instanceof Error ? erro.message : String(erro)
+
+    if (codigo === 'permission-denied' || mensagem.includes('PERMISSION_DENIED')) return 'negado'
+    throw erro
+  }
+}
+
 export function caminhoCliente(clientId: string, empresa = EMPRESA): string {
   return `businesses/${empresa}/clients/${clientId}`
 }
@@ -55,6 +73,52 @@ export function clienteComoOAppEscreve(extra: Record<string, unknown> = {}) {
     criadoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),
     atualizadoPor: 'a3f91c07',
+    ...extra,
+  }
+}
+
+export function vendaValida(extra: Record<string, unknown> = {}) {
+  return {
+    clientId: 'cliente-1',
+    dataVenda: '2026-09-21',
+    valorTotalCentavos: 120000,
+    numeroParcelas: 12,
+    valorParcelaCentavos: 10000,
+    diaVencimento: 19,
+    versaoCalculo: 1,
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+    atualizadoPor: 'a1b2c3d4',
+    ...extra,
+  }
+}
+
+export function parcelaValida(extra: Record<string, unknown> = {}) {
+  return {
+    clientId: 'cliente-1',
+    saleId: 'venda-1',
+    numero: 4,
+    total: 12,
+    vencimento: '2026-12-19',
+    valorCentavos: 10000,
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+    atualizadoPor: 'a1b2c3d4',
+    ...extra,
+  }
+}
+
+export function pagamentoValido(extra: Record<string, unknown> = {}) {
+  return {
+    clientId: 'cliente-1',
+    saleId: 'venda-1',
+    data: '2026-09-21',
+    valorCentavos: 5000,
+    forma: 'dinheiro',
+    cancelado: false,
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+    atualizadoPor: 'a1b2c3d4',
     ...extra,
   }
 }
