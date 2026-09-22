@@ -11,6 +11,22 @@ export function dataLocalISO(momento: Date): string {
   return `${ano}-${mes}-${dia}`
 }
 
+/**
+ * O mesmo formato que `ehDataCivil` exige em `firestore.rules`. Mantido aqui
+ * para o formulário recusar antes de tentar gravar, em vez de descobrir na
+ * volta do servidor — que offline só chegaria horas depois.
+ *
+ * Confere o calendário além do formato: 2026-02-31 casa com o regex da regra,
+ * mas não existe.
+ */
+export function ehDataCivil(valor: string): boolean {
+  if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(valor)) return false
+
+  const [ano, mes, dia] = valor.split('-').map(Number)
+
+  return dia <= diasNoMes(ano, mes - 1)
+}
+
 export function dataBonita(iso: string): string {
   const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
   if (!partes) return iso

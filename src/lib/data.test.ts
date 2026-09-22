@@ -3,6 +3,7 @@ import {
   dataBonita,
   dataLocalISO,
   diferencaEmDias,
+  ehDataCivil,
   vencimentoDaParcela,
 } from './data'
 
@@ -28,6 +29,35 @@ describe('dataLocalISO', () => {
 
   it('recusa uma data inválida em vez de devolver NaN-NaN-NaN', () => {
     expect(() => dataLocalISO(new Date('não é data'))).toThrow(TypeError)
+  })
+})
+
+describe('ehDataCivil', () => {
+  it('aceita o formato que a regra do Firestore exige', () => {
+    expect(ehDataCivil('2026-09-22')).toBe(true)
+    expect(ehDataCivil('2026-01-01')).toBe(true)
+    expect(ehDataCivil('2026-12-31')).toBe(true)
+  })
+
+  it('recusa formato fora do padrão', () => {
+    expect(ehDataCivil('22/09/2026')).toBe(false)
+    expect(ehDataCivil('2026-9-22')).toBe(false)
+    expect(ehDataCivil('2026-09-22T00:00:00Z')).toBe(false)
+    expect(ehDataCivil('')).toBe(false)
+  })
+
+  it('recusa mês e dia fora da faixa', () => {
+    expect(ehDataCivil('2026-13-01')).toBe(false)
+    expect(ehDataCivil('2026-00-01')).toBe(false)
+    expect(ehDataCivil('2026-09-32')).toBe(false)
+    expect(ehDataCivil('2026-09-00')).toBe(false)
+  })
+
+  it('confere o calendário, não só o formato — 31/02 casa com o regex da regra', () => {
+    expect(ehDataCivil('2026-02-31')).toBe(false)
+    expect(ehDataCivil('2026-02-29')).toBe(false)
+    expect(ehDataCivil('2024-02-29')).toBe(true)
+    expect(ehDataCivil('2026-04-31')).toBe(false)
   })
 })
 

@@ -1092,3 +1092,32 @@ proposital e vale escrito: **uma coleção nova agora é ingravável até a regr
 neste arquivo.** É o que dá dente à regra do `CLAUDE.md` de que toda coleção nasce com
 sua regra e seu teste no mesmo commit. `tests/regras/acesso.test.ts` tem os testes que
 impedem o curinga de voltar sem que alguém perceba.
+
+## Bloqueador de anúncios × canal do Firestore
+
+Encontrado no teste manual da etapa 5, em 22/09/2026, num Brave com os escudos ligados.
+O console mostrava:
+
+```
+POST https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel
+  ?...&TYPE=terminate&...   net::ERR_BLOCKED_BY_CLIENT
+```
+
+**`ERR_BLOCKED_BY_CLIENT` não vem do servidor nem do nosso código** — é o navegador, ou
+uma extensão dele, recusando a requisição antes de ela sair. Naquele caso era a chamada
+`TYPE=terminate`, que o SDK faz ao fechar o canal de long-polling, e nada se perdeu: os
+dados já tinham subido, conferidos no Console do Firebase.
+
+Fica registrado porque a conclusão fácil é errada nos dois sentidos:
+
+- **Não é bug do app, então não saia caçando no código.** Se o erro for só no `terminate`,
+  é cosmético.
+- **Mas também não é inofensivo por definição.** O Firestore web fala por um canal
+  persistente com `googleapis.com`. Um bloqueador mais agressivo, ou uma rede corporativa
+  com filtro, pode recusar o canal inteiro — e aí o sintoma é o app parecer offline para
+  sempre, com o selo de sincronização preso, sem nenhum erro que aponte para a causa.
+
+O que fazer quando aparecer: conferir **qual** requisição foi bloqueada. Só `terminate` é
+ruído. `Listen/channel` ou `Write/channel` bloqueados significam que aquele aparelho não
+sincroniza, e a saída é o usuário liberar o domínio — não há conserto possível no código,
+porque a recusa acontece antes da rede.
