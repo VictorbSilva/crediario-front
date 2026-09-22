@@ -3,6 +3,7 @@ import { AuthProvider } from '@/auth/AuthProvider'
 import { RequireAuth } from '@/auth/RequireAuth'
 import { AppShell } from '@/components/layout/AppShell'
 import { PwaPrompt } from '@/components/pwa/PwaPrompt'
+import { ClientePage } from '@/pages/ClientePage'
 import { ClientesPage } from '@/pages/ClientesPage'
 import { FinanceiroPage } from '@/pages/FinanceiroPage'
 import { LoginPage } from '@/pages/LoginPage'
@@ -19,6 +20,7 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route index element={<Navigate to="/clientes" replace />} />
               <Route path="/clientes" element={<ClientesPage />} />
+              <Route path="/clientes/:id" element={<ClientePage />} />
               <Route path="/rotas" element={<RotasPage />} />
               <Route path="/financeiro" element={<FinanceiroPage />} />
               <Route path="*" element={<Navigate to="/clientes" replace />} />

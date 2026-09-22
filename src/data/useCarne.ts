@@ -98,6 +98,8 @@ export type CarneDoCliente = {
   carnes: VendaComCarne<Venda>[]
   pagamentos: Pagamento[]
   saldo: ResumoDaVenda
+  /** A data usada no cálculo, para a tela não ler o relógio por conta própria. */
+  hoje: string
   carregando: boolean
   erro: string | null
   estadoSync: EstadoSync
@@ -155,7 +157,8 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
     const parcelasDele = deste(parcelas)
     const pagamentosDele = deste(pagamentos)
 
-    const carnes = montarCarne(vendasDele, parcelasDele, pagamentosDele, dataLocalISO(new Date()))
+    const hoje = dataLocalISO(new Date())
+    const carnes = montarCarne(vendasDele, parcelasDele, pagamentosDele, hoje)
     const carregando = COLECOES.some((nome) => !prontos.includes(chaveDe(clienteId, nome)))
     const pendentes = [...vendasDele, ...parcelasDele, ...pagamentosDele].filter(
       (item) => item.pendente,
@@ -165,6 +168,7 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
       carnes,
       pagamentos: pagamentosDele,
       saldo: saldoDoCliente(carnes),
+      hoje,
       carregando,
       erro,
       estadoSync: estadoDeSync({ carregando, erro: erro !== null, pendentes, doCache }),
