@@ -6,7 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Vite + React 19 + TypeScript project for **Crediário**, the application described in the sections below. The `create-vite` template has been removed. The vertical foundation is done — shell, design system, PWA, auth and rules — and **the clients screen persists to Firestore**; routes and finances are still demo data:
 
-- `src/App.tsx` holds the router config: `/login` is public, everything else sits behind `RequireAuth` and `AppShell` (`/clientes`, `/rotas`, `/financeiro`, with `index` and `*` redirecting to `/clientes`).
 - `src/components/layout/` holds the responsive shell — `AppShell` (sidebar at `md:`+, bottom tab bar below `md:`), `Sidebar`, `BottomNav`, `TopBar`, and `navItems.ts`, which is the **single source of navigation** consumed by both navs.
 - `src/pages/ClientesPage.tsx` reads and writes Firestore for real (create, search, archive), and `src/pages/ClientePage.tsx` (`/clientes/:id`) renders the carnê read-only. `RotasPage` and `FinanceiroPage` still render `src/demo/dadosDemo.ts` behind `DemoBanner`. The invariant is per screen: **no screen shows fake data without the banner, nor real data with it** — so `src/demo/` shrinks one screen at a time, it is not deleted wholesale.
 - Firebase Auth is wired (`src/auth/`), including password recovery. `src/lib/firebase.ts` initializes Firestore with a persistent multi-tab cache, and `src/data/ClientesProvider.tsx` holds **the one and only `onSnapshot` in the app** — mounted in `AppShell` so list, form and sync badge share a single subscription. Writes never `await`; see `docs/armadilhas.md` before touching that file.
@@ -20,20 +19,21 @@ Styling conventions: Tailwind classes only — `src/index.css` is the **only** `
 
 ## Commands
 
-- `npm run dev` — start the Vite dev server with HMR
-- `npm run build` — type-check via `tsc -b` then production-build via `vite build`
-- `npm run lint` — run ESLint over the repo
-- `npm run preview` — serve the production build locally
-- `npm test` — run the Vitest suite once; `npm run test:watch` for watch mode
+The standard scripts (`dev`, `build`, `lint`, `preview`, `test`, `test:watch`) are in
+`package.json` and do what their names say. The two that are **not** guessable:
+
+- `npm run test:rules` — boots the Firestore emulator and runs the rule suite against it
+- `npm run emu` — Firestore + Auth emulators, for working offline against fake data
+
+Both go through `scripts/firebase-com-jdk.mjs`, a wrapper that exists because an Oracle
+Java 8 sits ahead of the JDK 21 in this machine's PATH and `firebase-tools` refuses it.
 
 Vitest has its own `vitest.config.ts`, separate from `vite.config.ts`, so the test run does not load the PWA and React plugins. `globals` is deliberately off — importing `describe`/`it`/`expect` explicitly is what keeps `tsc -b` passing without extra type config.
 
 ## Architecture
 
-- Entry point: `index.html` → `src/main.tsx` mounts `<App />` from `src/App.tsx` into `#root` under `StrictMode`.
 - TypeScript project references split app code from tooling: `tsconfig.json` references `tsconfig.app.json` (for `src/`) and `tsconfig.node.json` (for Vite config). Run type-checks via `tsc -b`, not `tsc` directly, since there's no root `include`.
 - Path alias: `@/*` maps to `src/*` (configured in both `vite.config.ts` and `tsconfig.app.json` — keep these two in sync if the alias changes). `tsconfig.app.json` has **no `baseUrl`** (deprecated in TS 6, hard-fails in TS 7); `paths` therefore resolves relative to the config file and its entries must keep the leading `./`.
-- ESLint uses the flat-config format (`eslint.config.js`) with `typescript-eslint`, `eslint-plugin-react-hooks`, and `eslint-plugin-react-refresh`; type-aware lint rules are not enabled (see README for how to opt in).
 - Static assets referenced by absolute path (e.g. `/favicon.svg`) live in `public/`; assets imported by module path would be processed by Vite's bundler (there are none — the brand mark is drawn inline in `src/components/BrandMark.tsx`).
 
 ## Project: Crediário
@@ -54,9 +54,7 @@ Vitest has its own `vitest.config.ts`, separate from `vite.config.ts`, so the te
 
 ## Stack
 
-- Front-end: React 19 + TypeScript + Tailwind CSS + Vite (PWA via vite-plugin-pwa).
 - Data/Auth: Firebase — Firestore with offline persistence + Firebase Auth.
-- Key libraries: firebase, @dnd-kit/core (drag-and-drop route assignment/reordering), vite-plugin-pwa.
 - Hosting/CI: Vercel with Git integration (automatic deploys).
 - No bulk data load. The owner declined importing the spreadsheet (decided 01/09/2026): the ~700 existing clients are entered by hand through the app, one at a time, as visits happen. Two consequences drive prioritisation — the client-creation form is the adoption path for the whole product, and the export feature is the only backup of data that will exist nowhere else.
 
