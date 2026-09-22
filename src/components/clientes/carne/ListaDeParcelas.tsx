@@ -1,0 +1,102 @@
+import { StatusPill } from '@/components/ui/StatusPill'
+import type { TomStatus } from '@/components/ui/StatusPill'
+import { janelaDeParcelas, textoDaSituacao, textoDoResto } from '@/lib/carne'
+import { dataBonita } from '@/lib/data'
+import { formatarCentavos } from '@/lib/dinheiro'
+import type { ParcelaComEstado, SituacaoParcela } from '@/lib/parcelas'
+
+const tons: Record<SituacaoParcela, TomStatus> = {
+  paga: 'sucesso',
+  vencida: 'perigo',
+  parcial: 'alerta',
+  'a-vencer': 'neutro',
+}
+
+type LinhaProps = Readonly<{
+  item: ParcelaComEstado
+  total: number
+  hoje: string
+  simulando: boolean
+}>
+
+function Linha({ item, total, hoje, simulando }: LinhaProps) {
+  const { parcela, pagoCentavos, estado, encargos, taxaPropria } = item
+  const vencida = estado.situacao === 'vencida'
+  const encargoTotal = encargos.multaCentavos + encargos.jurosCentavos
+  const mostrarEncargo = simulando && encargoTotal > 0
+
+  return (
+    <li
+      className={`rounded-lg border p-3 ${
+        vencida ? 'border-danger/25 bg-danger-soft' : 'border-slate-200 bg-white'
+      } ${taxaPropria ? 'border-warning' : ''}`}
+    >
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-sm font-bold text-slate-900">
+          {parcela.numero}/{total}
+        </span>
+        <span className={`text-sm ${vencida ? 'font-semibold text-danger' : 'text-slate-700'}`}>
+          {dataBonita(parcela.vencimento)}
+        </span>
+        <StatusPill tom={tons[estado.situacao]}>{textoDaSituacao(item, hoje)}</StatusPill>
+        <span className="ml-auto text-base font-bold tabular-nums text-slate-900">
+          {formatarCentavos(parcela.valorCentavos)}
+        </span>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs tabular-nums text-slate-500">
+        {estado.situacao === 'paga' ? (
+          <span>quitada, sem acréscimo</span>
+        ) : (
+          <span>
+            {pagoCentavos > 0 ? `pago ${formatarCentavos(pagoCentavos)} · ` : ''}
+            resta {formatarCentavos(estado.restanteCentavos)}
+          </span>
+        )}
+
+        {taxaPropria ? <StatusPill tom="alerta">taxa própria</StatusPill> : null}
+      </div>
+
+      {mostrarEncargo ? (
+        <div className="mt-1.5 text-xs font-semibold tabular-nums text-warning">
+          {formatarCentavos(estado.restanteCentavos)} + multa{' '}
+          {formatarCentavos(encargos.multaCentavos)} + juros{' '}
+          {formatarCentavos(encargos.jurosCentavos)} ={' '}
+          {formatarCentavos(estado.restanteCentavos + encargoTotal)}
+        </div>
+      ) : null}
+    </li>
+  )
+}
+
+type ListaDeParcelasProps = Readonly<{
+  parcelas: readonly ParcelaComEstado[]
+  /** Quantas parcelas o plano da venda tem — ver `textoDasPagas`. */
+  total: number
+  hoje: string
+  simulando: boolean
+}>
+
+export function ListaDeParcelas({ parcelas, total, hoje, simulando }: ListaDeParcelasProps) {
+  const { visiveis, resto } = janelaDeParcelas(parcelas)
+
+  return (
+    <>
+      <ul className="flex flex-col gap-2">
+        {visiveis.map((item) => (
+          <Linha
+            key={item.parcela.id}
+            item={item}
+            total={total}
+            hoje={hoje}
+            simulando={simulando}
+          />
+        ))}
+      </ul>
+
+      {resto ? (
+        <p className="px-1 pt-2 text-xs text-slate-400">{textoDoResto(resto, total)}</p>
+      ) : null}
+    </>
+  )
+}

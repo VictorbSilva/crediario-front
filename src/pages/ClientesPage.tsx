@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Download, Plus } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { ExportarClientes } from '@/components/clientes/ExportarClientes'
 import { FormularioCliente } from '@/components/clientes/FormularioCliente'
 import { ListaDeClientes } from '@/components/clientes/ListaDeClientes'
 import { PainelDoCliente } from '@/components/clientes/PainelDoCliente'
+import { useTelaLarga } from '@/components/layout/useTelaLarga'
 import { Kpi } from '@/components/ui/Kpi'
 import { Nota } from '@/components/ui/Nota'
 import { SearchInput } from '@/components/ui/SearchInput'
@@ -36,6 +38,9 @@ export function ClientesPage() {
     alternarArquivo,
   } = useClientes()
 
+  const larga = useTelaLarga()
+  const navigate = useNavigate()
+
   const [busca, setBusca] = useState('')
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null)
   const [mostrarArquivados, setMostrarArquivados] = useState(false)
@@ -52,7 +57,17 @@ export function ClientesPage() {
     return visiveis.filter((cliente) => combina(cliente, termo, digitos))
   }, [visiveis, busca])
 
-  const selecionado = encontrados.find((c) => c.id === selecionadoId) ?? encontrados[0]
+  // No desktop o clique alimenta o painel ao lado; no celular ele navega para a
+  // página, que é a única forma do carnê caber. Sem o painel montado no celular,
+  // os três listeners do carnê também não sobem para um cliente que ninguém abriu.
+  const selecionado = larga
+    ? (encontrados.find((c) => c.id === selecionadoId) ?? encontrados[0])
+    : undefined
+
+  const aoSelecionar = (id: string) => {
+    if (larga) setSelecionadoId(id)
+    else navigate(`/clientes/${id}`)
+  }
 
   return (
     <div>
@@ -145,7 +160,7 @@ export function ClientesPage() {
             cadastrados={clientes.length}
             carregando={carregando}
             selecionadoId={selecionado?.id}
-            aoSelecionar={setSelecionadoId}
+            aoSelecionar={aoSelecionar}
           />
         </div>
 
