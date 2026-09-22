@@ -22,18 +22,59 @@ service cloud.firestore {
     }
 
     match /businesses/{businessId} {
+
+      function dados() {
+        return request.resource.data;
+      }
+
+      function anterior() {
+        return resource.data;
+      }
+
+      function ehDataCivil(valor) {
+        return valor is string
+          && valor.matches('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+      }
+
+      function ehIdentificador(valor) {
+        return valor is string && valor.size() > 0 && valor.size() <= 64;
+      }
+
+      function ehCentavos(valor) {
+        return valor is int && valor >= 0;
+      }
+
+      function ehTaxa(valor) {
+        return valor is number && valor >= 0 && valor <= 100;
+      }
+
+      function carimboDeCriacao() {
+        return dados().criadoEm == request.time
+          && dados().atualizadoEm == request.time;
+      }
+
+      function carimboDeEdicao() {
+        return dados().atualizadoEm == request.time;
+      }
+
+      function autoriaValida() {
+        return dados().atualizadoPor is string
+          && dados().atualizadoPor.size() > 0
+          && dados().atualizadoPor.size() <= 64;
+      }
+
+      function taxasValidas() {
+        return (!('multaTipo' in dados())
+            || dados().multaTipo in ['percentual', 'fixo'])
+          && (!('multaPercentual' in dados()) || ehTaxa(dados().multaPercentual))
+          && (!('multaFixaCentavos' in dados()) || ehCentavos(dados().multaFixaCentavos))
+          && (!('jurosPercentualDia' in dados()) || ehTaxa(dados().jurosPercentualDia));
+      }
+
       allow read: if podeAcessar(businessId);
       allow write: if ehDono();
 
       match /clients/{clientId} {
-
-        function dados() {
-          return request.resource.data;
-        }
-
-        function anterior() {
-          return resource.data;
-        }
 
         function camposConhecidos() {
           return dados().keys().hasOnly([
@@ -62,11 +103,8 @@ service cloud.firestore {
             && dados().nomeBusca is string
             && dados().nomeBusca.size() > 0
             && dados().nomeBusca.size() <= 120
-            && dados().atualizadoPor is string
-            && dados().atualizadoPor.size() > 0
-            && dados().atualizadoPor.size() <= 64
-            && dados().cadastradoEm is string
-            && dados().cadastradoEm.matches('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$')
+            && autoriaValida()
+            && ehDataCivil(dados().cadastradoEm)
             && (!('telefone' in dados())
                 || (dados().telefone is string && dados().telefone.size() <= 40))
             && (!('telefoneDigits' in dados())
@@ -84,15 +122,6 @@ service cloud.firestore {
                 || (dados().observacao is string && dados().observacao.size() <= 500))
             && (!('arquivado' in dados())
                 || dados().arquivado is bool);
-        }
-
-        function carimboDeCriacao() {
-          return dados().criadoEm == request.time
-            && dados().atualizadoEm == request.time;
-        }
-
-        function carimboDeEdicao() {
-          return dados().atualizadoEm == request.time;
         }
 
         function imutaveisPreservados() {
@@ -115,6 +144,208 @@ service cloud.firestore {
           && tiposValidos()
           && carimboDeEdicao()
           && imutaveisPreservados();
+
+        allow delete: if false;
+      }
+
+      match /sales/{saleId} {
+
+        function camposConhecidos() {
+          return dados().keys().hasOnly([
+            'clientId', 'dataVenda',
+            'valorTotalCentavos', 'numeroParcelas', 'valorParcelaCentavos', 'diaVencimento',
+            'multaTipo', 'multaPercentual', 'multaFixaCentavos', 'jurosPercentualDia',
+            'observacao', 'versaoCalculo',
+            'criadoEm', 'atualizadoEm', 'atualizadoPor'
+          ]);
+        }
+
+        function obrigatoriosPresentes() {
+          return dados().keys().hasAll([
+            'clientId', 'dataVenda',
+            'valorTotalCentavos', 'numeroParcelas', 'valorParcelaCentavos', 'diaVencimento',
+            'versaoCalculo',
+            'criadoEm', 'atualizadoEm', 'atualizadoPor'
+          ]);
+        }
+
+        function tiposValidos() {
+          return ehIdentificador(dados().clientId)
+            && ehDataCivil(dados().dataVenda)
+            && dados().valorTotalCentavos is int
+            && dados().valorTotalCentavos > 0
+            && dados().numeroParcelas is int
+            && dados().numeroParcelas > 0
+            && dados().numeroParcelas <= 120
+            && dados().valorParcelaCentavos is int
+            && dados().valorParcelaCentavos > 0
+            && dados().diaVencimento is int
+            && dados().diaVencimento >= 1
+            && dados().diaVencimento <= 31
+            && dados().versaoCalculo is int
+            && dados().versaoCalculo > 0
+            && autoriaValida()
+            && taxasValidas()
+            && (!('observacao' in dados())
+                || (dados().observacao is string && dados().observacao.size() <= 500));
+        }
+
+        function imutaveisPreservados() {
+          return dados().clientId == anterior().clientId
+            && dados().dataVenda == anterior().dataVenda
+            && dados().valorTotalCentavos == anterior().valorTotalCentavos
+            && dados().numeroParcelas == anterior().numeroParcelas
+            && dados().valorParcelaCentavos == anterior().valorParcelaCentavos
+            && dados().diaVencimento == anterior().diaVencimento
+            && dados().versaoCalculo == anterior().versaoCalculo
+            && dados().criadoEm == anterior().criadoEm;
+        }
+
+        allow read: if podeAcessar(businessId);
+
+        allow create: if podeAcessar(businessId)
+          && camposConhecidos()
+          && obrigatoriosPresentes()
+          && tiposValidos()
+          && carimboDeCriacao();
+
+        allow update: if podeAcessar(businessId)
+          && camposConhecidos()
+          && obrigatoriosPresentes()
+          && tiposValidos()
+          && carimboDeEdicao()
+          && imutaveisPreservados();
+
+        allow delete: if false;
+      }
+
+      match /installments/{installmentId} {
+
+        function camposConhecidos() {
+          return dados().keys().hasOnly([
+            'clientId', 'saleId', 'numero', 'total', 'vencimento', 'valorCentavos',
+            'multaTipo', 'multaPercentual', 'multaFixaCentavos', 'jurosPercentualDia',
+            'criadoEm', 'atualizadoEm', 'atualizadoPor'
+          ]);
+        }
+
+        function obrigatoriosPresentes() {
+          return dados().keys().hasAll([
+            'clientId', 'saleId', 'numero', 'total', 'vencimento', 'valorCentavos',
+            'criadoEm', 'atualizadoEm', 'atualizadoPor'
+          ]);
+        }
+
+        function tiposValidos() {
+          return ehIdentificador(dados().clientId)
+            && ehIdentificador(dados().saleId)
+            && dados().numero is int
+            && dados().numero > 0
+            && dados().total is int
+            && dados().total > 0
+            && dados().numero <= dados().total
+            && ehDataCivil(dados().vencimento)
+            && dados().valorCentavos is int
+            && dados().valorCentavos > 0
+            && autoriaValida()
+            && taxasValidas();
+        }
+
+        function imutaveisPreservados() {
+          return dados().clientId == anterior().clientId
+            && dados().saleId == anterior().saleId
+            && dados().numero == anterior().numero
+            && dados().total == anterior().total
+            && dados().vencimento == anterior().vencimento
+            && dados().valorCentavos == anterior().valorCentavos
+            && dados().criadoEm == anterior().criadoEm;
+        }
+
+        allow read: if podeAcessar(businessId);
+
+        allow create: if podeAcessar(businessId)
+          && camposConhecidos()
+          && obrigatoriosPresentes()
+          && tiposValidos()
+          && carimboDeCriacao();
+
+        allow update: if podeAcessar(businessId)
+          && camposConhecidos()
+          && obrigatoriosPresentes()
+          && tiposValidos()
+          && carimboDeEdicao()
+          && imutaveisPreservados();
+
+        allow delete: if false;
+      }
+
+      match /payments/{paymentId} {
+
+        function camposConhecidos() {
+          return dados().keys().hasOnly([
+            'clientId', 'saleId', 'data', 'valorCentavos', 'encargoCentavos', 'forma',
+            'cancelado', 'canceladoEm', 'observacao',
+            'criadoEm', 'atualizadoEm', 'atualizadoPor'
+          ]);
+        }
+
+        function obrigatoriosPresentes() {
+          return dados().keys().hasAll([
+            'clientId', 'saleId', 'data', 'valorCentavos', 'forma', 'cancelado',
+            'criadoEm', 'atualizadoEm', 'atualizadoPor'
+          ]);
+        }
+
+        function tiposValidos() {
+          return ehIdentificador(dados().clientId)
+            && ehIdentificador(dados().saleId)
+            && ehDataCivil(dados().data)
+            && dados().valorCentavos is int
+            && dados().valorCentavos > 0
+            && dados().forma in ['pix', 'dinheiro', 'cartao']
+            && dados().cancelado is bool
+            && autoriaValida()
+            && (!('encargoCentavos' in dados())
+                || (ehCentavos(dados().encargoCentavos)
+                    && dados().encargoCentavos <= dados().valorCentavos))
+            && (dados().cancelado == false
+                ? !('canceladoEm' in dados())
+                : ehDataCivil(dados().canceladoEm))
+            && (!('observacao' in dados())
+                || (dados().observacao is string && dados().observacao.size() <= 500));
+        }
+
+        function nascePorCancelar() {
+          return dados().cancelado == false;
+        }
+
+        function soCancelaNuncaReescreve() {
+          return dados().clientId == anterior().clientId
+            && dados().saleId == anterior().saleId
+            && dados().data == anterior().data
+            && dados().valorCentavos == anterior().valorCentavos
+            && dados().forma == anterior().forma
+            && dados().criadoEm == anterior().criadoEm
+            && dados().get('encargoCentavos', 0) == anterior().get('encargoCentavos', 0)
+            && anterior().cancelado == false
+            && dados().cancelado == true;
+        }
+
+        allow read: if podeAcessar(businessId);
+
+        allow create: if podeAcessar(businessId)
+          && camposConhecidos()
+          && obrigatoriosPresentes()
+          && tiposValidos()
+          && carimboDeCriacao()
+          && nascePorCancelar();
+
+        allow update: if podeAcessar(businessId)
+          && camposConhecidos()
+          && obrigatoriosPresentes()
+          && tiposValidos()
+          && carimboDeEdicao()
+          && soCancelaNuncaReescreve();
 
         allow delete: if false;
       }

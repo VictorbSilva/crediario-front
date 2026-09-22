@@ -134,8 +134,6 @@ describe('acesso — coleções que ainda não nasceram', () => {
   // casada permitir. Estes testes são o que impede o curinga de voltar.
   const caminhosFuturos = [
     `businesses/${EMPRESA}/routes/r1`,
-    `businesses/${EMPRESA}/sales/v1`,
-    `businesses/${EMPRESA}/payments/p1`,
     `businesses/${EMPRESA}/erros/e1`,
   ]
 

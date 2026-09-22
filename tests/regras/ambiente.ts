@@ -58,3 +58,49 @@ export function clienteComoOAppEscreve(extra: Record<string, unknown> = {}) {
     ...extra,
   }
 }
+
+export function vendaValida(extra: Record<string, unknown> = {}) {
+  return {
+    clientId: 'cliente-1',
+    dataVenda: '2026-09-21',
+    valorTotalCentavos: 120000,
+    numeroParcelas: 12,
+    valorParcelaCentavos: 10000,
+    diaVencimento: 19,
+    versaoCalculo: 1,
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+    atualizadoPor: 'a1b2c3d4',
+    ...extra,
+  }
+}
+
+export function parcelaValida(extra: Record<string, unknown> = {}) {
+  return {
+    clientId: 'cliente-1',
+    saleId: 'venda-1',
+    numero: 4,
+    total: 12,
+    vencimento: '2026-12-19',
+    valorCentavos: 10000,
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+    atualizadoPor: 'a1b2c3d4',
+    ...extra,
+  }
+}
+
+export function pagamentoValido(extra: Record<string, unknown> = {}) {
+  return {
+    clientId: 'cliente-1',
+    saleId: 'venda-1',
+    data: '2026-09-21',
+    valorCentavos: 5000,
+    forma: 'dinheiro',
+    cancelado: false,
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+    atualizadoPor: 'a1b2c3d4',
+    ...extra,
+  }
+}

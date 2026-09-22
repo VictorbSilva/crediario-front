@@ -72,6 +72,55 @@ O regex `^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$` recusa a classe grosseir
 > a situação real: nenhum usuário deste projeto tem claim, porque só o Admin SDK grava claim
 > e o projeto não tem Admin SDK.
 
+## firestore.rules — sales, installments e payments
+
+Nascidas em 21/09/2026, com regra e teste no mesmo commit. Os helpers `dados()`,
+`anterior()`, `ehDataCivil()`, `carimboDeCriacao()` e `autoriaValida()` subiram para o nível
+de `businesses`, onde as quatro coleções os herdam — regra do Firestore é herdada por match
+aninhado, e duplicar isso quatro vezes era o caminho para as cópias divergirem.
+
+> **AVISO**
+> `installments` é coleção de **primeiro nível**, com `clientId` e `saleId` como campos —
+> **não** é subcoleção de `sales`, apesar do esboço de 08/08/2026 desenhar assim. O esboço é
+> anterior ao checkpoint da página do cliente (26/08), que mudou a necessidade: a página
+> mostra todas as vendas de um cliente e precisa das parcelas de todas elas. Aninhada, isso
+> seria um listener por venda ou uma consulta de grupo de coleção. De primeiro nível, é **um
+> listener por cliente aberto**, filtrando por `clientId`.
+>
+> O teste `recusa parcela aninhada dentro da venda` existe para travar essa decisão: o
+> caminho antigo continua negado, então ninguém volta atrás sem perceber.
+
+**O pagamento é append-only de verdade, e a regra é quem garante.** `soCancelaNuncaReescreve`
+exige que `clientId`, `saleId`, `data`, `valorCentavos`, `forma`, `encargoCentavos` e
+`criadoEm` sejam idênticos ao que já estava, e que a transição de `cancelado` seja
+exatamente `false → true`. Ou seja:
+
+- nasce com `cancelado: false` — criar já cancelado é negado;
+- cancelar exige `canceladoEm`, e `canceladoEm` sem cancelamento é negado;
+- **descancelar é negado**, porque o estorno também é fato;
+- `delete` é negado, como em toda coleção deste projeto.
+
+Isso é a resposta C3 do dono virando regra: *"registra o cancelamento, com data, nada é
+apagado"*.
+
+**`encargoCentavos` é opcional e existe por causa da aritmética do saldo.** O dono disse que
+não cobra juros — a simulação é pressão de cobrança, não cobrança. Mas ele disse *"geralmente
+não cobro"*, e no dia em que cobrar, o dinheiro que entra é maior que a parcela. Sem separar
+quanto daquilo foi encargo, `saldo = total − Σ pagamentos` abateria principal que não foi
+pago. A regra exige `encargoCentavos <= valorCentavos`.
+
+**O estado da parcela não é gravado em lugar nenhum.** Ele se deriva de vencimento mais
+pagamentos, alocados do mais antigo para o mais novo. A exceção que existia até 07/08 —
+`renegociada` como fato gravado — **deixou de existir em 21/09**, quando o dono respondeu que
+renegociação não é funcionalidade. Não há mais nenhum estado de parcela que precise ser
+persistido.
+
+`versaoCalculo` é obrigatório na venda e imutável. É a regra de reversibilidade do
+`CLAUDE.md` virando campo: mudar a fórmula de geração de parcelas no futuro passa a ser um
+ramo na leitura, não uma migração de dado vivo.
+
+— referente a firestore.rules e tests/regras/vendas.test.ts
+
 ## tests/regras/ambiente.ts
 
 Projeto com prefixo `demo-`: o SDK reconhece esse prefixo como projeto de emulador e recusa qualquer chamada de rede para produção. É a garantia de que um teste de regra nunca escreve na base real.
