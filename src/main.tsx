@@ -11,19 +11,18 @@ if (!elementoRaiz) {
 
 const root = createRoot(elementoRaiz)
 
-import('./App')
-  .then(({ default: App }) => {
-    root.render(
-      <StrictMode>
-        <App />
-      </StrictMode>,
-    )
-  })
-  .catch((error: unknown) => {
-    console.error(error)
-    root.render(
-      <StrictMode>
-        <SetupError erro={error} />
-      </StrictMode>,
-    )
-  })
+try {
+  const { default: App } = await import('./App')
+  root.render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+} catch (erro: unknown) {
+  console.error(erro)
+  root.render(
+    <StrictMode>
+      <SetupError erro={erro} />
+    </StrictMode>,
+  )
+}

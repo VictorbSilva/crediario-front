@@ -109,6 +109,21 @@ Os dois testes `aceita o documento que o formulário monta` não checam um campo
 
 ---
 
+## src/components/clientes/ListaDeClientes.tsx e PainelDoCliente.tsx
+
+Extraídos da `ClientesPage` em 21/09/2026, depois de o SonarQube apontar complexidade
+cognitiva alta e ternários aninhados no mesmo container JSX.
+
+O ternário aninhado era a escolha entre quatro estados da lista — carregando, nenhum
+cadastrado, nada encontrado na busca, e a lista de fato. Em componente próprio isso vira
+quatro `return` com saída antecipada, que se lê de cima para baixo. A exceção da regra do
+Sonar para JSX não valia aqui: ela cobre ternários em containers **separados**, e esses
+estavam todos no mesmo.
+
+> Distinguir "nenhum cliente cadastrado" de "nada encontrado para esta busca" exige os dois
+> números. Por isso `ListaDeClientes` recebe `encontrados` **e** `cadastrados`: sem o
+> segundo, um filtro que não casa nada diria ao dono que ele não tem clientes.
+
 ## src/pages/ClientesPage.tsx
 
 Primeira tela do projeto lendo dado real. `DemoBanner` e `clientesDemo` saíram daqui, mas o
@@ -559,7 +574,9 @@ Emuladores locais, para desenvolver e testar regras sem tocar em produção.
 
 `App` é importado dinamicamente para que uma falha na inicialização do Firebase (config ausente) vire uma tela explicativa em vez de tela branca. O erro acontece ao avaliar o módulo, antes de o React montar — por isso um error boundary não pegaria.
 
-— referente a src/main.tsx, linhas 8–13
+Desde 21/09/2026 isso é `await import('./App')` no topo do módulo, dentro de `try/catch`, e não mais cadeia de `.then().catch()`. O comportamento é o mesmo; o que muda é a leitura. Top-level await torna o módulo assíncrono, o que aqui não custa nada porque `main.tsx` é o ponto de entrada e ninguém o importa.
+
+— referente a src/main.tsx, arquivo inteiro
 
 ## src/vite-env.d.ts
 
