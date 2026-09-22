@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   alocarPagamentos,
   gerarParcelas,
+  montarCarne,
   resumoDaVenda,
+  saldoDoCliente,
   simularEncargos,
   situacaoDaParcela,
   taxasEfetivas,
@@ -258,5 +260,91 @@ describe('resumoDaVenda', () => {
     const metade = resumoDaVenda([carne[0]], [pagamento({ valorCentavos: 5000 })], taxas, HOJE)
 
     expect(metade.encargosCentavos).toBeLessThan(inteira.encargosCentavos)
+  })
+})
+
+describe('montarCarne', () => {
+  const vendas = [
+    { id: 'v1', dataVenda: '2026-04-19', multaPercentual: 2, jurosPercentualDia: 0.1 },
+    { id: 'v2', dataVenda: '2026-09-02' },
+  ]
+
+  const parcelas = [
+    { ...parcela({ id: 'a', numero: 1, vencimento: '2026-06-19' }), saleId: 'v1' },
+    { ...parcela({ id: 'b', numero: 2, vencimento: '2026-10-19' }), saleId: 'v1' },
+    { ...parcela({ id: 'c', numero: 1, vencimento: '2026-11-02' }), saleId: 'v2' },
+  ]
+
+  const pagamentos = [{ ...pagamento({ id: 'g1', valorCentavos: 10000 }), saleId: 'v1' }]
+
+  it('põe a venda mais recente primeiro', () => {
+    expect(montarCarne(vendas, parcelas, pagamentos, HOJE).map((c) => c.venda.id)).toEqual([
+      'v2',
+      'v1',
+    ])
+  })
+
+  it('não mistura parcela nem pagamento entre vendas', () => {
+    const carnes = montarCarne(vendas, parcelas, pagamentos, HOJE)
+    const v1 = carnes.find((c) => c.venda.id === 'v1')
+    const v2 = carnes.find((c) => c.venda.id === 'v2')
+
+    expect(v1?.parcelas.map((p) => p.parcela.id)).toEqual(['a', 'b'])
+    expect(v2?.parcelas.map((p) => p.parcela.id)).toEqual(['c'])
+    expect(v2?.resumo.pagoCentavos).toBe(0)
+  })
+
+  it('numera as parcelas em ordem, venha o Firestore na ordem que vier', () => {
+    const embaralhado = [parcelas[1], parcelas[0], parcelas[2]]
+
+    expect(
+      montarCarne(vendas, embaralhado, [], HOJE)
+        .find((c) => c.venda.id === 'v1')
+        ?.parcelas.map((p) => p.parcela.numero),
+    ).toEqual([1, 2])
+  })
+
+  it('usa as taxas da venda em cada parcela dela', () => {
+    const carnes = montarCarne(vendas, parcelas, [], HOJE)
+    const vencida = carnes.find((c) => c.venda.id === 'v1')?.parcelas[0]
+
+    expect(vencida?.estado.situacao).toBe('vencida')
+    expect(vencida?.encargos.multaCentavos).toBe(200)
+    expect(vencida?.taxaPropria).toBe(false)
+  })
+
+  it('marca a parcela que tem taxa própria', () => {
+    const comPropria = [{ ...parcelas[0], jurosPercentualDia: 0 }, parcelas[1], parcelas[2]]
+    const primeira = montarCarne(vendas, comPropria, [], HOJE).find((c) => c.venda.id === 'v1')
+      ?.parcelas[0]
+
+    expect(primeira?.taxaPropria).toBe(true)
+    expect(primeira?.encargos.jurosCentavos).toBe(0)
+  })
+})
+
+describe('saldoDoCliente', () => {
+  it('soma os carnês do cliente inteiro', () => {
+    const vendas = [{ id: 'v1', dataVenda: '2026-04-19' }, { id: 'v2', dataVenda: '2026-09-02' }]
+    const parcelas = [
+      { ...parcela({ id: 'a', vencimento: '2026-10-19' }), saleId: 'v1' },
+      { ...parcela({ id: 'c', vencimento: '2026-11-02' }), saleId: 'v2' },
+    ]
+
+    expect(saldoDoCliente(montarCarne(vendas, parcelas, [], HOJE)).abertoCentavos).toBe(20000)
+  })
+
+  it('só chama de quitado quando todos os carnês fecharam', () => {
+    const vendas = [{ id: 'v1', dataVenda: '2026-04-19' }]
+    const parcelas = [{ ...parcela({ id: 'a' }), saleId: 'v1' }]
+    const quitando = [{ ...pagamento({ valorCentavos: 10000 }), saleId: 'v1' }]
+
+    expect(saldoDoCliente(montarCarne(vendas, parcelas, [], HOJE)).quitada).toBe(false)
+    expect(saldoDoCliente(montarCarne(vendas, parcelas, quitando, HOJE)).quitada).toBe(true)
+  })
+
+  it('devolve quitado para cliente sem venda nenhuma', () => {
+    expect(saldoDoCliente([]).quitada).toBe(true)
+    expect(saldoDoCliente([]).abertoCentavos).toBe(0)
   })
 })

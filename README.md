@@ -8,9 +8,14 @@ consiga trabalhar em campo mesmo sem sinal, sincronizando quando a conexão volt
 
 ## Status
 
-**MVP em desenvolvimento.** A aplicação já é um PWA instalável e o shell abre offline,
-mas nenhuma funcionalidade de negócio foi implementada — as três páginas são
-placeholders.
+**MVP em desenvolvimento.** A aplicação é um PWA instalável, abre offline, e a tela de
+**Clientes já grava e lê no Firestore de verdade** — cadastro com checagem de número
+repetido, busca, arquivamento e exportação de backup em JSON e CSV. O roteiro de aceite
+offline de 12 passos foi executado e aprovado em 21/09/2026: dado criado sem rede sobrevive
+a fechar o navegador e sincroniza sozinho quando a conexão volta.
+
+**Rotas e Financeiro continuam com dados de demonstração**, atrás do `DemoBanner`. A
+invariante é por tela: nenhuma tela mostra dado falso sem o banner, nem dado real com ele.
 
 ## Stack
 
@@ -211,16 +216,23 @@ public/              # favicon.svg (fonte) + ícones do PWA gerados a partir del
 pwa-assets.config.ts # receita de geração dos ícones
 .env.example         # modelo do .env.local (config do Firebase)
 src/
-  auth/          # AuthProvider, contexto, useAuth, RequireAuth
-  lib/
+  auth/          # AuthProvider, contexto, useAuth, RequireAuth, recuperação de senha
+  data/          # ClientesProvider (o único onSnapshot global), useClientes, useCarne
+  types/         # Cliente, Venda, Parcela, Pagamento — espelham firestore.rules
+  lib/           # toda decisão de negócio, pura e testada
     firebase.ts  # ponto único de inicialização do Firebase
+    cliente.ts   # validação e montagem do documento de cliente
+    parcelas.ts  # geração do carnê, alocação de pagamento, atraso, simulação de encargo
+    exportacao.ts, dinheiro.ts, data.ts, texto.ts, cpf.ts, sync.ts, dispositivo.ts
   components/
+    clientes/    # FormularioCliente, ListaDeClientes, PainelDoCliente, ExportarClientes
     layout/      # AppShell, Sidebar, BottomNav, TopBar, navItems, SignOutButton
     pwa/         # PwaPrompt (aviso de atualização / pronto offline)
     ui/          # componentes de apresentação reutilizáveis
     BrandMark.tsx
     SetupError.tsx
   pages/         # Login, Clientes, Rotas, Financeiro
+scripts/         # firebase-com-jdk.mjs (põe o JDK do JAVA_HOME na frente do PATH)
   App.tsx        # rotas + guarda de autenticação
   main.tsx       # ponto de entrada
   index.css      # diretivas do Tailwind + estilos globais
@@ -235,8 +247,15 @@ apenas o mínimo que não dá para expressar como utilitário do Tailwind.
 
 ## O que ainda não existe
 
-- Leitura e escrita reais no Firestore (as telas usam `src/demo/`)
-- Indicador de sincronização (estado pendente/sincronizado)
-- Modelos de dados do domínio (clientes, rotas, parcelas)
-- Toda a lógica de negócio — as regras financeiras (juros, multa, arredondamento,
-  estados de pagamento) ainda não estão especificadas
+- Página individual do cliente (`/clientes//:id`) com o carnê — as regras, as funções puras
+  e a camada de dados já existem; falta a tela
+- Registro de pagamento e formulário de venda
+- Rotas e Financeiro sobre dado real (seguem em `src/demo/`)
+- Coleção `erros` para as falhas de escrita que chegam com o app fechado
+- Separação do bundle (`manualChunks`) — daí o aviso de chunk acima de 500 kB no build
+
+As **regras financeiras deixaram de ser a incógnita**: o dono respondeu em 21/09/2026 e
+elas estão em Domain Notes no `CLAUDE.md`. Em resumo — não existe renegociação como
+funcionalidade, pagamento é valor livre contra a venda (livro-caixa, situação da parcela
+derivada), e juros e multa são **simulação desligada por padrão**, usada como pressão de
+cobrança e não como cobrança.

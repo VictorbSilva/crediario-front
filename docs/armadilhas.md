@@ -262,6 +262,39 @@ Salvar chama `criarCliente` e fecha na mesma linha, sem `await` — ver o AVISO 
 
 — referente a src/components/clientes/FormularioCliente.tsx, arquivo inteiro
 
+## src/data/useCarne.ts
+
+Três listeners por cliente aberto — `sales`, `installments` e `payments` —, cada um filtrado
+por `clientId`. É hook e não contexto: o único consumidor é a página do cliente e sua árvore,
+diferente do `ClientesProvider`, que existe como contexto porque o selo de sincronização o
+consome do outro lado do app.
+
+**A consulta filtra por `clientId` e nada mais; a ordenação é em memória.** Somar um
+`orderBy` a um `where` exigiria índice composto declarado e publicado, e o
+`firestore.indexes.json` está vazio de propósito. Com poucas vendas por cliente, ordenar em
+memória custa nada e economiza um artefato de infraestrutura para manter.
+
+> **AVISO**
+> Carregamento **não** é contador regressivo. A primeira versão usava `faltam = 3` e
+> decrementava a cada snapshot, o que quebra com `includeMetadataChanges: true`: os três
+> listeners são independentes, e `sales` pode disparar três vezes antes de `payments` disparar
+> uma. O contador chegaria a zero com uma coleção ainda vazia, e a tela diria "sem parcelas"
+> para um carnê que existe. Agora marca **qual** coleção chegou, por cliente.
+
+> **AVISO**
+> Ao trocar de cliente, o estado anterior continua em memória até os novos snapshots
+> chegarem — e mostrar o carnê do cliente errado é pior do que mostrar carnê nenhum. Por isso
+> o memo **filtra tudo por `clientId`** antes de montar: dado do cliente anterior simplesmente
+> não passa. A mesma chave por cliente vale para o carregamento, então trocar de cliente volta
+> a "carregando" em vez de exibir o carnê de outra pessoa.
+
+O `useMemo` recalcula `dataLocalISO(new Date())` a cada mudança das listas. A consequência é
+que o atraso só é reavaliado quando algum dado muda — se o app ficar aberto atravessando a
+meia-noite, os dias de atraso continuam os de ontem até a próxima escrita ou sincronização.
+Aceitável hoje; quando incomodar, o conserto é um estado com o dia civil corrente.
+
+— referente a src/data/useCarne.ts
+
 ## src/data/ClientesProvider.tsx
 
 O único `onSnapshot` do app. Montado no `AppShell`, para que a lista, o formulário e o selo
@@ -509,6 +542,37 @@ memória: o id deixa de sobreviver ao recarregamento, mas o cadastro não para. 
 continuidade do diagnóstico é aceitável; travar o cadastro do dono, não.
 
 — referente a src/lib/dispositivo.ts
+
+## Apontamentos do SonarQube recusados de propósito
+
+O projeto passa por varreduras do SonarQube. A maioria dos apontamentos foi aplicada — os
+quatro abaixo **não**, e cada um tem motivo. Sem este registro, a próxima varredura encontra
+os mesmos alertas e alguém os "conserta", piorando o código.
+
+**`S7718` — parâmetro de `catch` deveria se chamar `error_`.** Este projeto é escrito em
+português por convenção: `dados`, `anterior`, `carregando`, `falhas`, `erro`, `causa`.
+Renomear só os parâmetros de `catch` para inglês com underscore deixaria um punhado de
+identificadores fora do padrão do resto. É regra configurável — **desligar, não obedecer**.
+
+**`S6772` — espaçamento ambíguo entre elementos inline.** Casos como um ícone e um texto
+separados por quebra de linha. O raciocínio da regra está certo em geral, mas nesses pontos
+**o pai é um flex com `gap`**: o espaçamento é explícito no layout, não no texto. Pior,
+inserir `{' '}` criaria um item flex a mais e o `gap` passaria a ser aplicado dos dois lados
+dele — a "correção" quebraria o alinhamento. Se for preciso silenciar, o certo é `{/* */}`,
+nunca `{' '}`.
+
+**`S6747` — "Unknown property" em arquivos `.tsx`.** São dezenas, e todas são bug do
+analisador. Os nomes de propriedade que ele reporta — `'g-white"'`, `'-h-[90dvh'`, `'}
+   '`
+— são **fatias de strings de `className` cortadas em posições deslocadas**, e não batem com
+as próprias coordenadas reportadas. Não há o que consertar.
+
+**`S2245` em `src/lib/data.ts`.** Esse arquivo não tem gerador aleatório nenhum; as
+coordenadas apontam para `src/lib/dispositivo.ts`. Atribuição errada do relatório.
+
+> **Antes de agir sobre uma varredura, confira contra qual commit ela rodou.** Em 21/09 uma
+> lista inteira reapareceu porque o scan tinha rodado na `main`, que ainda não tinha os PRs
+> abertos. Metade do trabalho seria refazer o que já estava feito.
 
 ## scripts/firebase-com-jdk.mjs
 
