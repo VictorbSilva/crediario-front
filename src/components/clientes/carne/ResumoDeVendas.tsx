@@ -35,7 +35,7 @@ export function ResumoDeVendas({ dados }: ResumoDeVendasProps) {
             <div className="truncate text-sm font-semibold text-slate-900">
               Venda de {dataBonita(venda.dataVenda)}
             </div>
-            <div className="mt-0.5 text-xs text-slate-500">
+            <div className="mt-0.5 text-sm text-slate-600">
               {textoDoPlanoCurto(venda.numeroParcelas, parcelas)}
             </div>
           </div>
@@ -43,7 +43,7 @@ export function ResumoDeVendas({ dados }: ResumoDeVendasProps) {
             <div className="text-sm font-bold tabular-nums text-slate-900">
               {formatarCentavos(resumo.abertoCentavos)}
             </div>
-            <div className="text-xs text-slate-400">saldo</div>
+            <div className="text-xs text-slate-600">saldo</div>
           </div>
         </div>
       ))}

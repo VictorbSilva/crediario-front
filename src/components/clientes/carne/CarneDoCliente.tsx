@@ -150,7 +150,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
             />
             <span>
               <span className="font-semibold">Simular multa e juros</span>
-              <span className="mt-0.5 block text-xs text-slate-500">
+              <span className="mt-0.5 block text-sm text-slate-700">
                 {simulando
                   ? `O combinado continua sendo ${formatarCentavos(saldo.abertoCentavos)} — a simulação acrescenta ${formatarCentavos(saldo.encargosCentavos)} e não é cobrança.`
                   : 'Mostra quanto a dívida daria com os encargos. Não é o valor a cobrar.'}

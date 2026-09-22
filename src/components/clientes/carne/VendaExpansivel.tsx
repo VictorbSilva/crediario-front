@@ -77,7 +77,7 @@ export function VendaExpansivel({
           <span className="block text-sm font-bold text-slate-900">
             Venda de {dataBonita(venda.dataVenda)}
           </span>
-          <span className="mt-0.5 block text-xs text-slate-500">
+          <span className="mt-0.5 block text-sm text-slate-600">
             {textoDoPlano(venda.numeroParcelas, venda.valorParcelaCentavos)}
           </span>
         </span>
@@ -86,7 +86,7 @@ export function VendaExpansivel({
           <span className="block text-sm font-bold tabular-nums text-slate-900">
             {formatarCentavos(venda.valorTotalCentavos)}
           </span>
-          <span className="mt-0.5 block text-xs text-slate-400">
+          <span className="mt-0.5 block text-sm text-slate-600">
             {textoDasPagas(parcelas, venda.numeroParcelas)}
           </span>
         </span>
@@ -98,14 +98,11 @@ export function VendaExpansivel({
       {aberta ? (
         <div id={painelId} className="flex flex-col gap-2 pl-0 sm:pl-8">
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">
               Taxas desta venda
             </span>
             <StatusPill tom="marca">{textoDaMulta(venda)}</StatusPill>
             <StatusPill tom="marca">{textoDoJuros(venda)}</StatusPill>
-            <span className="text-xs text-slate-400">
-              informadas por você, não decididas pelo sistema
-            </span>
           </div>
 
           <ListaDeParcelas

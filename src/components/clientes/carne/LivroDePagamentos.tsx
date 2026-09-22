@@ -36,7 +36,7 @@ export function LivroDePagamentos({ pagamentos, aoCancelar }: LivroDePagamentosP
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
         Pagamentos recebidos
       </div>
 
@@ -53,7 +53,7 @@ export function LivroDePagamentos({ pagamentos, aoCancelar }: LivroDePagamentosP
               >
                 {formatarCentavos(pagamento.valorCentavos)}
               </span>
-              <span className="text-xs text-slate-500">
+              <span className="text-sm text-slate-700">
                 {dataBonita(pagamento.data)} · {formas[pagamento.forma]}
               </span>
 
@@ -98,9 +98,8 @@ export function LivroDePagamentos({ pagamentos, aoCancelar }: LivroDePagamentosP
         })}
       </ul>
 
-      <p className="mt-2 text-xs text-slate-400">
-        Cancelar não apaga: registra o estorno e a parcela volta a contar o atraso do vencimento
-        original.
+      <p className="mt-2 text-xs text-slate-600">
+        Cancelar registra o estorno; o atraso volta a contar do vencimento original.
       </p>
     </div>
   )
