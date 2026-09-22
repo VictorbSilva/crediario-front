@@ -41,17 +41,16 @@ const aparencias: Record<EstadoSync, Aparencia> = {
   },
 }
 
-type SyncBadgeProps = {
+type SyncBadgeProps = Readonly<{
   estado: EstadoSync
   className?: string
-}
+}>
 
 export function SyncBadge({ estado, className = '' }: SyncBadgeProps) {
   const { rotulo, caixa, ponto, pulsa } = aparencias[estado]
 
   return (
-    <span
-      role="status"
+    <output
       aria-live="polite"
       className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${caixa} ${className}`}
     >
@@ -60,6 +59,6 @@ export function SyncBadge({ estado, className = '' }: SyncBadgeProps) {
         className={`h-2 w-2 shrink-0 rounded-full ${ponto} ${pulsa ? 'animate-pulse' : ''}`}
       />
       <span className="truncate">{rotulo}</span>
-    </span>
+    </output>
   )
 }

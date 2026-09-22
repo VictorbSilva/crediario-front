@@ -3,17 +3,7 @@ const CHAVE = 'crediario:dispositivo'
 let emMemoria: string | null = null
 
 function sortearId(): string {
-  const bytes = new Uint8Array(4)
-  const aleatorio = globalThis.crypto
-
-  if (aleatorio && typeof aleatorio.getRandomValues === 'function') {
-    aleatorio.getRandomValues(bytes)
-  } else {
-    for (let i = 0; i < bytes.length; i += 1) {
-      bytes[i] = Math.floor(Math.random() * 256)
-    }
-  }
-
+  const bytes = crypto.getRandomValues(new Uint8Array(4))
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 

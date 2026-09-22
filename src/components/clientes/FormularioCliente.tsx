@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { SubmitEvent } from 'react'
 import { X } from 'lucide-react'
 import { Nota } from '@/components/ui/Nota'
 import { useClientes } from '@/data/useClientes'
@@ -7,7 +7,7 @@ import { ENTRADA_CLIENTE_VAZIA, LIMITES_CLIENTE, validarCliente } from '@/lib/cl
 import type { EntradaCliente } from '@/lib/cliente'
 import { avisoDeConferencia } from '@/lib/sync'
 
-type CampoProps = {
+type CampoProps = Readonly<{
   id: string
   rotulo: string
   valor: string
@@ -20,7 +20,7 @@ type CampoProps = {
   focoInicial?: boolean
   aoMudar: (valor: string) => void
   aoSair: () => void
-}
+}>
 
 function Campo({
   id,
@@ -130,7 +130,7 @@ export function FormularioCliente({ aoFechar }: Readonly<{ aoFechar: () => void 
     return () => setTocados((atual) => ({ ...atual, [campo]: true }))
   }
 
-  function enviar(evento: FormEvent) {
+  function enviar(evento: SubmitEvent<HTMLFormElement>) {
     evento.preventDefault()
     setTentouSalvar(true)
     if (Object.keys(erros).length > 0) return
