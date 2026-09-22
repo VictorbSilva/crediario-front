@@ -1121,3 +1121,64 @@ O que fazer quando aparecer: conferir **qual** requisição foi bloqueada. Só `
 ruído. `Listen/channel` ou `Write/channel` bloqueados significam que aquele aparelho não
 sincroniza, e a saída é o usuário liberar o domínio — não há conserto possível no código,
 porque a recusa acontece antes da rede.
+
+## src/lib/venda.ts — a regra recusa, mas offline ninguém fica sabendo
+
+Encontrado em 22/09/2026, conferindo à mão os documentos que o código monta contra o
+`firestore.rules` já publicado. Não apareceu em teste nenhum e não apareceria: em teste
+a escrita é síncrona e o erro volta na hora.
+
+**R$ 0,03 em 12 parcelas.** `gerarParcelas` faz `floor(3/12) = 0`, então onze parcelas
+nascem com `valorCentavos: 0`. A regra de `installments` exige `valorCentavos > 0`, então
+o servidor recusa — **mas só quando a sincronização acontecer.**
+
+Offline, o caminho é este: o lote entra no cache, a tela mostra o carnê completo, o dono
+fecha o app e vai para a próxima visita. Horas depois, com a rede de volta, o Firestore
+recusa e o carnê some. O `catch` do `commit()` registra a falha, mas ninguém está olhando,
+e o dono já saiu da casa do cliente achando que lançou.
+
+Corrigido com validação no formulário (`erroDasParcelas` recusa `numero > centavos`), e o
+motivo vale mais do que o caso:
+
+> **Offline transforma erro de validação em erro silencioso e atrasado.** A recusa do
+> servidor chega longe, no tempo e no espaço, de quem digitou. Por isso **toda restrição
+> que a regra impõe precisa existir também no formulário** — não como duplicação
+> defensiva, mas porque a regra sozinha só protege o banco, não o usuário.
+
+Checagem prática ao mexer em `montarCamposVenda` ou `montarCamposPagamento`: abra o
+`firestore.rules`, leia `tiposValidos()` da coleção, e confira campo a campo se o
+formulário recusa antes o que a regra recusaria depois. As fixtures de
+`tests/regras/ambiente.ts` (`vendaValida`, `parcelaValida`, `pagamentoValido`) são o
+espelho do que o código deve produzir — mas **nada automatiza essa comparação**, porque
+`vitest.rules.config.ts` deliberadamente não importa de `src/`. É conferência manual,
+e está registrada aqui por isso.
+
+## src/data/useCarne.ts — a venda e as parcelas vão num lote só
+
+`registrarVenda` usa `writeBatch`, não vários `setDoc`. Não é preferência de estilo.
+
+Meia venda gravada — o cabeçalho sem as parcelas, ou as parcelas sem o cabeçalho — é pior
+do que venda nenhuma. `montarCarne` cruza os três listeners por `saleId`: uma venda sem
+parcelas vira um carnê de zero parcelas com saldo zero, que a tela mostra como **quitada**.
+Não existe sinal na interface que denuncie isso, e o dono acreditaria.
+
+Com o lote, offline a coisa toda fica na fila e sobe inteira ou não sobe. Verificado no
+bloco 8 da bateria de 22/09: criado offline, navegador fechado e reaberto ainda offline,
+sincronizado em 2 s ao religar, e as 2 de 2 parcelas chegaram.
+
+## src/components/layout/useTelaLarga.ts — CSS não resolve, e o custo é leitura
+
+O painel lateral só existe no desktop. A tentação é `hidden lg:block`.
+
+**Isso esconde o componente mas o monta.** `PainelDoCliente` chama `useCarne`, que sobe
+**três listeners** do Firestore. Com CSS, todo celular que abrisse a lista de clientes
+pagaria a leitura do carnê de um cliente que ninguém abriu — e a lista auto-seleciona o
+primeiro, então aconteceria sempre, em toda sessão.
+
+Por isso a decisão é em JS (`useSyncExternalStore` sobre `matchMedia`), e o painel
+simplesmente não é renderizado abaixo de 1024px. O mesmo gancho decide se o clique na
+lista seleciona o painel ou navega para `/clientes/:id` — o que CSS também não faria.
+
+Primeira versão usava `useEffect` + `setState` e o ESLint recusou
+(`react-hooks/set-state-in-effect`), com razão: é exatamente o caso que
+`useSyncExternalStore` existe para resolver.
