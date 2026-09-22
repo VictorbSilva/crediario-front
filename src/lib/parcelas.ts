@@ -213,3 +213,86 @@ export function resumoDaVenda(
     quitada: abertoCentavos === 0,
   }
 }
+
+export type VendaConhecida = TaxasDeSimulacao & {
+  id: string
+  dataVenda: string
+}
+
+export type ParcelaDaVenda = ParcelaConhecida & { saleId: string }
+
+export type PagamentoDaVenda = PagamentoConhecido & { saleId: string }
+
+export type ParcelaComEstado = {
+  parcela: ParcelaDaVenda
+  pagoCentavos: number
+  estado: EstadoDaParcela
+  encargos: Encargos
+  taxaPropria: boolean
+}
+
+export type VendaComCarne<V extends VendaConhecida = VendaConhecida> = {
+  venda: V
+  parcelas: ParcelaComEstado[]
+  resumo: ResumoDaVenda
+}
+
+export function montarCarne<V extends VendaConhecida>(
+  vendas: readonly V[],
+  parcelas: readonly ParcelaDaVenda[],
+  pagamentos: readonly PagamentoDaVenda[],
+  hoje: string,
+): VendaComCarne<V>[] {
+  const ordenadas = [...vendas].sort((a, b) =>
+    a.dataVenda === b.dataVenda ? a.id.localeCompare(b.id) : b.dataVenda.localeCompare(a.dataVenda),
+  )
+
+  return ordenadas.map((venda) => {
+    const daVenda = parcelas.filter((parcela) => parcela.saleId === venda.id)
+    const pagas = pagamentos.filter((pagamento) => pagamento.saleId === venda.id)
+    const { cobertura } = alocarPagamentos(daVenda, pagas)
+
+    const emOrdem = [...daVenda].sort((a, b) => a.numero - b.numero)
+
+    const comEstado = emOrdem.map((parcela) => {
+      const pagoCentavos = cobertura.get(parcela.id) ?? 0
+      const estado = situacaoDaParcela(parcela, pagoCentavos, hoje)
+
+      return {
+        parcela,
+        pagoCentavos,
+        estado,
+        encargos: simularEncargos(
+          taxasEfetivas(venda, parcela),
+          estado.restanteCentavos,
+          estado.diasDeAtraso,
+        ),
+        taxaPropria: temTaxaPropria(parcela),
+      }
+    })
+
+    return { venda, parcelas: comEstado, resumo: resumoDaVenda(daVenda, pagas, venda, hoje) }
+  })
+}
+
+export function saldoDoCliente(carnes: readonly VendaComCarne[]): ResumoDaVenda {
+  return carnes.reduce<ResumoDaVenda>(
+    (soma, carne) => ({
+      pagoCentavos: soma.pagoCentavos + carne.resumo.pagoCentavos,
+      abertoCentavos: soma.abertoCentavos + carne.resumo.abertoCentavos,
+      encargosCentavos: soma.encargosCentavos + carne.resumo.encargosCentavos,
+      totalComEncargosCentavos:
+        soma.totalComEncargosCentavos + carne.resumo.totalComEncargosCentavos,
+      parcelasVencidas: soma.parcelasVencidas + carne.resumo.parcelasVencidas,
+      quitada: soma.quitada && carne.resumo.quitada,
+    }),
+    {
+      pagoCentavos: 0,
+      abertoCentavos: 0,
+      encargosCentavos: 0,
+      totalComEncargosCentavos: 0,
+      parcelasVencidas: 0,
+      quitada: true,
+    },
+  )
+}
