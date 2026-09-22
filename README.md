@@ -223,15 +223,19 @@ src/
     firebase.ts  # ponto único de inicialização do Firebase
     cliente.ts   # validação e montagem do documento de cliente
     parcelas.ts  # geração do carnê, alocação de pagamento, atraso, simulação de encargo
+    venda.ts     # validação e montagem dos documentos de venda e de pagamento
+    carne.ts     # textos e janela de parcelas da tela do carnê
     exportacao.ts, dinheiro.ts, data.ts, texto.ts, cpf.ts, sync.ts, dispositivo.ts
   components/
     clientes/    # FormularioCliente, ListaDeClientes, PainelDoCliente, ExportarClientes
+      carne/     # CarneDoCliente, VendaExpansivel, ListaDeParcelas, LivroDePagamentos,
+                 # FormularioVenda, FormularioPagamento
     layout/      # AppShell, Sidebar, BottomNav, TopBar, navItems, SignOutButton
     pwa/         # PwaPrompt (aviso de atualização / pronto offline)
     ui/          # componentes de apresentação reutilizáveis
     BrandMark.tsx
     SetupError.tsx
-  pages/         # Login, Clientes, Rotas, Financeiro
+  pages/         # Login, Clientes, Cliente (/clientes/:id), Rotas, Financeiro
 scripts/         # firebase-com-jdk.mjs (põe o JDK do JAVA_HOME na frente do PATH)
   App.tsx        # rotas + guarda de autenticação
   main.tsx       # ponto de entrada
@@ -245,13 +249,24 @@ Os tokens visuais (escala da cor `brand`, cores de status e a família tipográf
 ficam em `tailwind.config.js`, que é a fonte única de verdade. O `index.css` guarda
 apenas o mínimo que não dá para expressar como utilitário do Tailwind.
 
+## O que já funciona ponta a ponta
+
+- Cadastro, busca e arquivamento de clientes sobre o Firestore, offline inclusive
+- Exportação em JSON/CSV — o **único backup** de uma base digitada à mão
+- Página individual do cliente (`/clientes/:id`): carnê com vendas expansíveis, parcelas,
+  situação derivada e simulação de encargo atrás de um interruptor desligado por padrão
+- Lançar venda (gera o carnê), registrar pagamento e estornar lançamento
+
+Validado à mão no build de produção em 22/09/2026, numa bateria de 10 blocos que incluiu
+offline e as recusas de borda. **Mas quem validou foi o desenvolvedor, não o dono** — o
+app ainda não foi usado numa visita de verdade.
+
 ## O que ainda não existe
 
-- Página individual do cliente (`/clientes//:id`) com o carnê — as regras, as funções puras
-  e a camada de dados já existem; falta a tela
-- Registro de pagamento e formulário de venda
 - Rotas e Financeiro sobre dado real (seguem em `src/demo/`)
-- Coleção `erros` para as falhas de escrita que chegam com o app fechado
+- Coleção `erros` para as falhas de escrita que chegam com o app fechado — **é o próximo
+  passo**, e a janela é antes de o app ir para a rua, senão o rastro do primeiro erro real
+  já se perdeu
 - Separação do bundle (`manualChunks`) — daí o aviso de chunk acima de 500 kB no build
 
 As **regras financeiras deixaram de ser a incógnita**: o dono respondeu em 21/09/2026 e
