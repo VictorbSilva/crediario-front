@@ -543,6 +543,37 @@ continuidade do diagnóstico é aceitável; travar o cadastro do dono, não.
 
 — referente a src/lib/dispositivo.ts
 
+## Apontamentos do SonarQube recusados de propósito
+
+O projeto passa por varreduras do SonarQube. A maioria dos apontamentos foi aplicada — os
+quatro abaixo **não**, e cada um tem motivo. Sem este registro, a próxima varredura encontra
+os mesmos alertas e alguém os "conserta", piorando o código.
+
+**`S7718` — parâmetro de `catch` deveria se chamar `error_`.** Este projeto é escrito em
+português por convenção: `dados`, `anterior`, `carregando`, `falhas`, `erro`, `causa`.
+Renomear só os parâmetros de `catch` para inglês com underscore deixaria um punhado de
+identificadores fora do padrão do resto. É regra configurável — **desligar, não obedecer**.
+
+**`S6772` — espaçamento ambíguo entre elementos inline.** Casos como um ícone e um texto
+separados por quebra de linha. O raciocínio da regra está certo em geral, mas nesses pontos
+**o pai é um flex com `gap`**: o espaçamento é explícito no layout, não no texto. Pior,
+inserir `{' '}` criaria um item flex a mais e o `gap` passaria a ser aplicado dos dois lados
+dele — a "correção" quebraria o alinhamento. Se for preciso silenciar, o certo é `{/* */}`,
+nunca `{' '}`.
+
+**`S6747` — "Unknown property" em arquivos `.tsx`.** São dezenas, e todas são bug do
+analisador. Os nomes de propriedade que ele reporta — `'g-white"'`, `'-h-[90dvh'`, `'}
+   '`
+— são **fatias de strings de `className` cortadas em posições deslocadas**, e não batem com
+as próprias coordenadas reportadas. Não há o que consertar.
+
+**`S2245` em `src/lib/data.ts`.** Esse arquivo não tem gerador aleatório nenhum; as
+coordenadas apontam para `src/lib/dispositivo.ts`. Atribuição errada do relatório.
+
+> **Antes de agir sobre uma varredura, confira contra qual commit ela rodou.** Em 21/09 uma
+> lista inteira reapareceu porque o scan tinha rodado na `main`, que ainda não tinha os PRs
+> abertos. Metade do trabalho seria refazer o que já estava feito.
+
 ## scripts/firebase-com-jdk.mjs
 
 Os scripts `test:rules` e `emu` não chamam o `firebase` direto: passam por este wrapper, que
