@@ -60,7 +60,8 @@ describe('sales — criação', () => {
   })
 
   it('recusa venda sem versaoCalculo, que é o que permite recalcular depois', async () => {
-    const { versaoCalculo: _, ...semVersao } = vendaValida()
+    const semVersao: Record<string, unknown> = vendaValida()
+    delete semVersao.versaoCalculo
     await assertFails(setDoc(doc(bancoDono(), venda()), semVersao))
   })
 
