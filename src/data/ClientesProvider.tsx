@@ -63,11 +63,13 @@ function paraCliente(documento: QueryDocumentSnapshot<DocumentData>): Cliente {
   }
 }
 
+function codigoDoErro(falha: unknown): string {
+  if (typeof falha !== 'object' || falha === null || !('code' in falha)) return ''
+  return typeof falha.code === 'string' ? falha.code : ''
+}
+
 function mensagemDeLeitura(falha: unknown): string {
-  const codigo =
-    typeof falha === 'object' && falha !== null && 'code' in falha
-      ? String((falha as { code: unknown }).code)
-      : ''
+  const codigo = codigoDoErro(falha)
 
   if (codigo === 'permission-denied') {
     return 'Sem permissão para ler os clientes. Confira se as regras do Firestore foram publicadas.'

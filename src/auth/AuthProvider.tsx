@@ -12,9 +12,8 @@ import { AuthContext } from './auth-context'
 import type { AuthContextValue } from './auth-context'
 
 function codigoDe(erro: unknown): string {
-  return typeof erro === 'object' && erro !== null && 'code' in erro
-    ? String((erro as { code: unknown }).code)
-    : ''
+  if (typeof erro !== 'object' || erro === null || !('code' in erro)) return ''
+  return typeof erro.code === 'string' ? erro.code : ''
 }
 
 function mensagemDeRecuperacao(codigo: string): string {
