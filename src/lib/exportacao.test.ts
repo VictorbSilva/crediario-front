@@ -4,6 +4,7 @@ import {
   nomeDoArquivo,
   paraCSV,
   paraJSON,
+  resumoDaLista,
   situacaoExportacao,
 } from './exportacao'
 import type { ClienteExportavel } from './exportacao'
@@ -177,5 +178,17 @@ describe('situacaoExportacao', () => {
 
     expect(situacao.pode && situacao.alerta).toContain('parte dos clientes')
     expect(situacao.pode && situacao.alerta).toContain('2 cadastros')
+  })
+})
+
+describe('resumoDaLista', () => {
+  it('concorda em número com o que vai no arquivo', () => {
+    expect(resumoDaLista(1, 0)).toBe('1 cliente')
+    expect(resumoDaLista(4, 0)).toBe('4 clientes')
+  })
+
+  it('diz quantos estão arquivados, no singular e no plural', () => {
+    expect(resumoDaLista(4, 1)).toBe('4 clientes, sendo 1 arquivado')
+    expect(resumoDaLista(9, 2)).toBe('9 clientes, sendo 2 arquivados')
   })
 })

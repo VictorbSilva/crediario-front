@@ -17,10 +17,10 @@ function Linha({ rotulo, children }: Readonly<{ rotulo: string; children: ReactN
   )
 }
 
-type PainelDoClienteProps = {
+type PainelDoClienteProps = Readonly<{
   cliente: Cliente
   aoAlternarArquivo: (cliente: Cliente) => void
-}
+}>
 
 export function PainelDoCliente({ cliente, aoAlternarArquivo }: PainelDoClienteProps) {
   const arquivado = cliente.arquivado === true

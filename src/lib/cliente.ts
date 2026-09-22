@@ -76,61 +76,91 @@ export function clienteComNumero(
   return clientes.find((cliente) => cliente.numero === numero && cliente.arquivado !== true)
 }
 
+function erroDoNumero(
+  entrada: EntradaCliente,
+  clientes: readonly ClienteConhecido[],
+  confianca: ConfiancaDaLista,
+): string | undefined {
+  const numero = parseNumeroCadastro(entrada.numero)
+
+  if (numero === null) {
+    return entrada.numero.trim()
+      ? 'Use só números, sem letras nem pontos.'
+      : 'Digite o número do cliente.'
+  }
+
+  if (confianca === 'desconhecida') {
+    return 'Espere a lista de clientes carregar para conferir o número.'
+  }
+
+  const dono = clienteComNumero(clientes, numero)
+  return dono ? `O número ${numero} já é de ${dono.nome}.` : undefined
+}
+
+function erroDoNome(valor: string): string | undefined {
+  const nome = valor.trim()
+
+  if (!nome) return 'Digite o nome do cliente.'
+  if (nome.length > LIMITES_CLIENTE.nome) {
+    return `Nome muito longo: máximo ${LIMITES_CLIENTE.nome} caracteres.`
+  }
+  if (normalizar(nome).length === 0) return 'Digite um nome com pelo menos uma letra ou número.'
+
+  return undefined
+}
+
+function erroDoTelefone(valor: string): string | undefined {
+  const telefone = valor.trim()
+
+  if (telefone.length > LIMITES_CLIENTE.telefone) {
+    return `Telefone muito longo: máximo ${LIMITES_CLIENTE.telefone} caracteres.`
+  }
+  if (somenteDigitos(telefone).length > LIMITES_CLIENTE.telefoneDigits) {
+    return `Telefone com dígitos demais: máximo ${LIMITES_CLIENTE.telefoneDigits}.`
+  }
+
+  return undefined
+}
+
+function erroDoCpf(valor: string): string | undefined {
+  const cpf = valor.trim()
+
+  if (cpf.length > LIMITES_CLIENTE.cpf) {
+    return `CPF muito longo: máximo ${LIMITES_CLIENTE.cpf} caracteres.`
+  }
+
+  const situacao = situacaoCpf(somenteDigitos(cpf))
+  if (situacao === 'incompleto') return 'CPF incompleto: faltam dígitos.'
+  if (situacao === 'invalido') return 'Digite um CPF válido.'
+
+  return undefined
+}
+
+function erroDeTamanho(valor: string, limite: number, rotulo: string): string | undefined {
+  return valor.trim().length > limite ? `${rotulo}: máximo ${limite} caracteres.` : undefined
+}
+
 export function validarCliente(
   entrada: EntradaCliente,
   clientes: readonly ClienteConhecido[],
   confianca: ConfiancaDaLista,
 ): ErrosCliente {
+  const candidatos: ErrosCliente = {
+    numero: erroDoNumero(entrada, clientes, confianca),
+    nome: erroDoNome(entrada.nome),
+    telefone: erroDoTelefone(entrada.telefone),
+    cpf: erroDoCpf(entrada.cpf),
+    endereco: erroDeTamanho(entrada.endereco, LIMITES_CLIENTE.endereco, 'Endereço muito longo'),
+    observacao: erroDeTamanho(
+      entrada.observacao,
+      LIMITES_CLIENTE.observacao,
+      'Observação muito longa',
+    ),
+  }
+
   const erros: ErrosCliente = {}
-
-  const numero = parseNumeroCadastro(entrada.numero)
-  if (numero === null) {
-    erros.numero = entrada.numero.trim()
-      ? 'Use só números, sem letras nem pontos.'
-      : 'Digite o número do cliente.'
-  } else if (confianca === 'desconhecida') {
-    erros.numero = 'Espere a lista de clientes carregar para conferir o número.'
-  } else {
-    const dono = clienteComNumero(clientes, numero)
-    if (dono) erros.numero = `O número ${numero} já é de ${dono.nome}.`
-  }
-
-  const nome = entrada.nome.trim()
-  if (!nome) {
-    erros.nome = 'Digite o nome do cliente.'
-  } else if (nome.length > LIMITES_CLIENTE.nome) {
-    erros.nome = `Nome muito longo: máximo ${LIMITES_CLIENTE.nome} caracteres.`
-  } else if (normalizar(nome).length === 0) {
-    erros.nome = 'Digite um nome com pelo menos uma letra ou número.'
-  }
-
-  const telefone = entrada.telefone.trim()
-  if (telefone.length > LIMITES_CLIENTE.telefone) {
-    erros.telefone = `Telefone muito longo: máximo ${LIMITES_CLIENTE.telefone} caracteres.`
-  } else if (somenteDigitos(telefone).length > LIMITES_CLIENTE.telefoneDigits) {
-    erros.telefone = `Telefone com dígitos demais: máximo ${LIMITES_CLIENTE.telefoneDigits}.`
-  }
-
-  const cpf = entrada.cpf.trim()
-  if (cpf.length > LIMITES_CLIENTE.cpf) {
-    erros.cpf = `CPF muito longo: máximo ${LIMITES_CLIENTE.cpf} caracteres.`
-  } else {
-    const situacao = situacaoCpf(somenteDigitos(cpf))
-    if (situacao === 'incompleto') {
-      erros.cpf = 'CPF incompleto: faltam dígitos.'
-    } else if (situacao === 'invalido') {
-      erros.cpf = 'Digite um CPF válido.'
-    }
-  }
-
-  const endereco = entrada.endereco.trim()
-  if (endereco.length > LIMITES_CLIENTE.endereco) {
-    erros.endereco = `Endereço muito longo: máximo ${LIMITES_CLIENTE.endereco} caracteres.`
-  }
-
-  const observacao = entrada.observacao.trim()
-  if (observacao.length > LIMITES_CLIENTE.observacao) {
-    erros.observacao = `Observação muito longa: máximo ${LIMITES_CLIENTE.observacao} caracteres.`
+  for (const [campo, erro] of Object.entries(candidatos)) {
+    if (erro) erros[campo as keyof EntradaCliente] = erro
   }
 
   return erros

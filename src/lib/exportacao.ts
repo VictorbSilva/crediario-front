@@ -47,7 +47,7 @@ function iso(carimbo: CarimboExportavel): string | null {
 
 function campoCsv(valor: string): string {
   if (!/[;"\r\n]/.test(valor)) return valor
-  return `"${valor.replace(/"/g, '""')}"`
+  return `"${valor.replaceAll('"', '""')}"`
 }
 
 function celula(cliente: ClienteExportavel, coluna: (typeof COLUNAS)[number]): string {
@@ -140,4 +140,12 @@ export function situacaoExportacao(
   }
 
   return { pode: true, alerta: alertas.length > 0 ? alertas.join(' ') : null }
+}
+
+export function resumoDaLista(total: number, arquivados: number): string {
+  const contagem = total === 1 ? '1 cliente' : `${total} clientes`
+  if (arquivados === 0) return contagem
+
+  const rotulo = arquivados === 1 ? 'arquivado' : 'arquivados'
+  return `${contagem}, sendo ${arquivados} ${rotulo}`
 }

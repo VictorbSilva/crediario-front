@@ -2,7 +2,13 @@ import { useEffect, useId, useRef } from 'react'
 import { FileJson, FileSpreadsheet, X } from 'lucide-react'
 import { Nota } from '@/components/ui/Nota'
 import { useClientes } from '@/data/useClientes'
-import { nomeDoArquivo, paraCSV, paraJSON, situacaoExportacao } from '@/lib/exportacao'
+import {
+  nomeDoArquivo,
+  paraCSV,
+  paraJSON,
+  resumoDaLista,
+  situacaoExportacao,
+} from '@/lib/exportacao'
 
 function baixar(conteudo: string, nome: string, tipo: string): void {
   const endereco = URL.createObjectURL(new Blob([conteudo], { type: tipo }))
@@ -55,11 +61,7 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
               Exportar clientes
             </h2>
             <p className="mt-0.5 text-sm text-slate-500">
-              {clientes.length === 1 ? '1 cliente' : `${clientes.length} clientes`}
-              {arquivados.length > 0
-                ? `, sendo ${arquivados.length} ${arquivados.length === 1 ? 'arquivado' : 'arquivados'}`
-                : ''}
-              . Arquivados entram no arquivo.
+              {resumoDaLista(clientes.length, arquivados.length)}. Arquivados entram no arquivo.
             </p>
           </div>
           <button

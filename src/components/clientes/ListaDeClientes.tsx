@@ -4,13 +4,13 @@ import { StatusPill } from '@/components/ui/StatusPill'
 import { iniciaisDe } from '@/lib/texto'
 import type { Cliente } from '@/types/cliente'
 
-type ListaDeClientesProps = {
+type ListaDeClientesProps = Readonly<{
   encontrados: readonly Cliente[]
   cadastrados: number
   carregando: boolean
   selecionadoId?: string
   aoSelecionar: (id: string) => void
-}
+}>
 
 export function ListaDeClientes({
   encontrados,

@@ -370,6 +370,25 @@ precisa de teste próprio. É a única família de CPF inválido que o algoritmo
 `atualizadoPor` mais abaixo. Oito caracteres hexadecimais cabem folgado no limite de 64 da
 regra.
 
+O id vem de `crypto.getRandomValues`, sem alternativa. Existia um caminho com
+`Math.random()` para o caso de a API faltar; ele saiu em 21/09/2026, depois de o SonarQube
+marcá-lo como ponto a revisar (S2245). Não era risco — o id nunca autoriza nada —, mas era
+**código morto**: `getRandomValues` está em todo navegador desde 2011 e, ao contrário de
+`crypto.subtle`, não exige contexto seguro. Alternativa para um caso impossível é alternativa
+que nunca foi testada.
+
+O `localStorage` pode estourar (aba anônima, armazenamento bloqueado), então há fallback em
+memória: o id deixa de sobreviver ao recarregamento, mas o cadastro não para. Perder a
+continuidade do diagnóstico é aceitável; travar o cadastro do dono, não.
+
+— referente a src/lib/dispositivo.ts
+
+## src/lib/dispositivo.ts — nota antiga
+
+`atualizadoPor` é diagnóstico de dispositivo, nunca autorização — ver a armadilha do
+`atualizadoPor` mais abaixo. Oito caracteres hexadecimais cabem folgado no limite de 64 da
+regra.
+
 O `localStorage` pode estourar (aba anônima, armazenamento bloqueado), então há fallback em
 memória: o id deixa de sobreviver ao recarregamento, mas o cadastro não para. Perder a
 continuidade do diagnóstico é aceitável; travar o cadastro do dono, não.

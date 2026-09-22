@@ -41,10 +41,10 @@ const aparencias: Record<EstadoSync, Aparencia> = {
   },
 }
 
-type SyncBadgeProps = {
+type SyncBadgeProps = Readonly<{
   estado: EstadoSync
   className?: string
-}
+}>
 
 export function SyncBadge({ estado, className = '' }: SyncBadgeProps) {
   const { rotulo, caixa, ponto, pulsa } = aparencias[estado]
