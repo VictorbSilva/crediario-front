@@ -1,5 +1,6 @@
 import { ChevronRight } from 'lucide-react'
 import { ListaDeParcelas } from '@/components/clientes/carne/ListaDeParcelas'
+import { LivroDePagamentos } from '@/components/clientes/carne/LivroDePagamentos'
 import { StatusPill } from '@/components/ui/StatusPill'
 import type { TomStatus } from '@/components/ui/StatusPill'
 import {
@@ -12,8 +13,8 @@ import {
 import type { SituacaoVenda } from '@/lib/carne'
 import { dataBonita } from '@/lib/data'
 import { formatarCentavos } from '@/lib/dinheiro'
-import type { VendaComCarne } from '@/lib/parcelas'
-import type { Venda } from '@/types/venda'
+import type { ParcelaComEstado, VendaComCarne } from '@/lib/parcelas'
+import type { Pagamento, Venda } from '@/types/venda'
 
 const rotulos: Record<SituacaoVenda, string> = {
   quitada: 'Quitada',
@@ -29,18 +30,25 @@ const tons: Record<SituacaoVenda, TomStatus> = {
 
 type VendaExpansivelProps = Readonly<{
   carne: VendaComCarne<Venda>
+  pagamentos: readonly Pagamento[]
   hoje: string
   simulando: boolean
   aberta: boolean
   aoAlternar: () => void
+  /** Ausentes no painel lateral, que é só leitura. */
+  aoRegistrarPagamento?: (venda: Venda, item: ParcelaComEstado) => void
+  aoCancelarPagamento?: (pagamento: Pagamento, quando: string) => void
 }>
 
 export function VendaExpansivel({
   carne,
+  pagamentos,
   hoje,
   simulando,
   aberta,
   aoAlternar,
+  aoRegistrarPagamento,
+  aoCancelarPagamento,
 }: VendaExpansivelProps) {
   const { venda, parcelas, resumo } = carne
   const situacao = situacaoDaVenda(resumo)
@@ -105,7 +113,17 @@ export function VendaExpansivel({
             total={venda.numeroParcelas}
             hoje={hoje}
             simulando={simulando}
+            aoRegistrarPagamento={
+              aoRegistrarPagamento ? (item) => aoRegistrarPagamento(venda, item) : undefined
+            }
           />
+
+          {aoCancelarPagamento ? (
+            <LivroDePagamentos
+              pagamentos={pagamentos.filter((p) => p.saleId === venda.id)}
+              aoCancelar={aoCancelarPagamento}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -107,12 +107,21 @@ function erroDoValor(valor: string): string | undefined {
   return undefined
 }
 
-function erroDasParcelas(entrada: string): string | undefined {
+function erroDasParcelas(entrada: string, valor: string): string | undefined {
   const numero = parseInteiro(entrada)
   if (numero === null) return 'Informe em quantas parcelas'
   if (numero < 1) return 'Pelo menos uma parcela'
   if (numero > LIMITES_VENDA.numeroParcelas) {
     return `No máximo ${LIMITES_VENDA.numeroParcelas} parcelas`
+  }
+
+  // Cada parcela precisa valer ao menos um centavo: a regra do Firestore exige
+  // `valorCentavos > 0`. Sem esta checagem, R$ 0,03 em 12 parcelas geraria onze
+  // parcelas de zero — aceitas no cache, **recusadas em silêncio** na hora de
+  // sincronizar, que é quando ninguém está olhando.
+  const centavos = parseReaisParaCentavos(valor)
+  if (centavos !== null && centavos > 0 && numero > centavos) {
+    return 'Parcelas demais para este valor — cada uma ficaria em zero'
   }
 
   return undefined
@@ -158,7 +167,7 @@ export function validarVenda(entrada: EntradaVenda): ErrosVenda {
   return compactar<keyof EntradaVenda>({
     dataVenda: ehDataCivil(entrada.dataVenda) ? undefined : 'Data inválida',
     valor: erroDoValor(entrada.valor),
-    numeroParcelas: erroDasParcelas(entrada.numeroParcelas),
+    numeroParcelas: erroDasParcelas(entrada.numeroParcelas, entrada.valor),
     diaVencimento: erroDoDia(entrada.diaVencimento),
     cobrarTaxas: undefined,
     multaTipo: undefined,

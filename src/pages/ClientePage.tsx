@@ -68,7 +68,7 @@ export function ClientePage() {
 
         <div className="flex flex-col gap-3.5">
           <h1 className="text-base font-bold text-slate-900">Vendas</h1>
-          <CarneDoCliente dados={dados} />
+          <CarneDoCliente dados={dados} permiteEscrita />
         </div>
       </div>
     </div>

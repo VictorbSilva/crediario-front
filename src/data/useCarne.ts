@@ -1,13 +1,26 @@
-import { useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  collection,
+  doc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore'
 import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'
 import { useAuth } from '@/auth/useAuth'
 import { dataLocalISO } from '@/lib/data'
+import { identificarDispositivo } from '@/lib/dispositivo'
 import { db } from '@/lib/firebase'
 import { montarCarne, saldoDoCliente } from '@/lib/parcelas'
 import type { ResumoDaVenda, VendaComCarne } from '@/lib/parcelas'
 import { estadoDeSync } from '@/lib/sync'
 import type { EstadoSync } from '@/lib/sync'
+import { montarCamposPagamento, montarCamposVenda } from '@/lib/venda'
+import type { EntradaPagamento, EntradaVenda } from '@/lib/venda'
 import type { Pagamento, Parcela, Venda } from '@/types/venda'
 
 type Documento = QueryDocumentSnapshot<DocumentData>
@@ -104,6 +117,17 @@ export type CarneDoCliente = {
   erro: string | null
   estadoSync: EstadoSync
   pendentes: number
+  falhas: FalhaDeEscrita[]
+  descartarFalha: (id: string) => void
+  registrarVenda: (entrada: EntradaVenda) => void
+  registrarPagamento: (saleId: string, entrada: EntradaPagamento) => void
+  cancelarPagamento: (pagamento: Pagamento, quando: string) => void
+}
+
+export type FalhaDeEscrita = {
+  id: string
+  mensagem: string
+  quando: Date
 }
 
 export function useCarne(clienteId: string | null): CarneDoCliente {
@@ -115,6 +139,9 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
   const [prontos, setProntos] = useState<string[]>([])
   const [erro, setErro] = useState<string | null>(null)
   const [doCache, setDoCache] = useState(true)
+  const [falhas, setFalhas] = useState<FalhaDeEscrita[]>([])
+
+  const proximaFalha = useRef(0)
 
   useEffect(() => {
     if (!businessId || !clienteId) return
@@ -149,6 +176,108 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
     }
   }, [businessId, clienteId])
 
+  const registrarFalha = useCallback((mensagem: string, causa: unknown) => {
+    console.error('[carne]', mensagem, causa)
+    proximaFalha.current += 1
+    const id = `falha-${proximaFalha.current}`
+    setFalhas((anteriores) => [...anteriores, { id, mensagem, quando: new Date() }])
+  }, [])
+
+  const descartarFalha = useCallback((id: string) => {
+    setFalhas((anteriores) => anteriores.filter((falha) => falha.id !== id))
+  }, [])
+
+  /**
+   * A venda e as parcelas dela vão num lote só. Meia venda gravada — o
+   * cabeçalho sem as parcelas, ou o contrário — é pior do que venda nenhuma:
+   * a tela mostraria um carnê que não fecha e não haveria como saber disso
+   * olhando. Offline o lote fica na fila e sobe inteiro quando a rede volta.
+   */
+  const registrarVenda = useCallback(
+    (entrada: EntradaVenda) => {
+      if (!businessId || !clienteId) return
+
+      const dispositivo = identificarDispositivo()
+      const { venda, parcelas } = montarCamposVenda(clienteId, entrada, {
+        agora: new Date(),
+        dispositivo,
+      })
+
+      const vendas = collection(db, 'businesses', businessId, 'sales')
+      const referenciaDaVenda = doc(vendas)
+
+      const lote = writeBatch(db)
+      lote.set(referenciaDaVenda, {
+        ...venda,
+        criadoEm: serverTimestamp(),
+        atualizadoEm: serverTimestamp(),
+      })
+
+      for (const parcela of parcelas) {
+        lote.set(doc(collection(db, 'businesses', businessId, 'installments')), {
+          ...parcela,
+          saleId: referenciaDaVenda.id,
+          criadoEm: serverTimestamp(),
+          atualizadoEm: serverTimestamp(),
+        })
+      }
+
+      lote.commit().catch((causa: unknown) => {
+        registrarFalha(
+          'A venda foi recusada pelo servidor e saiu da lista. Lance de novo.',
+          causa,
+        )
+      })
+    },
+    [businessId, clienteId, registrarFalha],
+  )
+
+  const registrarPagamento = useCallback(
+    (saleId: string, entrada: EntradaPagamento) => {
+      if (!businessId || !clienteId) return
+
+      const campos = montarCamposPagamento(clienteId, saleId, entrada, {
+        agora: new Date(),
+        dispositivo: identificarDispositivo(),
+      })
+
+      const referencia = doc(collection(db, 'businesses', businessId, 'payments'))
+
+      setDoc(referencia, {
+        ...campos,
+        criadoEm: serverTimestamp(),
+        atualizadoEm: serverTimestamp(),
+      }).catch((causa: unknown) => {
+        registrarFalha('O pagamento foi recusado pelo servidor e saiu do carnê.', causa)
+      })
+    },
+    [businessId, clienteId, registrarFalha],
+  )
+
+  /**
+   * Cancelar é um evento novo, nunca um `delete`: a regra do Firestore recusa
+   * remoção e só aceita `cancelado` indo de `false` para `true`. A parcela
+   * volta a vencida contando do vencimento **original**, porque a situação é
+   * derivada e nada dela foi gravado.
+   */
+  const cancelarPagamento = useCallback(
+    (pagamento: Pagamento, quando: string) => {
+      if (!businessId) return
+
+      const referencia = doc(db, 'businesses', businessId, 'payments', pagamento.id)
+
+      updateDoc(referencia, {
+        cancelado: true,
+        canceladoEm: quando,
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: identificarDispositivo(),
+      }).catch((causa: unknown) => {
+        registrarFalha('Não foi possível cancelar este pagamento.', causa)
+      })
+    },
+    [businessId, registrarFalha],
+  )
+
   return useMemo(() => {
     const deste = <T extends { clientId: string }>(itens: T[]) =>
       clienteId ? itens.filter((item) => item.clientId === clienteId) : []
@@ -173,6 +302,24 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
       erro,
       estadoSync: estadoDeSync({ carregando, erro: erro !== null, pendentes, doCache }),
       pendentes,
+      falhas,
+      descartarFalha,
+      registrarVenda,
+      registrarPagamento,
+      cancelarPagamento,
     }
-  }, [clienteId, vendas, parcelas, pagamentos, prontos, erro, doCache])
+  }, [
+    clienteId,
+    vendas,
+    parcelas,
+    pagamentos,
+    prontos,
+    erro,
+    doCache,
+    falhas,
+    descartarFalha,
+    registrarVenda,
+    registrarPagamento,
+    cancelarPagamento,
+  ])
 }

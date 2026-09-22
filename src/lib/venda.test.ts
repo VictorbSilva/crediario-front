@@ -86,6 +86,13 @@ describe('validarVenda', () => {
     expect(validarVenda(venda({ numeroParcelas: '120' })).numeroParcelas).toBeUndefined()
   })
 
+  it('recusa parcelas demais para o valor — a regra exige parcela > 0 centavos', () => {
+    // R$ 0,03 em 12 parcelas daria onze parcelas de zero centavo, que o
+    // Firestore recusaria só na sincronização.
+    expect(validarVenda(venda({ valor: '0,03', numeroParcelas: '12' })).numeroParcelas).toBeDefined()
+    expect(validarVenda(venda({ valor: '0,03', numeroParcelas: '3' })).numeroParcelas).toBeUndefined()
+  })
+
   it('recusa dia de vencimento fora de 1..31', () => {
     expect(validarVenda(venda({ diaVencimento: '0' })).diaVencimento).toBeDefined()
     expect(validarVenda(venda({ diaVencimento: '32' })).diaVencimento).toBeDefined()
@@ -195,7 +202,7 @@ describe('montarCamposVenda', () => {
   })
 
   it('a soma das parcelas fecha com o total, sempre', () => {
-    for (const total of ['100,00', '300,00', '999,99', '0,03', '1.234,56']) {
+    for (const total of ['100,00', '300,00', '999,99', '1.234,56']) {
       for (const n of ['1', '3', '7', '12']) {
         const { venda: v, parcelas } = montarCamposVenda(
           'c1',

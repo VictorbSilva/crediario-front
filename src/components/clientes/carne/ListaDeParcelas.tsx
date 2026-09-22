@@ -17,9 +17,10 @@ type LinhaProps = Readonly<{
   total: number
   hoje: string
   simulando: boolean
+  aoRegistrarPagamento?: (item: ParcelaComEstado) => void
 }>
 
-function Linha({ item, total, hoje, simulando }: LinhaProps) {
+function Linha({ item, total, hoje, simulando, aoRegistrarPagamento }: LinhaProps) {
   const { parcela, pagoCentavos, estado, encargos, taxaPropria } = item
   const vencida = estado.situacao === 'vencida'
   const encargoTotal = encargos.multaCentavos + encargos.jurosCentavos
@@ -57,6 +58,20 @@ function Linha({ item, total, hoje, simulando }: LinhaProps) {
         {taxaPropria ? <StatusPill tom="alerta">taxa própria</StatusPill> : null}
       </div>
 
+      {aoRegistrarPagamento && estado.situacao !== 'paga' ? (
+        <button
+          type="button"
+          onClick={() => aoRegistrarPagamento(item)}
+          className={`mt-2 inline-flex min-h-9 w-full items-center justify-center rounded-lg px-3 text-xs font-semibold transition-colors sm:w-auto ${
+            vencida
+              ? 'bg-brand-600 text-white hover:bg-brand-700'
+              : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          Registrar pagamento
+        </button>
+      ) : null}
+
       {mostrarEncargo ? (
         <div className="mt-1.5 text-xs font-semibold tabular-nums text-warning">
           {formatarCentavos(estado.restanteCentavos)} + multa{' '}
@@ -75,9 +90,17 @@ type ListaDeParcelasProps = Readonly<{
   total: number
   hoje: string
   simulando: boolean
+  /** Ausente no painel lateral, que é só leitura. */
+  aoRegistrarPagamento?: (item: ParcelaComEstado) => void
 }>
 
-export function ListaDeParcelas({ parcelas, total, hoje, simulando }: ListaDeParcelasProps) {
+export function ListaDeParcelas({
+  parcelas,
+  total,
+  hoje,
+  simulando,
+  aoRegistrarPagamento,
+}: ListaDeParcelasProps) {
   const { visiveis, resto } = janelaDeParcelas(parcelas)
 
   return (
@@ -90,6 +113,7 @@ export function ListaDeParcelas({ parcelas, total, hoje, simulando }: ListaDePar
             total={total}
             hoje={hoje}
             simulando={simulando}
+            aoRegistrarPagamento={aoRegistrarPagamento}
           />
         ))}
       </ul>
