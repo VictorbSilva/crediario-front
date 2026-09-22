@@ -22,6 +22,24 @@ export function criarAmbiente(): Promise<RulesTestEnvironment> {
   })
 }
 
+export type Veredito = 'permitido' | 'negado'
+
+export async function veredito(operacao: Promise<unknown>): Promise<Veredito> {
+  try {
+    await operacao
+    return 'permitido'
+  } catch (erro) {
+    const codigo =
+      typeof erro === 'object' && erro !== null && 'code' in erro
+        ? String((erro as { code: unknown }).code)
+        : ''
+    const mensagem = erro instanceof Error ? erro.message : String(erro)
+
+    if (codigo === 'permission-denied' || mensagem.includes('PERMISSION_DENIED')) return 'negado'
+    throw erro
+  }
+}
+
 export function caminhoCliente(clientId: string, empresa = EMPRESA): string {
   return `businesses/${empresa}/clients/${clientId}`
 }

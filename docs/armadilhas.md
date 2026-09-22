@@ -121,6 +121,29 @@ ramo na leitura, não uma migração de dado vivo.
 
 — referente a firestore.rules e tests/regras/vendas.test.ts
 
+## tests/regras/ambiente.ts — `veredito`
+
+Os testes de regra não usam `assertFails`/`assertSucceeds` do
+`@firebase/rules-unit-testing`. Usam `veredito(operacao)`, que devolve `'permitido'` ou
+`'negado'`, e o teste compara com `expect`.
+
+Duas razões, e a segunda é a que importa mais:
+
+1. **O SonarQube marcava todo teste de regra como "teste sem asserção"** (regra S2699). Ele
+   só reconhece uma lista fixa de bibliotecas, e `assertFails` não está nela. Eram dezenas de
+   alertas permanentes — e alerta que sempre aparece é alerta que ninguém lê, que é
+   exatamente o problema que este projeto passa o tempo tentando evitar na interface.
+2. **`veredito` é mais estrito que `assertFails`.** Ele só devolve `'negado'` quando o erro é
+   de fato `permission-denied`; qualquer outra falha — caminho errado, campo com nome trocado,
+   emulador fora do ar — é **relançada** em vez de contada como negação. O `assertFails`
+   aceitava a falha sem perguntar o motivo, o que deixava passar teste que "passava" porque o
+   código de teste estava quebrado.
+
+> A migração dos 95 pontos de chamada em 21/09/2026 serviu de prova: se algum dos 99 testes
+> estivesse passando por motivo errado, o `veredito` teria estourado. Nenhum estourou.
+
+— referente a tests/regras/ambiente.ts
+
 ## tests/regras/ambiente.ts
 
 Projeto com prefixo `demo-`: o SDK reconhece esse prefixo como projeto de emulador e recusa qualquer chamada de rede para produção. É a garantia de que um teste de regra nunca escreve na base real.

@@ -1,5 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, it } from 'vitest'
-import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
@@ -11,6 +10,7 @@ import {
   caminhoCliente,
   clienteValido,
   criarAmbiente,
+  veredito,
 } from './ambiente.ts'
 
 let ambiente: RulesTestEnvironment
@@ -50,23 +50,23 @@ describe('acesso — o dono', () => {
   it('lê um cliente da empresa', async () => {
     await semearCliente('c1')
     const banco = bancoDe(ambiente.authenticatedContext(UID_DONO))
-    await assertSucceeds(getDoc(doc(banco, caminhoCliente('c1'))))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1'))))).toBe('permitido')
   })
 
   it('cria um cliente na empresa', async () => {
     const banco = bancoDe(ambiente.authenticatedContext(UID_DONO))
-    await assertSucceeds(setDoc(doc(banco, caminhoCliente('c1')), clienteValido()))
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c1')), clienteValido()))).toBe('permitido')
   })
 
   it('lê sem ter claim nenhum, que é a situação real dele em produção', async () => {
     await semearCliente('c1')
     const banco = bancoDe(ambiente.authenticatedContext(UID_DONO, {}))
-    await assertSucceeds(getDoc(doc(banco, caminhoCliente('c1'))))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1'))))).toBe('permitido')
   })
 
   it('escreve no documento da própria empresa', async () => {
     const banco = bancoDe(ambiente.authenticatedContext(UID_DONO))
-    await assertSucceeds(setDoc(doc(banco, `businesses/${EMPRESA}`), { nome: 'Loja' }))
+    expect(await veredito(setDoc(doc(banco, `businesses/${EMPRESA}`), { nome: 'Loja' }))).toBe('permitido')
   })
 })
 
@@ -74,17 +74,17 @@ describe('acesso — o intruso', () => {
   it('não lê cliente nenhum', async () => {
     await semearCliente('c1')
     const banco = bancoDe(ambiente.authenticatedContext(UID_INTRUSO))
-    await assertFails(getDoc(doc(banco, caminhoCliente('c1'))))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1'))))).toBe('negado')
   })
 
   it('não cria cliente', async () => {
     const banco = bancoDe(ambiente.authenticatedContext(UID_INTRUSO))
-    await assertFails(setDoc(doc(banco, caminhoCliente('c1')), clienteValido()))
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c1')), clienteValido()))).toBe('negado')
   })
 
   it('não lê o documento da empresa', async () => {
     const banco = bancoDe(ambiente.authenticatedContext(UID_INTRUSO))
-    await assertFails(getDoc(doc(banco, `businesses/${EMPRESA}`)))
+    expect(await veredito(getDoc(doc(banco, `businesses/${EMPRESA}`)))).toBe('negado')
   })
 })
 
@@ -92,12 +92,12 @@ describe('acesso — sem autenticação', () => {
   it('não lê', async () => {
     await semearCliente('c1')
     const banco = bancoDe(ambiente.unauthenticatedContext())
-    await assertFails(getDoc(doc(banco, caminhoCliente('c1'))))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1'))))).toBe('negado')
   })
 
   it('não escreve', async () => {
     const banco = bancoDe(ambiente.unauthenticatedContext())
-    await assertFails(setDoc(doc(banco, caminhoCliente('c1')), clienteValido()))
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c1')), clienteValido()))).toBe('negado')
   })
 })
 
@@ -105,25 +105,21 @@ describe('acesso — funcionário com claim businessId', () => {
   it('lê e escreve na empresa do próprio claim', async () => {
     const contexto = ambiente.authenticatedContext('funcionario-1', { businessId: EMPRESA })
     const banco = bancoDe(contexto)
-    await assertSucceeds(setDoc(doc(banco, caminhoCliente('c1')), clienteValido()))
-    await assertSucceeds(getDoc(doc(banco, caminhoCliente('c1'))))
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c1')), clienteValido()))).toBe('permitido')
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1'))))).toBe('permitido')
   })
 
   it('não alcança a empresa de outro claim', async () => {
     await semearCliente('c1', OUTRA_EMPRESA)
     const contexto = ambiente.authenticatedContext('funcionario-1', { businessId: EMPRESA })
     const banco = bancoDe(contexto)
-    await assertFails(getDoc(doc(banco, caminhoCliente('c1', OUTRA_EMPRESA))))
-    await assertFails(
-      setDoc(doc(banco, caminhoCliente('c2', OUTRA_EMPRESA)), clienteValido()),
-    )
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1', OUTRA_EMPRESA))))).toBe('negado')
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c2', OUTRA_EMPRESA)), clienteValido()))).toBe('negado')
   })
 
   it('não escreve no documento da empresa — isso é só do dono', async () => {
     const contexto = ambiente.authenticatedContext('funcionario-1', { businessId: EMPRESA })
-    await assertFails(
-      setDoc(doc(bancoDe(contexto), `businesses/${EMPRESA}`), { nome: 'Loja renomeada' }),
-    )
+    expect(await veredito(setDoc(doc(bancoDe(contexto), `businesses/${EMPRESA}`), { nome: 'Loja renomeada' }))).toBe('negado')
   })
 })
 
@@ -140,14 +136,12 @@ describe('acesso — coleções que ainda não nasceram', () => {
   for (const caminho of caminhosFuturos) {
     it(`nega escrita em ${caminho.split('/')[2]} até a regra dela existir`, async () => {
       const banco = bancoDe(ambiente.authenticatedContext(UID_DONO))
-      await assertFails(setDoc(doc(banco, caminho), { qualquerCoisa: true }))
+      expect(await veredito(setDoc(doc(banco, caminho), { qualquerCoisa: true }))).toBe('negado')
     })
   }
 
   it('nega em qualquer profundidade, não só no primeiro nível', async () => {
     const banco = bancoDe(ambiente.authenticatedContext(UID_DONO))
-    await assertFails(
-      setDoc(doc(banco, `businesses/${EMPRESA}/sales/v1/installments/p1`), { valor: 1 }),
-    )
+    expect(await veredito(setDoc(doc(banco, `businesses/${EMPRESA}/sales/v1/installments/p1`), { valor: 1 }))).toBe('negado')
   })
 })
