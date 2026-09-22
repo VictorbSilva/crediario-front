@@ -350,6 +350,49 @@ inventar data, e a tela avisa quantos cadastros estão nessa situação.
 > do `click()` cancela o download antes de começar em alguns navegadores — o link fica
 > válido por um segundo e só então é liberado.
 
+## src/lib/parcelas.ts
+
+Onde a resposta do dono sobre pagamento parcial vira código. Todo o carnê é derivado daqui;
+nada de situação de parcela é gravado no Firestore.
+
+> **AVISO**
+> `alocarPagamentos` **soma os pagamentos num bolo e cobre da parcela mais antiga para a mais
+> nova** — não existe "este pagamento é da parcela 4". É a única forma de representar o que o
+> dono descreveu: *"pagou 50, vai ficar 250, pagou mais 50, vai ficar 200, e sempre contando o
+> atraso"*. Uma parcela coberta pela metade continua **vencida**, contando do vencimento
+> original, e é `situacaoDaParcela` que garante isso.
+>
+> A ordem é por **vencimento**, não pela ordem em que os documentos chegaram do Firestore, e
+> há teste com a lista embaralhada para travar isso.
+
+`alocarPagamentos` abate **só o principal**: `valorCentavos - encargoCentavos`. Sem isso, um
+pagamento que inclui juros abateria dívida que não foi paga, e o saldo desceria mais rápido
+que a realidade.
+
+**Duas suposições que o dono ainda não confirmou.** As duas estão registradas em
+`versaoCalculo: 1`, gravado e imutável na venda — é o que permite mudar a fórmula depois sem
+migrar carnê nenhum, porque a versão diz qual regra gerou cada venda.
+
+1. **A primeira parcela cai no mês seguinte ao da venda**, no dia combinado. Venda em 19/04
+   com vencimento dia 19 gera a primeira em 19/05.
+2. **A sobra da divisão vai para a última parcela.** R$ 100,00 em 3 vira 33,33 / 33,33 /
+   33,34, e a soma bate exatamente com o total — há teste para isso.
+
+Dia 31 encolhe para o último dia do mês curto (`vencimentoDaParcela` em `src/lib/data.ts`).
+Sem isso, `new Date(2026, 1, 31)` viraria 3 de março em silêncio, e o carnê nasceria com
+vencimento fora do mês.
+
+> ⚠️ **Terceira suposição, e é a mais discutível:** multa e juros incidem sobre o que **falta**
+> da parcela, não sobre o valor cheio. Quem pagou metade de uma parcela vencida simula
+> encargo sobre a metade. É a leitura mais defensável — *"você ainda me deve 50, e é sobre
+> isso que corre"* —, mas o dono não foi perguntado. Trocar para o valor cheio é uma linha.
+
+Encargo é **simulação, nunca cobrança**: sem taxa configurada, `simularEncargos` devolve
+zero, e `resumoDaVenda` separa `abertoCentavos` de `encargosCentavos` para a tela poder
+mostrar só o principal por padrão. Ver as regras financeiras no `CLAUDE.md`.
+
+— referente a src/lib/parcelas.ts
+
 ## src/lib/cliente.ts
 
 `LIMITES_CLIENTE` existe para que o `maxLength` do formulário e o limite da regra saiam do

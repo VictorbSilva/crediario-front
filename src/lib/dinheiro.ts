@@ -20,6 +20,28 @@ const formatadorSemCentavos = new Intl.NumberFormat('pt-BR', {
   roundingMode: 'halfEven',
 })
 
+/**
+ * Arredonda para centavo inteiro com empate indo para o par — a mesma regra que
+ * os formatadores acima usam na exibição. É a única regra de arredondamento do
+ * projeto: uma conta que produz fração de centavo (juros percentual, rateio de
+ * parcela) passa por aqui antes de virar dado.
+ *
+ * Empate para o par em vez de sempre para cima porque, numa coluna longa, o
+ * empate sempre para cima empurra o total numa direção só; com meio-par os
+ * empates se cancelam entre si.
+ */
+export function arredondarCentavos(valor: number): number {
+  if (!Number.isFinite(valor)) return 0
+
+  const piso = Math.floor(valor)
+  const resto = valor - piso
+
+  if (resto > 0.5) return piso + 1
+  if (resto < 0.5) return piso
+
+  return piso % 2 === 0 ? piso : piso + 1
+}
+
 /** Convenção de tabela para "não há valor aqui" — travessão, não "R$ NaN". */
 const SEM_VALOR = '—'
 

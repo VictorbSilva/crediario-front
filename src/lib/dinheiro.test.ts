@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  arredondarCentavos,
   formatarCentavos,
   formatarCentavosCurto,
   parseReaisParaCentavos,
@@ -180,5 +181,23 @@ describe('parseReaisParaCentavos', () => {
     for (const centavos of [0, 7, 50, 1234, 123456, 1234567890]) {
       expect(parseReaisParaCentavos(formatarCentavos(centavos))).toBe(centavos)
     }
+  })
+})
+
+describe('arredondarCentavos', () => {
+  it('arredonda para cima e para baixo fora do empate', () => {
+    expect(arredondarCentavos(131.25)).toBe(131)
+    expect(arredondarCentavos(131.75)).toBe(132)
+  })
+
+  it('manda o empate para o centavo par, nos dois sentidos', () => {
+    expect(arredondarCentavos(130.5)).toBe(130)
+    expect(arredondarCentavos(131.5)).toBe(132)
+    expect(arredondarCentavos(132.5)).toBe(132)
+  })
+
+  it('devolve zero para valor não finito em vez de propagar NaN', () => {
+    expect(arredondarCentavos(Number.NaN)).toBe(0)
+    expect(arredondarCentavos(Number.POSITIVE_INFINITY)).toBe(0)
   })
 })
