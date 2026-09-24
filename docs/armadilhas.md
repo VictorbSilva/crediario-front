@@ -830,6 +830,26 @@ SPA: qualquer rota (/clientes, /rotas, ...) cai no index.html.
 
 — referente a vite.config.ts, linhas 54–64
 
+O bloco `build` separa o que vem de `node_modules` em dois chunks próprios, por
+`build.rolldownOptions.output.codeSplitting.groups`: `firebase` (`@firebase/*` e
+`firebase`, prioridade 2) e `vendor` (todo o resto de `node_modules`, prioridade 1). A
+prioridade maior faz o Firebase ganhar do `vendor` — sem ela, os módulos do Firebase
+cairiam no grupo genérico. O regex usa `[\\/]` e não `/` porque no Windows o caminho do
+módulo vem com `\`, e a doc do rolldown pede os dois separadores. `manualChunks` está
+depreciado no Vite 8 (o rolldown o ignora quando `codeSplitting` existe), por isso não é
+usado. O código do app, inclusive `src/lib/firebase.ts`, continua no chunk do `App` — é o
+que mantém o `import('./App')` do `src/main.tsx` rejeitando quando a config falta, e com
+isso a `SetupError`.
+
+O ganho, medido em 24/09/2026: antes, `App-*.js` tinha 777 kB (Firebase, react-router,
+lucide e o app juntos) e `index-*.js` 184 kB (React), e qualquer mudança no app trocava o
+hash do `App` inteiro. Depois: `App` 89 kB, `vendor` 243 kB, `firebase` 642 kB, `index`
+2,7 kB. Com uma troca de texto em `ClientesPage.tsx`, `firebase-*.js` e `vendor-*.js`
+mantiveram o mesmo nome e só `App-*.js` e `index-*.js` mudaram (o `index` porque guarda o
+nome com hash do `App`) — numa atualização comum, o aparelho baixa ~92 kB em vez de
+~960 kB. O aviso de chunk acima de 500 kB continua, agora só no `firebase-*.js`; o limite
+(`chunkSizeWarningLimit`) não foi aumentado de propósito.
+
 ---
 
 # Invariantes acrescentadas na varredura de defeitos (08/08/2026)
