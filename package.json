@@ -9,8 +9,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "preview:treino": "tsc -b && vite build --mode treino && vite preview --port 4174 --strictPort",
     "lint": "eslint .",
-    "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rules": "node scripts/firebase-com-jdk.mjs emulators:exec --only firestore --project demo-crediario \"vitest run --config vitest.rules.config.ts\"",

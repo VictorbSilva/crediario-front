@@ -126,7 +126,7 @@ npm install
 | `npm run dev` | Sobe o servidor de desenvolvimento com HMR |
 | `npm run build` | Verifica os tipos (`tsc -b`) e gera o build de produção em `dist/` |
 | `npm run lint` | Roda o ESLint em todo o repositório |
-| `npm run preview` | Serve localmente o build de produção |
+| `npm run preview:treino` | Gera o build de produção apontado para `loja-treino` e serve em `http://localhost:4174` |
 | `npm test` | Roda a suíte de testes unitários uma vez (Vitest) |
 | `npm run test:watch` | A mesma suíte em modo *watch* |
 | `npm run test:rules` | Sobe o emulador do Firestore e roda os testes das regras de segurança |
@@ -190,10 +190,12 @@ tela branca. Por isso `devOptions` está desligado no `vite.config.ts`; ligar n�
 Offline só se testa na build de produção, que é bundlada e pré-cacheada:
 
 ```bash
-npm run build && npm run preview
+npm run preview:treino
 ```
 
-Depois abra `http://localhost:4173`, confirme no DevTools (*Application → Service
+Depois abra `http://localhost:4174` — não a 4173: lá mora o service worker de builds
+antigos que gravavam em `loja-principal`, e outra porta é outra origem, sem esse worker nem
+a fila offline dele. Confirme no DevTools (*Application → Service
 Workers*) que o worker está `activated`, e só então corte a rede — ou, melhor ainda,
 **derrube o processo do preview**, que é um teste mais honesto que o modo offline do
 DevTools.

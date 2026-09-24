@@ -826,7 +826,7 @@ SPA: qualquer rota (/clientes, /rotas, ...) cai no index.html.
 > Não adianta ligar isto para "testar offline em dev": em dev o Vite serve o app sem bundle, como ~24 módulos separados gerados sob demanda (/src/main.tsx, /src/App.tsx, /node_modules/.vite/deps/...). Esses módulos não entram no precache — o service worker de dev pré-cacheia só `registerSW.js` e `/index.html`. Offline, o HTML abriria e todo o JavaScript falharia: tela branca.
 >
 > Testar PWA e offline SEMPRE pela build de produção:
->   npm run build && npm run preview
+>   npm run preview:treino
 
 — referente a vite.config.ts, linhas 54–64
 
@@ -1182,3 +1182,35 @@ lista seleciona o painel ou navega para `/clientes/:id` — o que CSS também n�
 Primeira versão usava `useEffect` + `setState` e o ESLint recusou
 (`react-hooks/set-state-in-effect`), com razão: é exatamente o caso que
 `useSyncExternalStore` existe para resolver.
+
+## .env.development e .env.treino
+
+O Vite carrega `.env.[modo]` por cima do `.env`. Os dois arquivos trocam só
+`VITE_BUSINESS_ID`, para `loja-treino`; a config do Firebase continua vindo do `.env`.
+
+- `.env.development` vale para `npm run dev`.
+- `.env.treino` vale para `vite build --mode treino`, que é o que `npm run preview:treino`
+  roda. É build de produção de verdade — `NODE_ENV=production`, service worker, precache —
+  e só a empresa muda. Por isso é o único jeito local de testar PWA e offline.
+
+Os dois gravam no **Firestore real**, com as mesmas regras e o mesmo usuário, só que sob
+`businesses/loja-treino`. Não é emulador. O que eles evitam é sujar
+`businesses/loja-principal`, a empresa que o dono precisa receber vazia — foi exatamente
+assim que os testes de 21 e 22/09 deixaram dado lá: sem claim no token, o `AuthProvider`
+usa `VITE_BUSINESS_ID`, e o `.env` diz `loja-principal`.
+
+O script `preview` saiu de propósito. Depois de `npm run build` ele serviria um bundle que
+grava em `loja-principal`.
+
+A porta é 4174, não 4173. Em `localhost:4173` mora o service worker de builds antigos que
+gravavam em `loja-principal`, com a fila offline deles. Outra porta é outra origem: sem
+esse worker e sem aquela fila.
+
+Os dois arquivos são versionados de propósito — não têm segredo. O `.gitignore` ignora
+`.env` e `*.local`, não `.env.[modo]`.
+
+> **AVISO**
+> Um `.env.development.local` ou `.env.treino.local` com `loja-principal` desfaz o
+> isolamento em silêncio: o `.local` do modo vence o arquivo do modo, e nada no build
+> avisa. Para conferir, procure a empresa no bundle: depois de `npx vite build --mode
+> treino`, `loja-treino` tem que aparecer em `dist/assets/*.js` e `loja-principal` não.
