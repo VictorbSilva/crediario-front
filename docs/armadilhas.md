@@ -1214,3 +1214,33 @@ Os dois arquivos são versionados de propósito — não têm segredo. O `.gitig
 > isolamento em silêncio: o `.local` do modo vence o arquivo do modo, e nada no build
 > avisa. Para conferir, procure a empresa no bundle: depois de `npx vite build --mode
 > treino`, `loja-treino` tem que aparecer em `dist/assets/*.js` e `loja-principal` não.
+
+## src/lib/ambiente.ts e src/components/FaixaDeTreino.tsx
+
+A faixa "Ambiente de treino — nada do que for lançado aqui é real." decide pela
+**empresa**, não pelo `MODE`. Na Vercel o Preview é build de produção: `import.meta.env.MODE`
+vale `'production'` tanto no Preview quanto na Production. O que difere entre os dois é só
+`VITE_BUSINESS_ID`.
+
+A regra é `ehProducao`: produção é `VITE_BUSINESS_ID === 'loja-principal'` **e** emuladores
+desligados. Todo o resto mostra a faixa. A pergunta é "isto é produção?", e não "isto é
+treino?", de propósito: configuração errada — empresa com erro de digitação, espaço sobrando,
+maiúscula, variável ausente — faz a faixa **aparecer**, nunca sumir. A comparação é exata
+pelo mesmo motivo.
+
+Emulador conta como não-produção, mesmo com `loja-principal`: o dado vai para o emulador,
+não para a empresa real.
+
+A Production da Vercel **mostra a faixa até a entrega**, porque fica sem `VITE_BUSINESS_ID`
+até o dono começar. É esperado, não é defeito.
+
+A faixa fica em `App.tsx`, como primeiro filho do `BrowserRouter` e fora do `AppShell`, para
+aparecer também no login.
+
+> **AVISO**
+> A faixa lê a variável do **build**. Hoje isso equivale a ler a empresa em uso, porque
+> ninguém tem o claim `businessId` (só o Admin SDK grava claim, e o projeto não usa) e o
+> `AuthProvider` cai no `VITE_BUSINESS_ID`. No dia em que existir claim, o `AuthProvider`
+> passa a preferi-lo — e a faixa precisa passar a ler a empresa resolvida do contexto de
+> auth, senão um usuário com claim `loja-principal` num build de treino veria a faixa
+> gravando em produção, ou o contrário.

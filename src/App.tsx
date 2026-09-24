@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '@/auth/AuthProvider'
 import { RequireAuth } from '@/auth/RequireAuth'
+import { FaixaDeTreino } from '@/components/FaixaDeTreino'
 import { AppShell } from '@/components/layout/AppShell'
 import { PwaPrompt } from '@/components/pwa/PwaPrompt'
 import { ClientePage } from '@/pages/ClientePage'
@@ -12,6 +13,7 @@ import { RotasPage } from '@/pages/RotasPage'
 export default function App() {
   return (
     <BrowserRouter>
+      <FaixaDeTreino />
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
