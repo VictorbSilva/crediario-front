@@ -1264,3 +1264,40 @@ aparecer também no login.
 > passa a preferi-lo — e a faixa precisa passar a ler a empresa resolvida do contexto de
 > auth, senão um usuário com claim `loja-principal` num build de treino veria a faixa
 > gravando em produção, ou o contrário.
+
+## vercel.json e a Vercel
+
+**O rewrite só pega caminho sem ponto.** `"/((?!.*\\.).*)"` manda para `/index.html` o que
+não tem `.` no caminho: as rotas do app (`/clientes`, `/clientes/:id`, `/rotas`,
+`/financeiro`, `/login`) e os IDs do Firestore não têm ponto. Se o rewrite pegasse tudo, um
+asset inexistente — um `/assets/App-antigo.js` pedido por um `index.html` velho — voltaria
+como HTML com status 200, e com o cabeçalho `immutable` esse HTML ficaria um ano no
+navegador no lugar do JavaScript: tela branca, sem erro que aponte a causa. Com o filtro,
+dá 404.
+
+**Os cabeçalhos.** `/assets/*` tem hash no nome, então recebe
+`public, max-age=31536000, immutable`: o nome muda quando o conteúdo muda. Todo o resto
+(`/`, `index.html`, `sw.js`, `manifest.webmanifest`, `workbox-*.js`, ícones) recebe
+`no-cache`. Um `sw.js` ou `index.html` velho em cache prende o aparelho na versão antiga, e
+o aviso de atualização do `PwaPrompt` depende de o navegador buscar o `sw.js` de novo.
+
+**Preview é build de produção.** `NODE_ENV=production`, service worker e precache, igual à
+Production. O que difere entre os dois ambientes vem só de variável — por isso a faixa de
+treino decide pela empresa e não pelo `MODE` (ver `src/lib/ambiente.ts` acima).
+
+**Cada deploy é uma origem.** Cada deploy tem URL própria, e cada URL tem cache, fila
+offline, service worker e login próprios. Um teste offline feito numa URL de deploy some no
+push seguinte. Testar offline só no branch `treino`, que tem endereço estável, ou em
+`localhost:4174` (`npm run preview:treino`).
+
+**Variável nova só vale no próximo deploy.** O Vite embute `VITE_*` no bundle em tempo de
+build; mudar no painel não altera o que já foi publicado. É preciso *Redeploy*.
+
+**Production fica sem `VITE_BUSINESS_ID` até a entrega.** Sem empresa, a URL de produção
+não tem onde gravar, e `loja-principal` só recebe dado quando o dono começar. Cadastrar a
+variável antes disso reabre exatamente o problema que o `.env.development` e o `.env.treino`
+fecharam: teste gravando na empresa que o dono precisa receber vazia.
+
+**A proteção de deploy (Vercel Authentication) fica desligada**, para o iPhone abrir o
+treino sem conta da Vercel. Os previews ficam públicos, mas só mostram o login; quem
+protege os dados são as regras do Firestore, não o sigilo da URL.

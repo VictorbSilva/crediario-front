@@ -105,7 +105,7 @@ npx firebase-tools deploy --only firestore:rules
 
 ## Pré-requisitos
 
-- Node.js 20 ou superior (exigido pelo Vite 8)
+- Node.js 22 (fixado em `.nvmrc` e em `engines`, com `engine-strict`)
 - npm
 - JDK **21 ou superior**, apenas para rodar o emulador do Firestore (`npm run emu` e
   `npm run test:rules`). O `firebase-tools` 15 recusa o JDK 17 com
@@ -210,6 +210,41 @@ Duas armadilhas já encontradas, para não repetir:
 - **Não** adicionar `runtimeCaching` para o Firestore. O SDK tem persistência local
   própria; cachear as chamadas dele no Workbox cria uma segunda camada competindo com a
   primeira e serve dado velho por cima do que o Firestore considera correto.
+
+## Deploy (Vercel)
+
+A Vercel gera um build a cada push, com a configuração versionada em `vercel.json`
+(rewrite de SPA e cabeçalhos de cache):
+
+- **`main` → Production.**
+- **Qualquer outro branch → Preview**, gravando em `loja-treino`. O branch `treino` é o
+  endereço estável de teste: cada deploy tem URL própria, e cada URL é uma origem própria,
+  com cache, fila offline, service worker e login próprios.
+
+As variáveis ficam no painel (*Settings → Environment Variables*), por ambiente:
+
+| Variável | Production | Preview |
+| --- | --- | --- |
+| `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID` | sim | sim |
+| `VITE_BUSINESS_ID` | **não cadastrada até a entrega ao dono** | `loja-treino` |
+
+Sem `VITE_BUSINESS_ID`, a URL de produção não tem onde gravar — de propósito:
+`loja-principal` só recebe dado quando o dono começar a usar.
+
+Para atualizar o treino com o que está na `main`:
+
+```bash
+git push origin main:treino
+```
+
+Só avanço rápido: nunca faça commit direto no `treino`, para que o push acima nunca
+precise de força.
+
+Variável mudada no painel **só vale no próximo deploy**: o Vite a embute no build. Depois
+de mudar, use *Redeploy* no deploy mais recente.
+
+O deploy das regras do Firestore continua manual (`firebase deploy --only
+firestore:rules`); o CI só verifica.
 
 ## Estrutura do projeto
 
