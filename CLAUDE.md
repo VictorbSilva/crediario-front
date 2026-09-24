@@ -18,20 +18,23 @@ This is a Vite + React 19 + TypeScript project for **Crediário**, the applicati
   - **A payment is written against the sale, never against an instalment.** The button sits on the instalment and pre-fills its remainder because that is how the owner thinks, but the document carries no `installmentId`; coverage stays derived oldest-first. There is a test refusing that field.
   - **Every constraint the rule enforces must also exist in the form.** Offline turns a server rejection into a silent, hours-late failure, far from whoever typed it — see the zero-centavo trap in `docs/armadilhas.md`.
 - A sale and its instalments are written in one `writeBatch`: half a sale is worse than none, because the screen would show a carnê that does not add up. `useTelaLarga` decides panel-vs-page in JS rather than CSS: `hidden lg:block` would still mount the panel, and with it three Firestore listeners for a client nobody opened.
-- **The offline acceptance script of 12 steps was executed and passed on 21/09/2026**: data created offline survives closing the browser, syncs by itself in 3–5 s when the network returns, and the badge does not get stuck. Redo it on the production build (`npm run build && npm run preview`) whenever the data layer changes. ⚠️ **The data layer changed on 22/09 (etapa 5) and that script has not been redone.** The manual battery of that day covered offline in 6 sub-steps — sale created offline, browser closed and reopened offline, 2 s sync, batch arrived whole — but it is not the 12-step script.
+- **The offline acceptance script of 12 steps was executed and passed on 21/09/2026**: data created offline survives closing the browser, syncs by itself in 3–5 s when the network returns, and the badge does not get stuck. Redo it on the production build (`npm run preview:treino`) whenever the data layer changes. ⚠️ **The data layer changed on 22/09 (etapa 5) and that script has not been redone.** The manual battery of that day covered offline in 6 sub-steps — sale created offline, browser closed and reopened offline, 2 s sync, batch arrived whole — but it is not the 12-step script.
 - **Nobody but the developer has used this app.** The 22/09 battery was run by Victor on a desktop emulating a phone. The owner has not held it yet. Two of his own findings that day (instalments hidden with no way to open them, secondary text unreadable) are the kind that only appear with the device in hand — expect more, and do not treat the current screens as settled.
 
 Styling conventions: Tailwind classes only — `src/index.css` is the **only** `.css` file in the project and holds just `@tailwind` directives plus a short `@layer base` block. Design tokens (the `brand` colour scale, `success`/`warning`/`danger`, font family) live in `tailwind.config.js`, which is the single source of truth; do not introduce a parallel CSS-variable token layer. The app is **light-theme only** (`color-scheme: light`); do not add `dark:` variants.
 
 ## Commands
 
-The standard scripts (`dev`, `build`, `lint`, `preview`, `test`, `test:watch`) are in
-`package.json` and do what their names say. The two that are **not** guessable:
+The standard scripts (`dev`, `build`, `lint`, `test`, `test:watch`) are in
+`package.json` and do what their names say — except that `npm run dev` writes to
+`loja-treino`, not `loja-principal`, because `.env.development` overrides `VITE_BUSINESS_ID`.
+The three that are **not** guessable:
 
+- `npm run preview:treino` — production build with `--mode treino` (`.env.treino` points it at `loja-treino`), served on port 4174; the only local way to test PWA and offline. There is deliberately no plain `preview` script: after `npm run build` it would serve a bundle that writes to `loja-principal`.
 - `npm run test:rules` — boots the Firestore emulator and runs the rule suite against it
 - `npm run emu` — Firestore + Auth emulators, for working offline against fake data
 
-Both go through `scripts/firebase-com-jdk.mjs`, a wrapper that exists because an Oracle
+`test:rules` and `emu` go through `scripts/firebase-com-jdk.mjs`, a wrapper that exists because an Oracle
 Java 8 sits ahead of the JDK 21 in this machine's PATH and `firebase-tools` refuses it.
 
 Vitest has its own `vitest.config.ts`, separate from `vite.config.ts`, so the test run does not load the PWA and React plugins. `globals` is deliberately off — importing `describe`/`it`/`expect` explicitly is what keeps `tsc -b` passing without extra type config.
@@ -92,6 +95,6 @@ These were the last open questions in the project. They are decided; do not re-d
 - **Every Firestore read goes through a listener over the local cache.** No ad-hoc query in a hot screen — this is what keeps the project inside the Spark plan.
 - **Every new collection is born with its own per-collection rule and the matching rule test, in the same commit.** The `match /{documento=**}` wildcard does not count as write authorization: with no Cloud Functions, the rule is the only schema validation this project will ever have.
 - **Money is always integer centavos.** Never `parseFloat` a money string — use `parseReaisParaCentavos` from `src/lib/dinheiro.ts`.
-- **Test PWA and offline behaviour on the production build only** (`npm run build` then `npm run preview`). `npm run dev` proves nothing: `devOptions` is off, so no service worker is registered.
+- **Test PWA and offline behaviour on the production build only** (`npm run preview:treino`). `npm run dev` proves nothing: `devOptions` is off, so no service worker is registered. Never test with `npm run build` + `vite preview` — that bundle writes to `loja-principal`, the business the owner must receive empty.
 - **Read `docs/armadilhas.md` before touching `vite.config.ts`, `src/lib/firebase.ts`, `pwa-assets.config.ts` or `firestore.rules`.** It records traps already paid for — bugs that do not show up in the build and only appear in production, offline, or on a specific platform.
 - **When a modelling decision depends on an answer from the owner, first check whether it is reversible by construction.** If it is, implement the reversible path and move on instead of blocking. The general shape: store what the user typed *and* the derived result *and* a `versaoCalculo`, so that a later rule change is a recomputation of new records rather than a migration of old ones.
