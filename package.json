@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "test:rules": "node scripts/firebase-com-jdk.mjs emulators:exec --only firestore --project demo-crediario \"vitest run --config vitest.rules.config.ts\"",
     "emu": "node scripts/firebase-com-jdk.mjs emulators:start --only firestore,auth --project demo-crediario",
-    "generate-pwa-assets": "pwa-assets-generator"
+    "generate-pwa-assets": "pwa-assets-generator",
+    "revisar": "node .claude/scripts/revisar-pr.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
