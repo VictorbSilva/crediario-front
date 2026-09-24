@@ -37,4 +37,16 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'firebase', test: /node_modules[\\/](@firebase|firebase)[\\/]/, priority: 2 },
+            { name: 'vendor', test: /node_modules[\\/]/, priority: 1 },
+          ],
+        },
+      },
+    },
+  },
 })

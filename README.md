@@ -269,7 +269,6 @@ app ainda não foi usado numa visita de verdade.
 - Coleção `erros` para as falhas de escrita que chegam com o app fechado — **é o próximo
   passo**, e a janela é antes de o app ir para a rua, senão o rastro do primeiro erro real
   já se perdeu
-- Separação do bundle (`manualChunks`) — daí o aviso de chunk acima de 500 kB no build
 
 As **regras financeiras deixaram de ser a incógnita**: o dono respondeu em 21/09/2026 e
 elas estão em Domain Notes no `CLAUDE.md`. Em resumo — não existe renegociação como
