@@ -21,11 +21,19 @@ export type ClienteExportavel = {
   atualizadoPor: string
 }
 
+export type DocumentoExportavel = { id: string; dados: Record<string, unknown> }
+
+export type CarneExportavel = {
+  vendas: readonly DocumentoExportavel[]
+  parcelas: readonly DocumentoExportavel[]
+  pagamentos: readonly DocumentoExportavel[]
+}
+
 export type SituacaoExportacao =
   | { pode: false; motivo: string }
   | { pode: true; alerta: string | null }
 
-export const VERSAO_EXPORTACAO = 1
+export const VERSAO_EXPORTACAO = 2
 
 const COLUNAS = [
   'numero',
@@ -75,12 +83,39 @@ export function paraCSV(clientes: readonly ClienteExportavel[]): string {
   return '﻿' + linhas.join('\r\n') + '\r\n'
 }
 
-export function paraJSON(clientes: readonly ClienteExportavel[], agora: Date): string {
+function ehCarimbo(valor: object): valor is { toDate: () => Date } {
+  return 'toDate' in valor && typeof valor.toDate === 'function'
+}
+
+export function serializar(valor: unknown): unknown {
+  if (typeof valor !== 'object' || valor === null) return valor
+  if (ehCarimbo(valor)) return valor.toDate().toISOString()
+  if (Array.isArray(valor)) return valor.map(serializar)
+
+  return Object.fromEntries(
+    Object.entries(valor).map(([campo, conteudo]) => [campo, serializar(conteudo)]),
+  )
+}
+
+function documentoParaJSON({ id, dados }: DocumentoExportavel) {
+  return { id, ...(serializar(dados) as Record<string, unknown>) }
+}
+
+export function paraJSON(
+  clientes: readonly ClienteExportavel[],
+  carne: CarneExportavel,
+  agora: Date,
+): string {
   const conteudo = {
-    formato: 'crediario-clientes',
+    formato: 'crediario-backup',
     versao: VERSAO_EXPORTACAO,
     geradoEm: agora.toISOString(),
-    quantidade: clientes.length,
+    quantidades: {
+      clientes: clientes.length,
+      vendas: carne.vendas.length,
+      parcelas: carne.parcelas.length,
+      pagamentos: carne.pagamentos.length,
+    },
     clientes: clientes.map((cliente) => ({
       id: cliente.id,
       numero: cliente.numero,
@@ -98,13 +133,86 @@ export function paraJSON(clientes: readonly ClienteExportavel[], agora: Date): s
       atualizadoEm: iso(cliente.atualizadoEm),
       atualizadoPor: cliente.atualizadoPor,
     })),
+    vendas: carne.vendas.map(documentoParaJSON),
+    parcelas: carne.parcelas.map(documentoParaJSON),
+    pagamentos: carne.pagamentos.map(documentoParaJSON),
   }
 
   return JSON.stringify(conteudo, null, 2)
 }
 
 export function nomeDoArquivo(extensao: 'json' | 'csv', agora: Date): string {
-  return `crediario-clientes-${dataLocalISO(agora)}.${extensao}`
+  const conteudo = extensao === 'json' ? 'backup' : 'clientes'
+  return `crediario-${conteudo}-${dataLocalISO(agora)}.${extensao}`
+}
+
+export function conferenciaDoCarne(
+  vendas: readonly DocumentoExportavel[],
+  parcelas: readonly DocumentoExportavel[],
+): string | null {
+  const anunciadas = vendas.reduce((soma, { dados }) => {
+    const numero = dados.numeroParcelas
+    return typeof numero === 'number' && Number.isFinite(numero) ? soma + numero : soma
+  }, 0)
+  const diferenca = anunciadas - parcelas.length
+
+  if (diferenca === 0) return null
+
+  if (diferenca > 0) {
+    const falta = diferenca === 1 ? 'falta 1' : `faltam ${diferenca}`
+    return `As vendas somam ${anunciadas} parcelas, mas só ${parcelas.length} estão neste aparelho: ${falta}, e o arquivo sairia com carnê incompleto.`
+  }
+
+  const sobra = -diferenca === 1 ? '1 parcela' : `${-diferenca} parcelas`
+  return `Há ${sobra} a mais do que as vendas somam: alguma venda ainda não chegou a este aparelho e sairia fora do arquivo.`
+}
+
+export type SinaisDoBackup = {
+  confianca: ConfiancaDaLista
+  pendentes: number
+  conferencia: string | null
+  erro?: string | null
+}
+
+export function situacaoDoBackup({
+  confianca,
+  pendentes,
+  conferencia,
+  erro = null,
+}: SinaisDoBackup): SituacaoExportacao {
+  if (erro) {
+    return {
+      pode: false,
+      motivo: `${erro} O backup completo fica bloqueado para não sair sem as vendas e os pagamentos.`,
+    }
+  }
+
+  if (confianca === 'desconhecida') {
+    return {
+      pode: false,
+      motivo: 'As vendas e os pagamentos ainda estão carregando. Espere terminar para fazer o backup completo.',
+    }
+  }
+
+  const alertas: string[] = []
+
+  if (confianca === 'parcial') {
+    alertas.push(
+      'Este aparelho ainda não sincronizou as vendas e os pagamentos com o servidor, então o backup pode sair com apenas parte do carnê.',
+    )
+  }
+
+  if (pendentes > 0) {
+    alertas.push(
+      pendentes === 1
+        ? '1 lançamento do carnê ainda não subiu: no arquivo ele sai sem a data de sincronização.'
+        : `${pendentes} lançamentos do carnê ainda não subiram: no arquivo eles saem sem a data de sincronização.`,
+    )
+  }
+
+  if (conferencia) alertas.push(conferencia)
+
+  return { pode: true, alerta: alertas.length > 0 ? alertas.join(' ') : null }
 }
 
 export function situacaoExportacao(
