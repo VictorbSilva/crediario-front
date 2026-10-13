@@ -6,8 +6,10 @@ import {
   formatarParaCampo,
   montarCamposPagamento,
   montarCamposVenda,
+  montarCancelamentoVenda,
   parseInteiro,
   parseTaxa,
+  podeCancelarVenda,
   validarPagamento,
   validarVenda,
 } from './venda'
@@ -249,6 +251,28 @@ describe('montarCamposVenda', () => {
 
   it('recusa montar o que a validação recusaria', () => {
     expect(() => montarCamposVenda('c1', venda({ valor: '' }), CONTEXTO)).toThrow(TypeError)
+  })
+})
+
+describe('cancelamento da venda', () => {
+  it('permite cancelar venda antiga sem o campo e venda ainda ativa', () => {
+    expect(podeCancelarVenda({})).toBe(true)
+    expect(podeCancelarVenda({ cancelada: false })).toBe(true)
+  })
+
+  it('não permite cancelar de novo', () => {
+    expect(podeCancelarVenda({ cancelada: true })).toBe(false)
+  })
+
+  it('monta exatamente o fato do cancelamento e a autoria, sem outros campos', () => {
+    expect(montarCancelamentoVenda('2026-10-13', {
+      agora: new Date(), dispositivo: 'abc',
+    })).toEqual({ cancelada: true, canceladaEm: '2026-10-13', atualizadoPor: 'abc' })
+  })
+
+  it('recusa data fora do formato civil', () => {
+    expect(montarCancelamentoVenda).toBeTypeOf('function')
+    expect(() => montarCancelamentoVenda('13/10/2026', CONTEXTO)).toThrow(TypeError)
   })
 })
 

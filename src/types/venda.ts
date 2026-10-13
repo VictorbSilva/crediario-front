@@ -17,6 +17,8 @@ export type Venda = {
   multaFixaCentavos?: number
   jurosPercentualDia?: number
   observacao?: string
+  cancelada?: boolean
+  canceladaEm?: string
   versaoCalculo: number
   criadoEm: Timestamp | null
   atualizadoEm: Timestamp | null

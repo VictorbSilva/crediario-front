@@ -2,7 +2,7 @@ import { diferencaEmDias } from './data'
 import { formatarCentavos } from './dinheiro'
 import type { ParcelaComEstado, ResumoDaVenda, TaxasDeSimulacao } from './parcelas'
 
-export type SituacaoVenda = 'quitada' | 'atrasada' | 'em-dia'
+export type SituacaoVenda = 'quitada' | 'atrasada' | 'em-dia' | 'cancelada'
 
 export type Janela = {
   visiveis: ParcelaComEstado[]
@@ -14,10 +14,26 @@ function plural(quantidade: number, singular: string, plural: string): string {
   return `${quantidade} ${quantidade === 1 ? singular : plural}`
 }
 
-export function situacaoDaVenda(resumo: ResumoDaVenda): SituacaoVenda {
+export function situacaoDaVenda(resumo: ResumoDaVenda, cancelada = false): SituacaoVenda {
+  if (cancelada) return 'cancelada'
   if (resumo.quitada) return 'quitada'
 
   return resumo.parcelasVencidas > 0 ? 'atrasada' : 'em-dia'
+}
+
+export function pagamentosAtivos(
+  pagamentos: readonly { saleId: string; valorCentavos: number; cancelado?: boolean }[],
+  saleId: string,
+): { quantidade: number; totalCentavos: number } {
+  return pagamentos
+    .filter((pagamento) => pagamento.saleId === saleId && pagamento.cancelado !== true)
+    .reduce(
+      (soma, pagamento) => ({
+        quantidade: soma.quantidade + 1,
+        totalCentavos: soma.totalCentavos + pagamento.valorCentavos,
+      }),
+      { quantidade: 0, totalCentavos: 0 },
+    )
 }
 
 /**

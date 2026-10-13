@@ -277,6 +277,39 @@ describe('montarCarne', () => {
 
   const pagamentos = [{ ...pagamento({ id: 'g1', valorCentavos: 10000 }), saleId: 'v1' }]
 
+  it('mantém parcelas e principal pago da venda cancelada, sem saldo nem vencidas', () => {
+    const daVenda = [
+      parcelas[0],
+      { ...parcelas[1], vencimento: '2026-07-19' },
+    ]
+    const recebidos = [{ ...pagamento({ valorCentavos: 5000 }), saleId: 'v1' }]
+    const [ativa] = montarCarne([vendas[0]], daVenda, recebidos, HOJE)
+    const [cancelada] = montarCarne(
+      [{ ...vendas[0], cancelada: true }], daVenda, recebidos, HOJE,
+    )
+
+    expect(ativa.resumo.parcelasVencidas).toBe(2)
+    expect(ativa.resumo.encargosCentavos).toBeGreaterThan(0)
+    expect(cancelada.cancelada).toBe(true)
+    expect(cancelada.resumo).toEqual({
+      pagoCentavos: ativa.resumo.pagoCentavos,
+      abertoCentavos: 0,
+      encargosCentavos: 0,
+      totalComEncargosCentavos: 0,
+      parcelasVencidas: 0,
+      quitada: false,
+    })
+    expect(cancelada.resumo.pagoCentavos).toBe(5000)
+    expect(cancelada.parcelas).toEqual(ativa.parcelas)
+    expect(cancelada.parcelas).toHaveLength(2)
+  })
+
+  it('venda sem o campo cancelada continua ativa', () => {
+    const [carne] = montarCarne([vendas[0]], parcelas, pagamentos, HOJE)
+
+    expect(carne.cancelada).toBe(false)
+  })
+
   it('põe a venda mais recente primeiro', () => {
     expect(montarCarne(vendas, parcelas, pagamentos, HOJE).map((c) => c.venda.id)).toEqual([
       'v2',
@@ -324,6 +357,36 @@ describe('montarCarne', () => {
 })
 
 describe('saldoDoCliente', () => {
+  const vendas = [
+    { id: 'v1', dataVenda: '2026-04-19', cancelada: true, multaPercentual: 2 },
+    { id: 'v2', dataVenda: '2026-05-19' },
+  ]
+  const parcelas = [
+    { ...parcela({ id: 'a', vencimento: '2026-06-19' }), saleId: 'v1' },
+    { ...parcela({ id: 'b', vencimento: '2026-07-19' }), saleId: 'v2' },
+  ]
+
+  it('ignora a cancelada atrasada ao determinar o saldo e a quitação do cliente', () => {
+    const pagamentos = [
+      { ...pagamento({ id: 'g1', valorCentavos: 5000 }), saleId: 'v1' },
+      { ...pagamento({ id: 'g2', valorCentavos: 10000 }), saleId: 'v2' },
+    ]
+    const saldo = saldoDoCliente(montarCarne(vendas, parcelas, pagamentos, HOJE))
+
+    expect(saldo.abertoCentavos).toBe(0)
+    expect(saldo.parcelasVencidas).toBe(0)
+    expect(saldo.quitada).toBe(true)
+    expect(saldo.pagoCentavos).toBe(10000)
+  })
+
+  it('cancelada e em aberto dão o mesmo saldo que a em aberto sozinha', () => {
+    const pagamentos = [{ ...pagamento(), saleId: 'v1' }]
+    const carnes = montarCarne(vendas, parcelas, pagamentos, HOJE)
+    const [ativa] = montarCarne([vendas[1]], parcelas, pagamentos, HOJE)
+
+    expect(saldoDoCliente(carnes)).toEqual(ativa.resumo)
+  })
+
   it('soma os carnês do cliente inteiro', () => {
     const vendas = [{ id: 'v1', dataVenda: '2026-04-19' }, { id: 'v2', dataVenda: '2026-09-02' }]
     const parcelas = [
