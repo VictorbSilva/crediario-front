@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   ENTRADA_CLIENTE_VAZIA,
   clienteComNumero,
+  entradaDoCliente,
   montarCamposCliente,
+  montarEdicaoCliente,
   parseNumeroCadastro,
   validarCliente,
+  validarEdicaoCliente,
 } from './cliente'
 import type { ClienteConhecido, EntradaCliente } from './cliente'
+import { normalizar } from './texto'
 
 const CONTEXTO = { agora: new Date(2026, 8, 21, 15, 30), dispositivo: 'a1b2c3d4' }
 
@@ -19,6 +23,132 @@ const lista: ClienteConhecido[] = [
 function entrada(partes: Partial<EntradaCliente> = {}): EntradaCliente {
   return { ...ENTRADA_CLIENTE_VAZIA, numero: '500', nome: 'Ana Paula Ferreira', ...partes }
 }
+
+describe('entradaDoCliente', () => {
+  it('preenche a entrada com os dados existentes e deixa opcionais ausentes em branco', () => {
+    expect(entradaDoCliente({ numero: 12, nome: 'Ana', telefone: '(83) 99999-0000' })).toEqual({
+      numero: '12',
+      nome: 'Ana',
+      telefone: '(83) 99999-0000',
+      cpf: '',
+      endereco: '',
+      observacao: '',
+    })
+  })
+
+  it('preserva todos os opcionais preenchidos', () => {
+    const dados = entrada({
+      telefone: '9999',
+      cpf: '529.982.247-25',
+      endereco: 'Rua A',
+      observacao: 'Aviso',
+    })
+    expect(entradaDoCliente({ ...dados, numero: 500 })).toEqual(dados)
+  })
+})
+
+describe('validarEdicaoCliente', () => {
+  it.each(['', 'abc', '137'])('ignora o número %j, sem devolver a chave numero', (numero) => {
+    expect(validarEdicaoCliente(entrada({ numero }))).toEqual({})
+  })
+
+  it.each([
+    { nome: '  ' },
+    { nome: 'a'.repeat(121) },
+    { nome: '\u0301\u0302' },
+    { telefone: 'a'.repeat(41) },
+    { telefone: '1'.repeat(21) },
+    { cpf: 'a'.repeat(21) },
+    { cpf: '529.982.247' },
+    { cpf: '529.982.247-24' },
+    { cpf: '123456789012' },
+    { endereco: 'a'.repeat(201) },
+    { observacao: 'a'.repeat(501) },
+  ])('devolve os mesmos erros do cadastro para %j', (partes) => {
+    const dados = entrada(partes)
+    const errosDoCadastro = validarCliente(dados, lista, 'confiavel')
+    expect(Object.keys(errosDoCadastro)).not.toHaveLength(0)
+    expect(validarEdicaoCliente(dados)).toEqual(errosDoCadastro)
+    expect(validarEdicaoCliente({ ...dados, numero: '' })).toEqual(errosDoCadastro)
+  })
+})
+
+describe('montarEdicaoCliente', () => {
+  const contexto = { ...CONTEXTO, dispositivo: 'abc' }
+
+  it('limpa os dados preenchidos e deriva os campos de busca do novo conteúdo', () => {
+    const { definir, remover } = montarEdicaoCliente(
+      entrada({
+        nome: '  Joana   Cláudia  ',
+        telefone: '  (83) 99999-0000  ',
+        cpf: ' 529.982.247-25 ',
+        endereco: ' Rua A ',
+        observacao: ' Aviso ',
+      }),
+      contexto,
+    )
+    expect(definir).toEqual({
+      nome: 'Joana Cláudia',
+      nomeBusca: normalizar('Joana Cláudia'),
+      telefone: '(83) 99999-0000',
+      telefoneDigits: '83999990000',
+      cpf: '529.982.247-25',
+      cpfDigits: '52998224725',
+      endereco: 'Rua A',
+      observacao: 'Aviso',
+      atualizadoPor: 'abc',
+    })
+    expect(remover).toEqual([])
+  })
+
+  it.each(['', '   '])('remove opcionais apagados (%j), incluindo os pares de dígitos', (vazio) => {
+    const { definir, remover } = montarEdicaoCliente(
+      entrada({ telefone: vazio, cpf: vazio, endereco: vazio, observacao: vazio }),
+      contexto,
+    )
+    expect(definir).toEqual({
+      nome: 'Ana Paula Ferreira',
+      nomeBusca: normalizar('Ana Paula Ferreira'),
+      atualizadoPor: 'abc',
+    })
+    expect(remover.sort()).toEqual([
+      'cpf',
+      'cpfDigits',
+      'endereco',
+      'observacao',
+      'telefone',
+      'telefoneDigits',
+    ])
+  })
+
+  it('remove dígitos antigos quando o texto novo não tem dígitos', () => {
+    const { definir, remover } = montarEdicaoCliente(
+      entrada({
+        telefone: ' sem telefone ',
+        cpf: ' sem CPF ',
+        endereco: 'Rua A',
+        observacao: 'Aviso',
+      }),
+      contexto,
+    )
+    expect(definir.telefone).toBe('sem telefone')
+    expect(definir.cpf).toBe('sem CPF')
+    expect(definir).not.toHaveProperty('telefoneDigits')
+    expect(definir).not.toHaveProperty('cpfDigits')
+    expect(remover.sort()).toEqual(['cpfDigits', 'telefoneDigits'])
+  })
+
+  it('nunca define o número, datas de cadastro e criação ou o arquivamento', () => {
+    const { definir } = montarEdicaoCliente(entrada({ numero: '' }), contexto)
+    for (const campo of ['numero', 'cadastradoEm', 'arquivado', 'criadoEm']) {
+      expect(definir).not.toHaveProperty(campo)
+    }
+  })
+
+  it('recusa nome feito só de acentos combinantes', () => {
+    expect(() => montarEdicaoCliente(entrada({ nome: '\u0301\u0302' }), contexto)).toThrow(TypeError)
+  })
+})
 
 describe('parseNumeroCadastro', () => {
   it('lê o número que o dono digita do caderno', () => {

@@ -4,21 +4,35 @@ import { Campo } from '@/components/ui/Campo'
 import { ModalDeFormulario } from '@/components/ui/ModalDeFormulario'
 import { Nota } from '@/components/ui/Nota'
 import { useClientes } from '@/data/useClientes'
-import { ENTRADA_CLIENTE_VAZIA, LIMITES_CLIENTE, validarCliente } from '@/lib/cliente'
+import {
+  ENTRADA_CLIENTE_VAZIA,
+  LIMITES_CLIENTE,
+  entradaDoCliente,
+  validarCliente,
+  validarEdicaoCliente,
+} from '@/lib/cliente'
 import type { EntradaCliente } from '@/lib/cliente'
 import { avisoDeConferencia } from '@/lib/sync'
+import type { Cliente } from '@/types/cliente'
 
-export function FormularioCliente({ aoFechar }: Readonly<{ aoFechar: () => void }>) {
-  const { clientes, confianca, criarCliente } = useClientes()
+export function FormularioCliente({
+  cliente,
+  aoFechar,
+}: Readonly<{ cliente?: Cliente; aoFechar: () => void }>) {
+  const { clientes, confianca, criarCliente, editarCliente } = useClientes()
 
-  const [entrada, setEntrada] = useState<EntradaCliente>(ENTRADA_CLIENTE_VAZIA)
+  const [entrada, setEntrada] = useState<EntradaCliente>(() =>
+    cliente ? entradaDoCliente(cliente) : ENTRADA_CLIENTE_VAZIA,
+  )
   const [tocados, setTocados] = useState<Partial<Record<keyof EntradaCliente, boolean>>>({})
   const [tentouSalvar, setTentouSalvar] = useState(false)
 
   const base = useId()
 
-  const erros = validarCliente(entrada, clientes, confianca)
-  const aviso = avisoDeConferencia(confianca)
+  const erros = cliente
+    ? validarEdicaoCliente(entrada)
+    : validarCliente(entrada, clientes, confianca)
+  const aviso = cliente ? null : avisoDeConferencia(confianca)
 
   function mostrar(campo: keyof EntradaCliente): string | undefined {
     const erro = erros[campo]
@@ -41,40 +55,48 @@ export function FormularioCliente({ aoFechar }: Readonly<{ aoFechar: () => void 
     setTentouSalvar(true)
     if (Object.keys(erros).length > 0) return
 
-    criarCliente(entrada)
+    if (cliente) editarCliente(cliente, entrada)
+    else criarCliente(entrada)
     aoFechar()
   }
 
   return (
     <ModalDeFormulario
-      titulo="Novo cliente"
-      subtitulo="O número é o mesmo da lista de papel."
-      rotuloDeEnvio="Salvar cliente"
+      titulo={cliente ? 'Editar cliente' : 'Novo cliente'}
+      subtitulo={
+        cliente
+          ? `#${cliente.numero} — o número não muda depois do cadastro.`
+          : 'O número é o mesmo da lista de papel.'
+      }
+      rotuloDeEnvio={cliente ? 'Salvar alterações' : 'Salvar cliente'}
       idDoTitulo={base + '-titulo'}
       aoEnviar={enviar}
       aoFechar={aoFechar}
     >
       {aviso ? <Nota tom="alerta">{aviso}</Nota> : null}
 
-      <Campo
-        id={base + '-numero'}
-        rotulo="Número"
-        valor={entrada.numero}
-        maxLength={9}
-        inputMode="numeric"
-        focoInicial
-        obrigatorio
-        erro={mostrar('numero')}
-        dica="Conferido contra a lista deste aparelho, não contra o servidor."
-        aoMudar={mudar('numero')}
-        aoSair={sair('numero')}
-      />
+      {cliente ? null : (
+        <Campo
+          id={base + '-numero'}
+          rotulo="Número"
+          valor={entrada.numero}
+          maxLength={9}
+          inputMode="numeric"
+          focoInicial
+          obrigatorio
+          erro={mostrar('numero')}
+          dica="Conferido contra a lista deste aparelho, não contra o servidor."
+          aoMudar={mudar('numero')}
+          aoSair={sair('numero')}
+        />
+      )}
 
       <Campo
         id={base + '-nome'}
         rotulo="Nome"
         valor={entrada.nome}
         maxLength={LIMITES_CLIENTE.nome}
+        focoInicial={cliente !== undefined}
         obrigatorio
         erro={mostrar('nome')}
         aoMudar={mudar('nome')}

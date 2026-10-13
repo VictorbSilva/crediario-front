@@ -289,8 +289,21 @@ O `maxLength` de cada campo sai de `LIMITES_CLIENTE`, a mesma constante que a va
 que por sua vez espelha `firestore.rules`. Estourar limite offline não dá erro na hora, dá
 rollback silencioso dias depois.
 
-Salvar chama `criarCliente` e fecha na mesma linha, sem `await` — ver o AVISO do
-`ClientesProvider` sobre Promise que não resolve offline.
+Sem a prop `cliente`, o formulário continua no modo de cadastro. Com ela, nasce preenchido
+por `entradaDoCliente` e usa `validarEdicaoCliente`: as mesmas validações dos dados do
+cadastro, sem conferir número ou mostrar `avisoDeConferencia`. O número é fixo por decisão
+do dono, então aparece só no subtítulo, nunca como campo de edição; o foco inicial vai para
+Nome. Dias de visita pertencem a Rotas e não entram neste formulário.
+
+Salvar chama `criarCliente` ou `editarCliente` e fecha na mesma linha, sem `await` — ver o
+AVISO do `ClientesProvider` sobre Promise que não resolve offline. A edição recompõe
+`nomeBusca` de `nome` e preserva `numero`, `cadastradoEm`, `criadoEm` e `arquivado`.
+
+Apagar um opcional **remove o campo do documento**, nunca grava string vazia. Telefone e
+CPF removem também seus pares de dígitos; texto sem dígitos preserva o texto e remove o
+derivado antigo. `montarEdicaoCliente` devolve `definir` e a lista `remover` sem importar o
+SDK: o provider converte a lista em `deleteField()`, acrescenta `serverTimestamp()` em
+`atualizadoEm` e empilha a rejeição em `falhas` pelo `.catch()`.
 
 — referente a src/components/clientes/FormularioCliente.tsx, arquivo inteiro
 

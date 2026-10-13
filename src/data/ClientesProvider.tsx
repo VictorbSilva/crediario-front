@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   collection,
+  deleteField,
   doc,
   onSnapshot,
   orderBy,
@@ -12,7 +13,7 @@ import {
 } from 'firebase/firestore'
 import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'
 import { useAuth } from '@/auth/useAuth'
-import { montarCamposCliente } from '@/lib/cliente'
+import { montarCamposCliente, montarEdicaoCliente } from '@/lib/cliente'
 import type { EntradaCliente } from '@/lib/cliente'
 import { identificarDispositivo } from '@/lib/dispositivo'
 import { db } from '@/lib/firebase'
@@ -159,6 +160,27 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
     [businessId, registrarFalha],
   )
 
+  const editarCliente = useCallback(
+    (cliente: Cliente, entrada: EntradaCliente) => {
+      if (!businessId) return
+
+      const { definir, remover } = montarEdicaoCliente(entrada, {
+        agora: new Date(),
+        dispositivo: identificarDispositivo(),
+      })
+      const referencia = doc(db, 'businesses', businessId, 'clients', cliente.id)
+
+      updateDoc(referencia, {
+        ...definir,
+        ...Object.fromEntries(remover.map((campo) => [campo, deleteField()])),
+        atualizadoEm: serverTimestamp(),
+      }).catch((causa: unknown) => {
+        registrarFalha(`Não foi possível salvar as alterações de ${cliente.nome}.`, causa)
+      })
+    },
+    [businessId, registrarFalha],
+  )
+
   const alternarArquivo = useCallback(
     (cliente: Cliente) => {
       if (!businessId) return
@@ -202,6 +224,7 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
       falhas,
       descartarFalha,
       criarCliente,
+      editarCliente,
       alternarArquivo,
     }
   }, [
@@ -213,6 +236,7 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
     falhas,
     descartarFalha,
     criarCliente,
+    editarCliente,
     alternarArquivo,
   ])
 
