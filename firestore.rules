@@ -155,7 +155,7 @@ service cloud.firestore {
             'clientId', 'dataVenda',
             'valorTotalCentavos', 'numeroParcelas', 'valorParcelaCentavos', 'diaVencimento',
             'multaTipo', 'multaPercentual', 'multaFixaCentavos', 'jurosPercentualDia',
-            'observacao', 'versaoCalculo',
+            'observacao', 'versaoCalculo', 'cancelada', 'canceladaEm',
             'criadoEm', 'atualizadoEm', 'atualizadoPor'
           ]);
         }
@@ -187,7 +187,21 @@ service cloud.firestore {
             && autoriaValida()
             && taxasValidas()
             && (!('observacao' in dados())
-                || (dados().observacao is string && dados().observacao.size() <= 500));
+                || (dados().observacao is string && dados().observacao.size() <= 500))
+            && (!('cancelada' in dados()) || dados().cancelada is bool)
+            && (dados().get('cancelada', false) == true
+                ? ehDataCivil(dados().get('canceladaEm', ''))
+                : !('canceladaEm' in dados()));
+        }
+
+        function nasceNaoCancelada() {
+          return dados().get('cancelada', false) == false;
+        }
+
+        function cancelamentoValido() {
+          return anterior().get('cancelada', false) == false
+            || (dados().get('cancelada', false) == true
+                && dados().get('canceladaEm', '') == anterior().get('canceladaEm', ''));
         }
 
         function imutaveisPreservados() {
@@ -207,14 +221,16 @@ service cloud.firestore {
           && camposConhecidos()
           && obrigatoriosPresentes()
           && tiposValidos()
-          && carimboDeCriacao();
+          && carimboDeCriacao()
+          && nasceNaoCancelada();
 
         allow update: if podeAcessar(businessId)
           && camposConhecidos()
           && obrigatoriosPresentes()
           && tiposValidos()
           && carimboDeEdicao()
-          && imutaveisPreservados();
+          && imutaveisPreservados()
+          && cancelamentoValido();
 
         allow delete: if false;
       }
