@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing'
-import { deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
+import { deleteDoc, deleteField, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import {
   EMPRESA,
@@ -131,6 +131,131 @@ describe('sales — edição e exclusão', () => {
   it('nunca apaga', async () => {
     await semear(venda(), vendaValida())
     expect(await veredito(deleteDoc(doc(bancoDono(), venda())))).toBe('negado')
+  })
+})
+
+describe('sales — cancelamento', () => {
+  it('aceita nascer com cancelada: false explícito', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida({ cancelada: false })))).toBe('permitido')
+  })
+
+  it('recusa nascer já cancelada', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), venda()),
+        vendaValida({ cancelada: true, canceladaEm: '2026-10-13' }),
+      ))).toBe('negado')
+  })
+
+  it('recusa canceladaEm em venda que nasce sem cancelada', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida({ canceladaEm: '2026-10-13' })))).toBe('negado')
+  })
+
+  it('cancela venda gravada antes do campo existir, registrando a data', async () => {
+    await semear(venda(), vendaValida())
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        cancelada: true,
+        canceladaEm: '2026-10-13',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('permitido')
+  })
+
+  it('recusa cancelar sem dizer quando', async () => {
+    await semear(venda(), vendaValida())
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        cancelada: true,
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('recusa canceladaEm que não é data civil', async () => {
+    await semear(venda(), vendaValida())
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        cancelada: true,
+        canceladaEm: '13/10/2026',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('recusa canceladaEm junto de cancelada: false', async () => {
+    await semear(venda(), vendaValida())
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        cancelada: false,
+        canceladaEm: '2026-10-13',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('recusa cancelada que não é booleano', async () => {
+    await semear(venda(), vendaValida())
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        cancelada: 'sim',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('recusa descancelar', async () => {
+    await semear(venda(), vendaValida({ cancelada: true, canceladaEm: '2026-10-13' }))
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        cancelada: false,
+        canceladaEm: deleteField(),
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('recusa descancelar apagando os dois campos', async () => {
+    await semear(venda(), vendaValida({ cancelada: true, canceladaEm: '2026-10-13' }))
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        cancelada: deleteField(),
+        canceladaEm: deleteField(),
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('recusa trocar a data de um cancelamento já gravado', async () => {
+    await semear(venda(), vendaValida({ cancelada: true, canceladaEm: '2026-10-13' }))
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        canceladaEm: '2026-10-14',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('aceita mudar as taxas de simulação de venda já cancelada', async () => {
+    await semear(venda(), vendaValida({ cancelada: true, canceladaEm: '2026-10-13' }))
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        multaTipo: 'fixo',
+        multaFixaCentavos: 500,
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('permitido')
+  })
+
+  it('recusa reescrever o valor junto do cancelamento', async () => {
+    await semear(venda(), vendaValida())
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        cancelada: true,
+        canceladaEm: '2026-10-13',
+        valorTotalCentavos: 1,
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('o intruso não cancela', async () => {
+    await semear(venda(), vendaValida())
+
+    expect(await veredito(updateDoc(doc(bancoIntruso(), venda()), {
+        cancelada: true,
+        canceladaEm: '2026-10-13',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
   })
 })
 

@@ -119,6 +119,38 @@ persistido.
 `CLAUDE.md` virando campo: mudar a fórmula de geração de parcelas no futuro passa a ser um
 ramo na leitura, não uma migração de dado vivo.
 
+**A venda pode ser cancelada, nunca excluída** (decisão do Victor em 24/09/2026, regra de
+13/10/2026). Dois campos novos em `sales`, `cancelada` (bool) e `canceladaEm` (data civil). O
+feminino é de propósito, porque é a venda; o pagamento usa `cancelado`/`canceladoEm`, e os
+nomes não se unificam. O cancelamento só grava o fato na venda — não toca `installments` nem
+`payments`.
+
+- **Os dois são opcionais.** Já existe venda gravada sem eles, e campo obrigatório depois de
+  haver dado é porta de mão única (ver `cadastradoEm`, acima). Ausente vale `false`.
+- nasce não cancelada (`nasceNaoCancelada`); `cancelada: true` exige `canceladaEm`, e
+  `canceladaEm` sem `cancelada: true` é negado;
+- **o update é uma disjunção** (`cancelamentoValido`): ou a venda ainda não estava cancelada,
+  ou continua cancelada com o mesmo `canceladaEm`. Descancelar, apagar os dois campos com
+  `deleteField()` e trocar a data de um cancelamento já gravado caem fora dos dois ramos.
+
+**Por que não é `soCancelaNuncaReescreve`.** No pagamento, a única edição legítima é cancelar,
+então aquela função exige a transição `false → true` em todo update. Na venda existe outra
+edição legítima — as taxas de simulação —, e copiar a função negaria tudo que não fosse o
+próprio cancelamento, quebrando `aceita mudar só as taxas de simulação`. Quem trava os valores
+combinados continua sendo `imutaveisPreservados()`, que também vale no update que cancela.
+
+> **AVISO**
+> Toda leitura dos campos novos passa por `.get(campo, padrão)` — `dados().get('cancelada',
+> false)`, `anterior().get('cancelada', false)`. A venda gravada antes de 13/10/2026 não tem o
+> campo, e `anterior().cancelada` lido direto faz a expressão **dar erro** em vez de devolver
+> `false`. Erro em regra nega, então toda venda antiga ficaria inatualizável — nem cancelar,
+> nem mudar taxa. Mesma família do AVISO sobre `pertenceAEmpresa()`, acima. O teste `cancela
+> venda gravada antes do campo existir` semeia a venda sem o campo para pegar essa regressão.
+>
+> A regra é publicada à mão, e **antes** de qualquer código gravar o campo: a regra antiga
+> recusa `cancelada` pela lista fechada, e offline essa recusa chega horas depois, longe de
+> quem tocou no botão.
+
 — referente a firestore.rules e tests/regras/vendas.test.ts
 
 ## tests/regras/ambiente.ts — `veredito`
