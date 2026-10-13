@@ -102,6 +102,37 @@ describe('validarVenda', () => {
     expect(validarVenda(venda({ dataVenda: '2026-02-31' })).dataVenda).toBeDefined()
   })
 
+  it('recusa venda cuja última parcela passaria do ano 9999', () => {
+    const erros = validarVenda(
+      venda({ dataVenda: '9999-06-01', numeroParcelas: '12', diaVencimento: '10' }),
+    )
+
+    expect(erros.dataVenda).toBeDefined()
+  })
+
+  it('aceita venda cuja última parcela ainda vence no ano 9999', () => {
+    const erros = validarVenda(
+      venda({ dataVenda: '9999-11-15', numeroParcelas: '1', diaVencimento: '15' }),
+    )
+
+    expect(erros.dataVenda).toBeUndefined()
+  })
+
+  it('recusa venda em dezembro de 9999 mesmo com uma só parcela', () => {
+    const erros = validarVenda(
+      venda({ dataVenda: '9999-12-01', numeroParcelas: '1', diaVencimento: '1' }),
+    )
+
+    expect(erros.dataVenda).toBeDefined()
+  })
+
+  it('parcelas em branco não geram erro na data válida', () => {
+    const erros = validarVenda(venda({ numeroParcelas: '' }))
+
+    expect(erros).toEqual({ numeroParcelas: 'Informe em quantas parcelas' })
+    expect(erros.dataVenda).toBeUndefined()
+  })
+
   it('não valida taxa nenhuma enquanto o dono não liga as taxas', () => {
     const erros = validarVenda(venda({ cobrarTaxas: false, jurosPercentualDia: 'dois' }))
 

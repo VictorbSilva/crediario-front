@@ -1,4 +1,4 @@
-import { dataLocalISO, ehDataCivil } from './data'
+import { dataLocalISO, ehDataCivil, vencimentoDaParcela } from './data'
 import { parseReaisParaCentavos } from './dinheiro'
 import { VERSAO_CALCULO, gerarParcelas } from './parcelas'
 import type { FormaDePagamento, TipoDeMulta } from '@/types/venda'
@@ -99,6 +99,24 @@ export function parseTaxa(entrada: string): number | null {
   return Number.isFinite(valor) ? valor : null
 }
 
+function erroDaDataVenda(entrada: EntradaVenda): string | undefined {
+  if (!ehDataCivil(entrada.dataVenda)) return 'Data inválida'
+
+  const numero = parseInteiro(entrada.numeroParcelas)
+  const dia = parseInteiro(entrada.diaVencimento)
+  if (
+    numero !== null && numero >= 1 && numero <= LIMITES_VENDA.numeroParcelas &&
+    dia !== null && dia >= 1 && dia <= 31
+  ) {
+    const ultimo = vencimentoDaParcela(entrada.dataVenda, numero, dia)
+    if (!ehDataCivil(ultimo)) {
+      return 'Confira o ano: a última parcela passaria do ano 9999.'
+    }
+  }
+
+  return undefined
+}
+
 function erroDoValor(valor: string): string | undefined {
   const centavos = parseReaisParaCentavos(valor)
   if (centavos === null) return 'Informe o valor da venda'
@@ -165,7 +183,7 @@ function compactar<T extends string>(candidatos: Record<T, string | undefined>) 
 
 export function validarVenda(entrada: EntradaVenda): ErrosVenda {
   return compactar<keyof EntradaVenda>({
-    dataVenda: ehDataCivil(entrada.dataVenda) ? undefined : 'Data inválida',
+    dataVenda: erroDaDataVenda(entrada),
     valor: erroDoValor(entrada.valor),
     numeroParcelas: erroDasParcelas(entrada.numeroParcelas, entrada.valor),
     diaVencimento: erroDoDia(entrada.diaVencimento),

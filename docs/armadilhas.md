@@ -734,7 +734,16 @@ Existe porque o erro acontece no carregamento do módulo, antes do React montar 
 
 Sair da conta. Usado pela Sidebar (desktop) e pela TopBar (celular).
 
-— referente a src/components/layout/SignOutButton.tsx, linhas 4–6
+**Sair exige confirmação**, porque entrar de novo exige internet. O `<dialog>` mora no
+próprio componente, para que celular e desktop tenham a mesma proteção. Ao abrir, lê
+`navigator.onLine`: se for `false`, mostra também o aviso de que só será possível entrar
+quando a conexão voltar. É uma leitura no momento da abertura, não um acompanhamento da
+rede enquanto o diálogo está aberto.
+
+"Continuar conectado" recebe o foco inicial; fechar ou apertar `Esc` mantém a sessão.
+Só confirmar "Sair" chama `sair()`, sem `await` e com o `.catch()` de falha preservado.
+
+— referente a src/components/layout/SignOutButton.tsx, arquivo inteiro
 
 ## src/components/layout/TopBar.tsx
 
@@ -1191,6 +1200,18 @@ e o dono já saiu da casa do cliente achando que lançou.
 
 Corrigido com validação no formulário (`erroDasParcelas` recusa `numero > centavos`), e o
 motivo vale mais do que o caso:
+
+**Ano 9999 também tem esta armadilha.** `9999-06-01` é uma data civil válida, mas em 12
+parcelas gera vencimentos no ano 10000, recusados pelo formato de quatro dígitos da regra
+de `installments`. Como venda e parcelas vão num `writeBatch`, a recusa derruba **o lote
+inteiro**, não apenas a parcela inválida.
+
+`erroDaDataVenda`, usada por `validarVenda`, confere o último vencimento com
+`vencimentoDaParcela` e recusa na data da venda se ele não passar em `ehDataCivil`.
+Só faz essa checagem quando número de parcelas e dia de vencimento estão nas faixas
+válidas, para não atribuir à data um erro de outro campo. Uma venda em novembro de 9999
+com uma parcela ainda cabe; em dezembro, nem uma cabe. O conserto fica na validação do
+formulário, sem mudar `gerarParcelas`, `data.ts` ou a regra.
 
 > **Offline transforma erro de validação em erro silencioso e atrasado.** A recusa do
 > servidor chega longe, no tempo e no espaço, de quem digitou. Por isso **toda restrição
