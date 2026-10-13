@@ -376,12 +376,86 @@ ramo na leitura, não uma adivinhação.
 `serverTimestamp()` que só materializa no servidor. O arquivo registra `null` em vez de
 inventar data, e a tela avisa quantos cadastros estão nessa situação.
 
+**Desde a versão 2 do envelope (13/10/2026) o JSON leva o carnê.** O formato passou de
+`crediario-clientes` para `crediario-backup`, `quantidade` virou `quantidades`
+(`clientes`, `vendas`, `parcelas`, `pagamentos`) e o arquivo passou a se chamar
+`crediario-backup-AAAA-MM-DD.json`. Um backup só de clientes devolveria os nomes e perderia
+quem deve quanto — justamente o que não existe em lugar nenhum fora do Firestore. O CSV
+continua só de clientes: é documento de leitura, não de restauração.
+
+Vendas, parcelas e pagamentos entram **crus**, ao contrário dos clientes: `{ id, ...campos }`
+com tudo o que o documento tiver, passado por `serializar`, que só troca o que tem
+`toDate()` (Timestamp) por ISO. Campo desconhecido entra sem ninguém mexer aqui — `cancelada`,
+dias de visita, o que vier. Montar campo a campo, como nos clientes, faria o backup perder em
+silêncio todo campo novo até alguém lembrar deste arquivo.
+
+> **AVISO**
+> A confiança do carnê pesa sobre o JSON do mesmo jeito que a dos clientes:
+> `situacaoDoBackup` **bloqueia** com `desconhecida` e **grita** com `parcial`. Bloqueia
+> também quando a leitura do carnê deu erro — sem isso, um `permission-denied` em `sales`
+> produziria um backup de clientes com zero vendas e cara de completo, e o aparelho que já
+> sincronizou alguma vez ainda diria `confiavel`. `conferenciaDoCarne` soma o
+> `numeroParcelas` das vendas e compara com as parcelas presentes: diferença em qualquer
+> direção vira alerta, porque falta parcela (carnê incompleto) ou falta venda (parcela
+> órfã). O CSV não depende de nada disso.
+
 — referente a src/lib/exportacao.ts e src/components/clientes/ExportarClientes.tsx
 
 > **AVISO**
 > O `URL.revokeObjectURL` do download roda com atraso de propósito. Revogar na mesma volta
 > do `click()` cancela o download antes de começar em alguns navegadores — o link fica
 > válido por um segundo e só então é liberado.
+
+## src/data/useCarneDaEmpresa.ts
+
+O carnê da **empresa inteira**, para o backup e, depois, para o Financeiro. Um listener por
+coleção pedida, sobre a coleção **inteira** de `businesses/{businessId}`: sem `where`, sem
+`orderBy`. Coleção sem filtro usa o índice automático, e o `firestore.indexes.json` continua
+vazio de propósito.
+
+> **AVISO — custo no plano Spark**
+> Cada vez que o hook monta online, ele lê as coleções pedidas **inteiras**. Exemplo: 300
+> vendas de 10 parcelas e 1.500 pagamentos são 300 + 3.000 + 1.500 = **4.800 leituras** por
+> abertura do diálogo de exportação — perto de 10% da cota diária grátis de 50 mil. Para um
+> backup ocasional é aceitável; numa tela quente, aberta dezenas de vezes por dia, não é.
+> Por isso: (1) o hook só fica montado enquanto o componente que o usa está montado, e o
+> `ExportarClientes` só é montado aberto; (2) o hook recebe **quais** coleções ouvir, e o
+> Financeiro vai pedir só `sales` e `payments` — `installments` é de longe a maior das
+> três, e o Financeiro não precisa dela.
+
+`colecoes` precisa ser **constante de módulo** (`CARNE_COMPLETO`, ou outra no mesmo
+molde). Ela é dependência do efeito: uma lista literal escrita no JSX nasce nova a cada
+render, e o efeito derrubaria e refaria os listeners em laço — cada volta, uma leitura nova.
+
+Pelo mesmo motivo do `useCarne` (ver o primeiro AVISO daquela seção), carregamento **não** é
+contador regressivo nem estado único: com `includeMetadataChanges: true` os listeners são
+independentes, e `sales` pode disparar três vezes antes de `payments` disparar uma. O estado
+guarda, **por coleção**, se ela já chegou e o `fromCache` do último snapshot dela.
+`carregando` é "alguma ainda não chegou"; `doCache` é "alguma veio do cache".
+
+A memória de já ter lido do servidor fica em
+`crediario:carne-sincronizou:<businessId>:<coleções>` no `localStorage`, gravada uma vez,
+quando **todas** as coleções pedidas já entregaram um snapshot com `fromCache: false`. A
+chave leva a lista de coleções porque provar `sales` e `payments` (Financeiro) não prova
+`installments` (backup). O valor inicial é lido no inicializador do `useState`, e todo
+acesso ao `localStorage` vai em `try/catch` — aba anônima e armazenamento bloqueado lançam.
+
+Erro de leitura grava a mensagem em `erro` e marca **todas** as coleções pedidas como
+chegadas, como o `useCarne` faz: sem isso a tela ficaria em "carregando" para sempre. Quem
+consome decide o que fazer com o erro — o backup bloqueia (ver a seção do
+`src/lib/exportacao.ts`).
+
+Os documentos saem **crus** (`{ id, dados: d.data() }`), sem os conversores do `useCarne`.
+É de propósito: o backup precisa de todo campo que existir, inclusive os que ainda não têm
+tipo. `pendente` não entra no documento; `pendentes` é a contagem de
+`metadata.hasPendingWrites` somada entre as coleções.
+
+O efeito não chama `setState` de forma síncrona (`react-hooks/set-state-in-effect`): o
+estado é marcado com a chave `businessId + coleções`, e o que pertence a outra chave é
+ignorado na leitura — trocar de empresa volta a "carregando" em vez de mostrar o carnê
+anterior.
+
+— referente a src/data/useCarneDaEmpresa.ts
 
 ## src/lib/parcelas.ts
 

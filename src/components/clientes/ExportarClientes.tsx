@@ -1,12 +1,15 @@
 import { useEffect, useId, useRef } from 'react'
 import { FileJson, FileSpreadsheet, X } from 'lucide-react'
 import { Nota } from '@/components/ui/Nota'
+import { CARNE_COMPLETO, useCarneDaEmpresa } from '@/data/useCarneDaEmpresa'
 import { useClientes } from '@/data/useClientes'
 import {
+  conferenciaDoCarne,
   nomeDoArquivo,
   paraCSV,
   paraJSON,
   resumoDaLista,
+  situacaoDoBackup,
   situacaoExportacao,
 } from '@/lib/exportacao'
 
@@ -25,6 +28,7 @@ function baixar(conteudo: string, nome: string, tipo: string): void {
 
 export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }>) {
   const { clientes, arquivados, confianca, pendentes } = useClientes()
+  const { vendas, parcelas, pagamentos, ...carne } = useCarneDaEmpresa(CARNE_COMPLETO)
 
   const dialogo = useRef<HTMLDialogElement>(null)
   const base = useId()
@@ -34,12 +38,22 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
   }, [])
 
   const situacao = situacaoExportacao(confianca, clientes.length, pendentes)
+  const backup = situacaoDoBackup({
+    confianca: carne.confianca,
+    pendentes: carne.pendentes,
+    conferencia: conferenciaDoCarne(vendas, parcelas),
+    erro: carne.erro,
+  })
 
   function exportar(extensao: 'json' | 'csv') {
     const agora = new Date()
 
     if (extensao === 'json') {
-      baixar(paraJSON(clientes, agora), nomeDoArquivo('json', agora), 'application/json')
+      baixar(
+        paraJSON(clientes, { vendas, parcelas, pagamentos }, agora),
+        nomeDoArquivo('json', agora),
+        'application/json',
+      )
     } else {
       baixar(paraCSV(clientes), nomeDoArquivo('csv', agora), 'text/csv;charset=utf-8')
     }
@@ -61,7 +75,11 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
               Exportar clientes
             </h2>
             <p className="mt-0.5 text-sm text-slate-500">
-              {resumoDaLista(clientes.length, arquivados.length)}. Arquivados entram no arquivo.
+              {resumoDaLista(clientes.length, arquivados.length)}
+              {carne.carregando
+                ? null
+                : ` · ${vendas.length} ${vendas.length === 1 ? 'venda' : 'vendas'} · ${pagamentos.length} ${pagamentos.length === 1 ? 'pagamento' : 'pagamentos'}`}
+              . Arquivados entram no arquivo.
             </p>
           </div>
           <button
@@ -81,10 +99,16 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
               {situacao.alerta}
             </Nota>
           ) : null}
+          {backup.pode ? null : <Nota tom="alerta">{backup.motivo}</Nota>}
+          {backup.pode && backup.alerta ? (
+            <Nota tom="alerta" titulo="Confira o carnê antes de guardar o backup">
+              {backup.alerta}
+            </Nota>
+          ) : null}
 
           <button
             type="button"
-            disabled={!situacao.pode}
+            disabled={!situacao.pode || !backup.pode}
             onClick={() => exportar('json')}
             className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-brand-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200"
           >
@@ -94,8 +118,8 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
                 Backup completo (.json)
               </span>
               <span className="mt-0.5 block text-xs leading-relaxed text-slate-500">
-                Guarda tudo, inclusive as datas e o que está arquivado. É o arquivo que
-                consegue devolver os clientes se algo acontecer. Guarde fora do celular.
+                Clientes, vendas, parcelas e pagamentos — o arquivo que consegue devolver tudo
+                se algo acontecer. Guarde fora do celular.
               </span>
             </span>
           </button>
