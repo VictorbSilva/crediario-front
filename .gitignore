@@ -30,3 +30,7 @@ dev-dist
 *.sln
 *.sw?
 .claude/
+
+# Codex: arquivos locais, não versionados
+AGENTS.md
+.codex/
