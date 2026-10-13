@@ -203,6 +203,7 @@ describe('sales — cancelamento', () => {
 
     expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
         cancelada: false,
+        canceladaEm: deleteField(),
         atualizadoEm: serverTimestamp(),
       }))).toBe('negado')
   })
