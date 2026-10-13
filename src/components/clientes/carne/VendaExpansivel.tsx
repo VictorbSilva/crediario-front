@@ -17,12 +17,14 @@ import type { ParcelaComEstado, VendaComCarne } from '@/lib/parcelas'
 import type { Pagamento, Venda } from '@/types/venda'
 
 const rotulos: Record<SituacaoVenda, string> = {
+  cancelada: 'Cancelada',
   quitada: 'Quitada',
   atrasada: 'Atrasada',
   'em-dia': 'Em dia',
 }
 
 const tons: Record<SituacaoVenda, TomStatus> = {
+  cancelada: 'neutro',
   quitada: 'neutro',
   atrasada: 'perigo',
   'em-dia': 'sucesso',
@@ -51,7 +53,7 @@ export function VendaExpansivel({
   aoCancelarPagamento,
 }: VendaExpansivelProps) {
   const { venda, parcelas, resumo } = carne
-  const situacao = situacaoDaVenda(resumo)
+  const situacao = situacaoDaVenda(resumo, carne.cancelada)
   const painelId = `carne-${venda.id}`
 
   return (

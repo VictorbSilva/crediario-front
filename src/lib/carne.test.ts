@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  pagamentosAtivos,
   janelaDeParcelas,
   situacaoDaVenda,
   textoDaMulta,
@@ -50,12 +51,37 @@ describe('situacaoDaVenda', () => {
     expect(situacaoDaVenda({ ...base, quitada: true })).toBe('quitada')
   })
 
+  it('cancelada tem prioridade sobre vencidas e quitação', () => {
+    expect(situacaoDaVenda({ ...base, parcelasVencidas: 2 }, true)).toBe('cancelada')
+    expect(situacaoDaVenda({ ...base, quitada: true }, true)).toBe('cancelada')
+  })
+
   it('uma parcela vencida basta para a venda estar atrasada', () => {
     expect(situacaoDaVenda({ ...base, parcelasVencidas: 1 })).toBe('atrasada')
   })
 
   it('em aberto sem vencidas está em dia', () => {
     expect(situacaoDaVenda({ ...base, abertoCentavos: 10_000 })).toBe('em-dia')
+  })
+})
+
+describe('pagamentosAtivos', () => {
+  it('soma só os pagamentos ativos da venda, incluindo o valor recebido com encargos', () => {
+    const pagamentos = [
+      { saleId: 'v1', valorCentavos: 5000 },
+      { saleId: 'v1', valorCentavos: 10350, encargoCentavos: 350, cancelado: false },
+      { saleId: 'v1', valorCentavos: 10000, cancelado: true },
+      { saleId: 'v2', valorCentavos: 20000 },
+    ]
+
+    expect(pagamentosAtivos(pagamentos, 'v1')).toEqual({ quantidade: 2, totalCentavos: 15350 })
+  })
+
+  it('devolve zero quando a venda não tem pagamentos ativos', () => {
+    expect(pagamentosAtivos([], 'v1')).toEqual({ quantidade: 0, totalCentavos: 0 })
+    expect(pagamentosAtivos([
+      { saleId: 'v1', valorCentavos: 5000, cancelado: true },
+    ], 'v1')).toEqual({ quantidade: 0, totalCentavos: 0 })
   })
 })
 

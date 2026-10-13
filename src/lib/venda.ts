@@ -282,6 +282,27 @@ export function montarCamposVenda(
   return { venda, parcelas }
 }
 
+export function podeCancelarVenda(venda: { cancelada?: boolean }): boolean {
+  return venda.cancelada !== true
+}
+
+export type CamposCancelamentoVenda = {
+  cancelada: true
+  canceladaEm: string
+  atualizadoPor: string
+}
+
+export function montarCancelamentoVenda(
+  quando: string,
+  { dispositivo }: ContextoEscrita,
+): CamposCancelamentoVenda {
+  if (!ehDataCivil(quando)) {
+    throw new TypeError('montarCancelamentoVenda recebeu uma data que não passou na validação')
+  }
+
+  return { cancelada: true, canceladaEm: quando, atualizadoPor: dispositivo }
+}
+
 // ---------------------------------------------------------------------------
 // Pagamento
 //

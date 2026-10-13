@@ -217,6 +217,7 @@ export function resumoDaVenda(
 export type VendaConhecida = TaxasDeSimulacao & {
   id: string
   dataVenda: string
+  cancelada?: boolean
 }
 
 export type ParcelaDaVenda = ParcelaConhecida & { saleId: string }
@@ -233,6 +234,7 @@ export type ParcelaComEstado = {
 
 export type VendaComCarne<V extends VendaConhecida = VendaConhecida> = {
   venda: V
+  cancelada: boolean
   parcelas: ParcelaComEstado[]
   resumo: ResumoDaVenda
 }
@@ -248,6 +250,7 @@ export function montarCarne<V extends VendaConhecida>(
   )
 
   return ordenadas.map((venda) => {
+    const cancelada = venda.cancelada === true
     const daVenda = parcelas.filter((parcela) => parcela.saleId === venda.id)
     const pagas = pagamentos.filter((pagamento) => pagamento.saleId === venda.id)
     const { cobertura } = alocarPagamentos(daVenda, pagas)
@@ -271,12 +274,28 @@ export function montarCarne<V extends VendaConhecida>(
       }
     })
 
-    return { venda, parcelas: comEstado, resumo: resumoDaVenda(daVenda, pagas, venda, hoje) }
+    const resumo = resumoDaVenda(daVenda, pagas, venda, hoje)
+
+    return {
+      venda,
+      cancelada,
+      parcelas: comEstado,
+      resumo: cancelada
+        ? {
+            ...resumo,
+            abertoCentavos: 0,
+            encargosCentavos: 0,
+            totalComEncargosCentavos: 0,
+            parcelasVencidas: 0,
+            quitada: false,
+          }
+        : resumo,
+    }
   })
 }
 
 export function saldoDoCliente(carnes: readonly VendaComCarne[]): ResumoDaVenda {
-  return carnes.reduce<ResumoDaVenda>(
+  return carnes.filter((carne) => !carne.cancelada).reduce<ResumoDaVenda>(
     (soma, carne) => ({
       pagoCentavos: soma.pagoCentavos + carne.resumo.pagoCentavos,
       abertoCentavos: soma.abertoCentavos + carne.resumo.abertoCentavos,

@@ -420,6 +420,12 @@ inventar data, e a tela avisa quantos cadastros estão nessa situação.
 Onde a resposta do dono sobre pagamento parcial vira código. Todo o carnê é derivado daqui;
 nada de situação de parcela é gravado no Firestore.
 
+A venda cancelada continua listada, mas fica fora do saldo, das parcelas vencidas e da
+determinação de "quitado" do cliente: `saldoDoCliente` considera apenas as vendas não
+canceladas. O resumo da venda cancelada zera saldo e encargos e não a marca como quitada;
+suas parcelas continuam derivadas para exibição, com a cobertura dos pagamentos preservada.
+Cancelar a venda não estorna pagamentos: eles continuam no livro de pagamentos.
+
 > **AVISO**
 > `alocarPagamentos` **soma os pagamentos num bolo e cobre da parcela mais antiga para a mais
 > nova** — não existe "este pagamento é da parcela 4". É a única forma de representar o que o
