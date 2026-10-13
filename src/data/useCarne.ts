@@ -19,7 +19,7 @@ import { montarCarne, saldoDoCliente } from '@/lib/parcelas'
 import type { ResumoDaVenda, VendaComCarne } from '@/lib/parcelas'
 import { estadoDeSync } from '@/lib/sync'
 import type { EstadoSync } from '@/lib/sync'
-import { montarCamposPagamento, montarCamposVenda } from '@/lib/venda'
+import { montarCamposPagamento, montarCamposVenda, montarCancelamentoVenda } from '@/lib/venda'
 import type { EntradaPagamento, EntradaVenda } from '@/lib/venda'
 import type { Pagamento, Parcela, Venda } from '@/types/venda'
 
@@ -56,6 +56,8 @@ function paraVenda(documento: Documento): Venda {
     multaFixaCentavos: dados.multaFixaCentavos,
     jurosPercentualDia: dados.jurosPercentualDia,
     observacao: dados.observacao,
+    cancelada: dados.cancelada,
+    canceladaEm: dados.canceladaEm,
     versaoCalculo: dados.versaoCalculo,
     criadoEm: dados.criadoEm ?? null,
     atualizadoEm: dados.atualizadoEm ?? null,
@@ -122,6 +124,7 @@ export type CarneDoCliente = {
   registrarVenda: (entrada: EntradaVenda) => void
   registrarPagamento: (saleId: string, entrada: EntradaPagamento) => void
   cancelarPagamento: (pagamento: Pagamento, quando: string) => void
+  cancelarVenda: (venda: Venda, quando: string) => void
 }
 
 export type FalhaDeEscrita = {
@@ -278,6 +281,31 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
     [businessId, registrarFalha],
   )
 
+  /**
+   * Cancelar a venda também é evento, nunca `delete`: a venda sai do saldo e
+   * das vencidas porque `montarCarne` a ignora, mas as parcelas e os
+   * pagamentos ficam onde estão. Cancelar a venda não estorna pagamento —
+   * isso é `cancelarPagamento`, um por um.
+   */
+  const cancelarVenda = useCallback(
+    (venda: Venda, quando: string) => {
+      if (!businessId) return
+
+      const referencia = doc(db, 'businesses', businessId, 'sales', venda.id)
+
+      updateDoc(referencia, {
+        ...montarCancelamentoVenda(quando, {
+          agora: new Date(),
+          dispositivo: identificarDispositivo(),
+        }),
+        atualizadoEm: serverTimestamp(),
+      }).catch((causa: unknown) => {
+        registrarFalha('Não foi possível cancelar esta venda.', causa)
+      })
+    },
+    [businessId, registrarFalha],
+  )
+
   return useMemo(() => {
     const deste = <T extends { clientId: string }>(itens: T[]) =>
       clienteId ? itens.filter((item) => item.clientId === clienteId) : []
@@ -307,6 +335,7 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
       registrarVenda,
       registrarPagamento,
       cancelarPagamento,
+      cancelarVenda,
     }
   }, [
     clienteId,
@@ -321,5 +350,6 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
     registrarVenda,
     registrarPagamento,
     cancelarPagamento,
+    cancelarVenda,
   ])
 }

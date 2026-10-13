@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
+import { ConfirmarCancelamentoVenda } from '@/components/clientes/carne/ConfirmarCancelamentoVenda'
 import { ListaDeParcelas } from '@/components/clientes/carne/ListaDeParcelas'
 import { LivroDePagamentos } from '@/components/clientes/carne/LivroDePagamentos'
+import { Nota } from '@/components/ui/Nota'
 import { StatusPill } from '@/components/ui/StatusPill'
 import type { TomStatus } from '@/components/ui/StatusPill'
 import {
@@ -14,6 +17,7 @@ import type { SituacaoVenda } from '@/lib/carne'
 import { dataBonita } from '@/lib/data'
 import { formatarCentavos } from '@/lib/dinheiro'
 import type { ParcelaComEstado, VendaComCarne } from '@/lib/parcelas'
+import { podeCancelarVenda } from '@/lib/venda'
 import type { Pagamento, Venda } from '@/types/venda'
 
 const rotulos: Record<SituacaoVenda, string> = {
@@ -40,6 +44,7 @@ type VendaExpansivelProps = Readonly<{
   /** Ausentes no painel lateral, que é só leitura. */
   aoRegistrarPagamento?: (venda: Venda, item: ParcelaComEstado) => void
   aoCancelarPagamento?: (pagamento: Pagamento, quando: string) => void
+  aoCancelarVenda?: (venda: Venda) => void
 }>
 
 export function VendaExpansivel({
@@ -51,10 +56,13 @@ export function VendaExpansivel({
   aoAlternar,
   aoRegistrarPagamento,
   aoCancelarPagamento,
+  aoCancelarVenda,
 }: VendaExpansivelProps) {
   const { venda, parcelas, resumo } = carne
   const situacao = situacaoDaVenda(resumo, carne.cancelada)
   const painelId = `carne-${venda.id}`
+
+  const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false)
 
   return (
     <div className="flex flex-col gap-2">
@@ -89,7 +97,9 @@ export function VendaExpansivel({
             {formatarCentavos(venda.valorTotalCentavos)}
           </span>
           <span className="mt-0.5 block text-sm text-slate-600">
-            {textoDasPagas(parcelas, venda.numeroParcelas)}
+            {carne.cancelada && venda.canceladaEm
+              ? `Cancelada em ${dataBonita(venda.canceladaEm)}`
+              : textoDasPagas(parcelas, venda.numeroParcelas)}
           </span>
         </span>
 
@@ -99,23 +109,32 @@ export function VendaExpansivel({
 
       {aberta ? (
         <div id={painelId} className="flex flex-col gap-2 pl-0 sm:pl-8">
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-              Taxas desta venda
-            </span>
-            <StatusPill tom="marca">{textoDaMulta(venda)}</StatusPill>
-            <StatusPill tom="marca">{textoDoJuros(venda)}</StatusPill>
-          </div>
+          {carne.cancelada ? (
+            <Nota tom="info">
+              Venda cancelada. Não entra no saldo nem nas vencidas; os pagamentos lançados
+              continuam abaixo.
+            </Nota>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Taxas desta venda
+                </span>
+                <StatusPill tom="marca">{textoDaMulta(venda)}</StatusPill>
+                <StatusPill tom="marca">{textoDoJuros(venda)}</StatusPill>
+              </div>
 
-          <ListaDeParcelas
-            parcelas={parcelas}
-            total={venda.numeroParcelas}
-            hoje={hoje}
-            simulando={simulando}
-            aoRegistrarPagamento={
-              aoRegistrarPagamento ? (item) => aoRegistrarPagamento(venda, item) : undefined
-            }
-          />
+              <ListaDeParcelas
+                parcelas={parcelas}
+                total={venda.numeroParcelas}
+                hoje={hoje}
+                simulando={simulando}
+                aoRegistrarPagamento={
+                  aoRegistrarPagamento ? (item) => aoRegistrarPagamento(venda, item) : undefined
+                }
+              />
+            </>
+          )}
 
           {aoCancelarPagamento ? (
             <LivroDePagamentos
@@ -123,7 +142,28 @@ export function VendaExpansivel({
               aoCancelar={aoCancelarPagamento}
             />
           ) : null}
+
+          {aoCancelarVenda && podeCancelarVenda(venda) ? (
+            <div className="flex">
+              <button
+                type="button"
+                onClick={() => setConfirmandoCancelamento(true)}
+                className="min-h-11 rounded-lg px-3 text-sm font-semibold text-danger transition-colors hover:bg-danger-soft"
+              >
+                Cancelar venda
+              </button>
+            </div>
+          ) : null}
         </div>
+      ) : null}
+
+      {confirmandoCancelamento && aoCancelarVenda ? (
+        <ConfirmarCancelamentoVenda
+          venda={venda}
+          pagamentos={pagamentos}
+          aoConfirmar={() => aoCancelarVenda(venda)}
+          aoFechar={() => setConfirmandoCancelamento(false)}
+        />
       ) : null}
     </div>
   )
