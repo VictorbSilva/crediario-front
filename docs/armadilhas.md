@@ -325,6 +325,23 @@ que o atraso só é reavaliado quando algum dado muda — se o app ficar aberto 
 meia-noite, os dias de atraso continuam os de ontem até a próxima escrita ou sincronização.
 Aceitável hoje; quando incomodar, o conserto é um estado com o dia civil corrente.
 
+`cancelarVenda` segue o molde de `cancelarPagamento`: `updateDoc` sem `await`, com `.catch`
+empilhando em `falhas`. Os campos vêm de `montarCancelamentoVenda`, que já entrega
+`atualizadoPor`; `atualizadoEm` vai como `serverTimestamp()` porque a regra exige
+`atualizadoEm == request.time` em todo update. Só o documento da venda muda — parcelas e
+pagamentos ficam como estão. A venda sai do saldo e das vencidas porque `montarCarne` zera o
+resumo dela e `saldoDoCliente` a ignora, e **cancelar a venda não estorna pagamento**
+(decisão de 24/09/2026): estornar continua sendo `cancelarPagamento`, lançamento por
+lançamento. A regra só aceita `cancelada` indo de `false` para `true`, com `canceladaEm`
+congelado depois disso; a tela esconde o botão numa venda já cancelada
+(`podeCancelarVenda`) para não oferecer uma segunda escrita que seria recusada.
+
+> **AVISO**
+> `paraVenda` copia campo por campo, não espalha `dados`. Campo novo em `sales` que não
+> entrar ali existe no cache e no servidor, mas a tela nunca o vê — foi o caso de `cancelada`
+> e `canceladaEm`, que a regra já aceitava antes de `paraVenda` mapeá-los: uma venda
+> cancelada continuaria cobrando.
+
 — referente a src/data/useCarne.ts
 
 ## src/data/ClientesProvider.tsx

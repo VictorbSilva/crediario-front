@@ -18,7 +18,7 @@ export function ResumoDeVendas({ dados }: ResumoDeVendasProps) {
   if (erro) return <EmptyState>Não foi possível carregar o carnê.</EmptyState>
   if (carregando) return <EmptyState>Carregando…</EmptyState>
 
-  const abertas = carnes.filter((carne) => !carne.resumo.quitada)
+  const abertas = carnes.filter((carne) => !carne.cancelada && !carne.resumo.quitada)
 
   if (abertas.length === 0) {
     return <EmptyState>Nenhuma venda em aberto.</EmptyState>

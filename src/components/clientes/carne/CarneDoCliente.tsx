@@ -36,6 +36,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
     registrarVenda,
     registrarPagamento,
     cancelarPagamento,
+    cancelarVenda,
   } = dados
 
   const [abertaId, setAbertaId] = useState<string | null>(null)
@@ -51,7 +52,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
     )
   }
 
-  const emAberto = carnes.filter((carne) => !carne.resumo.quitada).length
+  const emAberto = carnes.filter((carne) => !carne.cancelada && !carne.resumo.quitada).length
 
   const avisos = falhas.length > 0 && (
     <div className="flex flex-col gap-2">
@@ -185,6 +186,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
                 : undefined
             }
             aoCancelarPagamento={permiteEscrita ? cancelarPagamento : undefined}
+            aoCancelarVenda={permiteEscrita ? (venda) => cancelarVenda(venda, hoje) : undefined}
           />
         ))}
       </div>
