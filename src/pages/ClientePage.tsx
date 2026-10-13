@@ -1,6 +1,8 @@
-import { ChevronLeft } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronLeft, Pencil } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { BotaoArquivar } from '@/components/clientes/BotaoArquivar'
+import { FormularioCliente } from '@/components/clientes/FormularioCliente'
 import { CabecalhoDoCliente, DadosDoCliente } from '@/components/clientes/IdentidadeDoCliente'
 import { CarneDoCliente } from '@/components/clientes/carne/CarneDoCliente'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -24,6 +26,7 @@ function Voltar() {
 export function ClientePage() {
   const { id } = useParams<{ id: string }>()
   const { clientes, carregando, alternarArquivo } = useClientes()
+  const [editando, setEditando] = useState(false)
 
   const cliente = clientes.find((item) => item.id === id)
   const dados = useCarne(cliente ? cliente.id : null)
@@ -63,6 +66,14 @@ export function ClientePage() {
             </dl>
           </div>
 
+          <button
+            type="button"
+            onClick={() => setEditando(true)}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+          >
+            <Pencil size={17} aria-hidden />
+            Editar dados
+          </button>
           <BotaoArquivar cliente={cliente} aoAlternarArquivo={alternarArquivo} />
         </div>
 
@@ -71,6 +82,9 @@ export function ClientePage() {
           <CarneDoCliente dados={dados} permiteEscrita />
         </div>
       </div>
+      {editando ? (
+        <FormularioCliente cliente={cliente} aoFechar={() => setEditando(false)} />
+      ) : null}
     </div>
   )
 }

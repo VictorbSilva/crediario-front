@@ -37,6 +37,24 @@ export const ENTRADA_CLIENTE_VAZIA: EntradaCliente = {
   observacao: '',
 }
 
+export function entradaDoCliente(cliente: {
+  numero: number
+  nome: string
+  telefone?: string
+  cpf?: string
+  endereco?: string
+  observacao?: string
+}): EntradaCliente {
+  return {
+    numero: String(cliente.numero),
+    nome: cliente.nome,
+    telefone: cliente.telefone ?? '',
+    cpf: cliente.cpf ?? '',
+    endereco: cliente.endereco ?? '',
+    observacao: cliente.observacao ?? '',
+  }
+}
+
 export type ErrosCliente = Partial<Record<keyof EntradaCliente, string>>
 
 export type ContextoEscrita = {
@@ -57,6 +75,29 @@ export type CamposCliente = {
   arquivado: boolean
   cadastradoEm: string
   atualizadoPor: string
+}
+
+export type CampoRemovivel =
+  | 'telefone'
+  | 'telefoneDigits'
+  | 'cpf'
+  | 'cpfDigits'
+  | 'endereco'
+  | 'observacao'
+
+export type EdicaoCliente = {
+  definir: {
+    nome: string
+    nomeBusca: string
+    telefone?: string
+    telefoneDigits?: string
+    cpf?: string
+    cpfDigits?: string
+    endereco?: string
+    observacao?: string
+    atualizadoPor: string
+  }
+  remover: CampoRemovivel[]
 }
 
 export function parseNumeroCadastro(entrada: string): number | null {
@@ -140,13 +181,8 @@ function erroDeTamanho(valor: string, limite: number, rotulo: string): string | 
   return valor.trim().length > limite ? `${rotulo}: máximo ${limite} caracteres.` : undefined
 }
 
-export function validarCliente(
-  entrada: EntradaCliente,
-  clientes: readonly ClienteConhecido[],
-  confianca: ConfiancaDaLista,
-): ErrosCliente {
+function errosDosDadosCliente(entrada: EntradaCliente): ErrosCliente {
   const candidatos: ErrosCliente = {
-    numero: erroDoNumero(entrada, clientes, confianca),
     nome: erroDoNome(entrada.nome),
     telefone: erroDoTelefone(entrada.telefone),
     cpf: erroDoCpf(entrada.cpf),
@@ -164,6 +200,20 @@ export function validarCliente(
   }
 
   return erros
+}
+
+export function validarCliente(
+  entrada: EntradaCliente,
+  clientes: readonly ClienteConhecido[],
+  confianca: ConfiancaDaLista,
+): ErrosCliente {
+  const numero = erroDoNumero(entrada, clientes, confianca)
+  const erros = errosDosDadosCliente(entrada)
+  return numero ? { numero, ...erros } : erros
+}
+
+export function validarEdicaoCliente(entrada: EntradaCliente): ErrosCliente {
+  return errosDosDadosCliente(entrada)
 }
 
 export function montarCamposCliente(
@@ -211,4 +261,44 @@ export function montarCamposCliente(
   if (observacao) campos.observacao = observacao
 
   return campos
+}
+
+export function montarEdicaoCliente(
+  entrada: EntradaCliente,
+  { dispositivo }: ContextoEscrita,
+): EdicaoCliente {
+  const nome = entrada.nome.trim().replace(/\s+/g, ' ')
+  const nomeBusca = normalizar(nome)
+  if (nomeBusca.length === 0) {
+    throw new TypeError('montarEdicaoCliente recebeu um nome que não passou na validação')
+  }
+
+  const definir: EdicaoCliente['definir'] = { nome, nomeBusca, atualizadoPor: dispositivo }
+  const remover: CampoRemovivel[] = []
+
+  const telefone = entrada.telefone.trim()
+  if (telefone) definir.telefone = telefone
+  else remover.push('telefone')
+
+  const telefoneDigits = somenteDigitos(telefone)
+  if (telefoneDigits) definir.telefoneDigits = telefoneDigits
+  else remover.push('telefoneDigits')
+
+  const cpf = entrada.cpf.trim()
+  if (cpf) definir.cpf = cpf
+  else remover.push('cpf')
+
+  const cpfDigits = somenteDigitos(cpf)
+  if (cpfDigits) definir.cpfDigits = cpfDigits
+  else remover.push('cpfDigits')
+
+  const endereco = entrada.endereco.trim()
+  if (endereco) definir.endereco = endereco
+  else remover.push('endereco')
+
+  const observacao = entrada.observacao.trim()
+  if (observacao) definir.observacao = observacao
+  else remover.push('observacao')
+
+  return { definir, remover }
 }
