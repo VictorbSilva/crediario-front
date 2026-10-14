@@ -283,9 +283,9 @@ estavam todos no mesmo.
 ## src/pages/ClientesPage.tsx
 
 Primeira tela do projeto lendo dado real. `DemoBanner` e `clientesDemo` saíram daqui, mas o
-`src/demo/` **continua existindo** para Rotas e Financeiro: a invariante é por tela — nenhuma
-tela mostra dado falso sem o banner, nem dado real com ele —, então apagar o módulo inteiro
-quebraria duas telas fora do escopo desta etapa.
+`src/demo/` **continuou existindo** para Rotas e Financeiro (Rotas saiu em 14/10/2026; só o
+Financeiro segue demo): a invariante é por tela — nenhuma tela mostra dado falso sem o banner,
+nem dado real com ele —, então apagar o módulo inteiro quebraria as telas fora do escopo.
 
 Os KPIs **"Com atraso" e "Sem rota" sumiram**, e não é esquecimento. `situacao` e
 `emAbertoCentavos` não existem no modelo: nascem nas etapas 4 e 5, com as regras financeiras.
@@ -309,6 +309,74 @@ esconderia o cliente sem caminho de volta.
 > instância custaria cinco linhas e hoje não teria o que pegar.
 
 — referente a src/pages/ClientesPage.tsx, arquivo inteiro
+
+## src/pages/RotasPage.tsx e src/components/rotas/
+
+Segunda tela lendo e gravando dado real. Toda a regra de rota está em `src/lib/rotas.ts` (ver
+a seção própria); a tela só liga: `rotaDeHoje`/`rotaDoDia` montam a lista, `arrasteNaRotaDeHoje`/
+`arrasteNaRotaDoDia` dizem o que gravar, `marcarVisitado`/`marcarAusente`/`desmarcar` dizem o
+que mudar na marca. As gravações são `marcarNaRota` e `reordenarRota`, em
+`src/data/ClientesProvider.tsx`, sem `await` e com `.catch()` empilhando em `falhas` — e a
+página **renderiza** `falhas`, como `ClientesPage` e o carnê: cada tela que escreve mostra as
+suas, senão a recusa do servidor, que offline chega horas depois, não aparece para ninguém.
+
+**Zero listener novo, e nenhum valor em reais.** Tudo vem de `useClientes()`. Valor a cobrar
+na rota exigiria ler o carnê de cada cliente do dia (três listeners por cliente), o que fura o
+plano Spark. Quem quiser pôr "Previsto" ou "Valor" de volta nesta tela precisa antes de uma
+decisão sobre custo, não só de um campo.
+
+**A marca não lança pagamento.** Visitado, Ausente e Desmarcar mexem só nos campos de visita do
+cliente (decisão de 24/09). Quem recebe dinheiro abre o carnê pelo botão "Carnê", e lá registra
+o pagamento contra a venda.
+
+> **AVISO**
+> **O arrasto nasce só na alça, e só a alça tem `touch-none`.** No toque, o mesmo gesto de
+> arrastar o dedo é rolar a lista: se o item inteiro tivesse `touch-action: none`, a rota de um
+> dia com dezenas de clientes não rolaria mais pelo corpo do item, e o dono ficaria preso. Por isso o
+> `useSortable` só ativa pelo botão da alça (`setActivatorNodeRef`), com `touch-none` e 44 px
+> de alvo; o resto do item mantém o `touch-action` padrão. O `TouchSensor` pede 200 ms de
+> pressão e tolera 8 px de deslize antes de começar a arrastar — é o que separa "segurar a
+> alça" de "passar o dedo". O `MouseSensor` pede 8 px de distância, para um clique simples na
+> alça não virar arrasto. **`PointerSensor` ficou de fora de propósito:** o plano da tarefa
+> manda usar sensores de mouse e de toque separados, por causa do iPhone, que é o aparelho que
+> mais importa. **Isto ainda não foi testado num iPhone** — e o emulador do DevTools não é
+> garantia do comportamento de rolagem do Safari.
+
+> **AVISO**
+> **A ordem de um dia é gravada com `FieldPath`, nunca com o mapa inteiro.** `ordemPorDia` é um
+> mapa dia → valor. `updateDoc(ref, { ordemPorDia: { '5': 1500 } })` **substitui o mapa**:
+> se o celular reordena o dia 5 enquanto o computador reordena o dia 12, quem sincronizar por
+> último apagaria o dia do outro. `new FieldPath('ordemPorDia', '5')` muda só esse dia. Já
+> `ordemDoDia` vai inteiro, como `{ data, valor }`, porque a regra exige os dois juntos (ver a
+> seção do `rotas.ts`). Um arraste simples é um `updateDoc`; um rebalanceamento, que pode
+> alterar vários clientes e vários dias, vai num único `writeBatch` — gravar só parte dele
+> deixaria a rota com chaves de escalas diferentes. Cada escrita leva `atualizadoEm` e
+> `atualizadoPor`, exigidos pela regra do cliente.
+
+**O separador "Atrasados" torna visível um limite que a lib impõe.** O atrasado sem posição
+gravada para hoje fica num bloco no fim, do mais antigo para o mais novo, e o arraste não
+atravessa esse bloco: soltar dentro ou depois dele encaixa o item logo antes, e mover um solto
+dentro do bloco não grava nada. Sem o separador, o dono arrastaria um atrasado, o item
+voltaria ao lugar e parecia defeito. O predicado que acha o início do bloco, `ehAtrasadoSolto`
+em `RotasPage.tsx`, é **cópia** do `solto` privado de `arrasteNaRotaDeHoje`: se um mudar, o
+outro tem de mudar junto (não foi exportado da lib porque esta tarefa não podia tocá-la).
+
+**`hoje` é calculado a cada renderização, e o dia escolhido nasce `null`.** `null` significa
+"o dia de hoje", então um app deixado aberto na virada da meia-noite passa a mostrar a rota do
+dia novo em vez de ficar parado no dia que já acabou. Escolher um dia na grade grava o número
+daquele dia, e só o dia de hoje mostra marcas e KPIs.
+
+**O botão Ausente some quando o cliente já está ausente hoje.** Reenviá-lo só regravaria os
+mesmos valores (e trocaria `atualizadoEm`); o que resta a fazer é Visitado ou Desmarcar. O item
+visitado fica esmaecido só no texto — alça e botões continuam com contraste pleno.
+
+> **AVISO**
+> Não há estado otimista local da ordem: ao soltar, a lista só se reordena quando o snapshot
+> do cache local volta do Firestore (alguns milissegundos). Pode haver uma piscada, com o
+> item voltando ao lugar antes de ir ao destino. **Não foi observado ainda.** Se aparecer,
+> a correção é segurar a ordem na tela até o snapshot chegar — e não gravar duas vezes.
+
+— referente a src/pages/RotasPage.tsx, src/components/rotas/ e, em src/data/ClientesProvider.tsx, `marcarNaRota` e `reordenarRota`
 
 ## src/components/clientes/FormularioCliente.tsx
 
@@ -1291,10 +1359,15 @@ qualquer falha em `unhandledrejection` silencioso.
 > indefinidas).
 >
 > Toda página que consome esse módulo renderiza o `<DemoBanner />` dizendo isso na
-> tela. **Ao ligar o Firestore, remover `src/demo/` e o `DemoBanner` juntos** — se
-> só a fonte de dados mudar e o banner ficar, o app mente para o usuário dizendo
-> que é demonstração; se só o banner sair, ele mente ao contrário, apresentando
-> dado inventado como real.
+> tela. **Ao ligar uma tela ao Firestore, o que era só dela sai daqui e o banner sai dela
+> no mesmo commit** — se só a fonte de dados mudar e o banner ficar, o app mente para o
+> usuário dizendo que é demonstração; se só o banner sair, ele mente ao contrário,
+> apresentando dado inventado como real.
+>
+> Hoje **só o Financeiro** ainda consome este módulo (`parcelasDemo`). Os clientes de
+> demonstração saíram em 21/09/2026 e as rotas, em 14/10/2026 (`rotasDemo`, `RotaDemo`,
+> `ParadaDemo` e `SituacaoParada`). Quando o Financeiro sair, `src/demo/` e o `DemoBanner`
+> saem juntos.
 
 O `<SyncBadge />` na Sidebar e na TopBar está fixo em `estado="nao-configurado"` de
 propósito. Ele já aceita todos os estados exigidos (`sincronizado`, `sincronizando`,
