@@ -8,7 +8,8 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import type { Announcements, DragEndEvent, Modifier, ScreenReaderInstructions } from '@dnd-kit/core'
+import type { Announcements, DragEndEvent, ScreenReaderInstructions } from '@dnd-kit/core'
+import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import {
   SortableContext,
   sortableKeyboardCoordinates,
@@ -35,9 +36,6 @@ const INSTRUCOES: ScreenReaderInstructions = {
   draggable:
     'Para mover este cliente na ordem da rota, pressione espaço ou enter. Use as setas para cima ou para baixo para escolher a posição, espaço ou enter para soltar, ou escape para cancelar.',
 }
-
-// A lista só ordena na vertical; sem isto o item acompanharia o dedo para os lados.
-const travarNoEixoVertical: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
 // Mesmo critério de `src/lib/rotas.ts` para o atrasado "solto": sem posição gravada para hoje.
 // É o início desse bloco que o separador marca.
@@ -168,7 +166,7 @@ export function RotasPage() {
               <Kpi rotulo="Na rota" valor={String(itensHoje.length)} />
               <Kpi rotulo="Visitados" valor={String(visitados)} tom="sucesso" />
               <Kpi rotulo="Ausentes" valor={String(ausentes)} tom="alerta" />
-              <Kpi rotulo="Atrasados" valor={String(atrasados)} tom="perigo" />
+              <Kpi rotulo="Visitas atrasadas" valor={String(atrasados)} tom="perigo" />
             </div>
           ) : (
             <div className="mb-4">
@@ -193,7 +191,8 @@ export function RotasPage() {
             <DndContext
               sensors={sensores}
               collisionDetection={closestCenter}
-              modifiers={[travarNoEixoVertical]}
+              // Só na vertical e sem sair do <ul>: o item não passa por cima dos KPIs nem do seletor.
+              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
               accessibility={{ announcements: anuncios, screenReaderInstructions: INSTRUCOES }}
               onDragEnd={aoSoltar}
             >
@@ -204,7 +203,7 @@ export function RotasPage() {
                         <Fragment key={item.cliente.id}>
                           {indice === inicioDosAtrasados ? (
                             <li className="px-1 pt-2 text-xs font-semibold text-danger">
-                              Atrasados · do mais antigo para o mais novo
+                              Visitas de dias anteriores · da mais antiga para a mais nova
                             </li>
                           ) : null}
                           <ParadaDaRota

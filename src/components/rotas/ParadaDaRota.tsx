@@ -66,7 +66,7 @@ export function ParadaDaRota({ cliente, estado, aoMarcar }: ParadaDaRotaProps) {
           <div className="mt-1.5 flex flex-wrap gap-1.5 empty:hidden">
             {estado?.atrasado && estado.agendadoPara ? (
               <StatusPill tom="perigo">
-                Atrasado desde {dataBonita(estado.agendadoPara)}
+                Visita pendente desde {dataBonita(estado.agendadoPara)}
               </StatusPill>
             ) : null}
             {ausenteHoje ? <StatusPill tom="alerta">Ausente</StatusPill> : null}
