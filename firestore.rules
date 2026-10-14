@@ -83,6 +83,8 @@ service cloud.firestore {
             'cpf', 'cpfDigits',
             'endereco', 'rotaId', 'observacao', 'arquivado',
             'cadastradoEm',
+            'diasDeVisita', 'rotaDesde', 'ordemPorDia', 'ordemDoDia',
+            'ultimaMarca', 'ultimaMarcaEm', 'ultimoVisitado', 'visitadoAnterior',
             'criadoEm', 'atualizadoEm', 'atualizadoPor'
           ]);
         }
@@ -121,7 +123,38 @@ service cloud.firestore {
             && (!('observacao' in dados())
                 || (dados().observacao is string && dados().observacao.size() <= 500))
             && (!('arquivado' in dados())
-                || dados().arquivado is bool);
+                || dados().arquivado is bool)
+            && (!('diasDeVisita' in dados())
+                || (dados().diasDeVisita is list
+                    && dados().diasDeVisita.hasOnly([
+                      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                      11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                      21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+                      31
+                    ])
+                    && dados().diasDeVisita.toSet().size() == dados().diasDeVisita.size()))
+            && (!('rotaDesde' in dados()) || ehDataCivil(dados().rotaDesde))
+            && (!('ordemPorDia' in dados())
+                || (dados().ordemPorDia is map
+                    && dados().ordemPorDia.keys().hasOnly([
+                      '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+                      '11', '12', '13', '14', '15', '16', '17', '18', '19', '20',
+                      '21', '22', '23', '24', '25', '26', '27', '28', '29', '30',
+                      '31'
+                    ])))
+            && (!('ordemDoDia' in dados())
+                || (dados().ordemDoDia is map
+                    && dados().ordemDoDia.keys().hasOnly(['data', 'valor'])
+                    && dados().ordemDoDia.keys().hasAll(['data', 'valor'])
+                    && ehDataCivil(dados().ordemDoDia.data)
+                    && dados().ordemDoDia.valor is number))
+            && ('ultimaMarca' in dados()) == ('ultimaMarcaEm' in dados())
+            && (!('ultimaMarca' in dados())
+                || dados().ultimaMarca in ['visitado', 'ausente'])
+            && (!('ultimaMarcaEm' in dados()) || ehDataCivil(dados().ultimaMarcaEm))
+            && (!('ultimoVisitado' in dados()) || ehDataCivil(dados().ultimoVisitado))
+            && (!('visitadoAnterior' in dados())
+                || (ehDataCivil(dados().visitadoAnterior) && 'ultimoVisitado' in dados()));
         }
 
         function imutaveisPreservados() {

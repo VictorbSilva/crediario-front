@@ -72,6 +72,58 @@ O regex `^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$` recusa a classe grosseir
 > a situação real: nenhum usuário deste projeto tem claim, porque só o Admin SDK grava claim
 > e o projeto não tem Admin SDK.
 
+### Campos de rota no cliente — acrescentados em 13/10/2026
+
+Decisões de 24/09 e 13/10/2026: rota é por dia do mês e mora no próprio cliente, sem
+coleção nova. O cliente guarda os dias de visita, a ordem em cada dia e a última marca; a
+pendência é derivada, não gravada. Oito campos entram em `camposConhecidos()` e
+`tiposValidos()`:
+
+- `diasDeVisita` — lista de inteiros de 1 a 31, sem repetição. Lista vazia vale.
+  `hasOnly([1, …, 31])` resolve tipo e faixa de uma vez (`'5'` em string não está na lista), e
+  `toSet().size() == size()` recusa o dia repetido.
+- `rotaDesde` — data civil.
+- `ordemPorDia` — mapa cujas chaves são as strings `'1'` a `'31'` e cujos valores são números.
+- `ordemDoDia` — mapa com **exatamente** as chaves `data` (data civil) e `valor` (número).
+- `ultimaMarca` (`'visitado'` ou `'ausente'`) e `ultimaMarcaEm` (data civil) — **os dois
+  existem juntos ou nenhum**. Removê-los exige apagar os dois no mesmo update.
+- `ultimoVisitado` e `visitadoAnterior` — datas civis; `visitadoAnterior` só existe se
+  `ultimoVisitado` existir.
+
+As duas listas literais (os 31 inteiros e as 31 strings) estão escritas por extenso.
+
+**Todos são opcionais.** Já existe cliente gravado sem eles, e campo obrigatório depois de
+haver dado é porta de mão única (ver `cadastradoEm`, acima): `obrigatoriosPresentes()` vale no
+update, e todo cliente antigo ficaria inatualizável. Por isso `clienteValido()` em
+`tests/regras/ambiente.ts` continua sem campo de rota.
+
+> **AVISO**
+> **A regra valida as chaves de `ordemPorDia`, não os valores.** A linguagem de regras não
+> percorre os valores de um mapa, então não há como exigir que cada um seja número. Um
+> `ordemPorDia['5'] = 'abc'` passa pela regra. **O dono dos valores é o código do app** —
+> quem mexer na gravação de `ordemPorDia` não pode contar com a regra para pegar o erro.
+
+**Gravação campo a campo por `FieldPath`.** O app grava `ordemPorDia` com
+`new FieldPath('ordemPorDia', '5')`, mexendo em um dia só. A regra não enxerga o update
+parcial: `request.resource.data` é o documento inteiro como ficaria depois da escrita, então a
+checagem das chaves vale igual — `FieldPath('ordemPorDia', '40')` é negado. Os testes
+`aceita gravar um dia de ordemPorDia por FieldPath em cliente sem rota` e `recusa gravar por
+FieldPath um dia de ordemPorDia que não existe` cobrem os dois lados.
+
+**`rotaId` continua aceito só por compatibilidade.** O modelo antigo, `routes/{diaDoMes}` com
+um `rotaId` único por cliente, caiu com essas decisões, e nenhum código deve gravar o campo.
+Ele fica na lista fechada porque tirá-lo seria a mesma porta de mão única ao contrário:
+`camposConhecidos()` também vale no update, e cliente que tivesse o campo ficaria
+inatualizável.
+
+> **AVISO**
+> A regra é publicada à mão, e **antes** de qualquer código gravar esses campos: a regra antiga
+> recusa todos eles pela lista fechada, e offline essa recusa chega horas depois, longe de quem
+> tocou no botão.
+
+— referente a firestore.rules, `match /clients/{clientId}`, e tests/regras/clients.test.ts,
+`describe('clients — rota')`
+
 ## firestore.rules — sales, installments e payments
 
 Nascidas em 21/09/2026, com regra e teste no mesmo commit. Os helpers `dados()`,
