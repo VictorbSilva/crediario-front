@@ -345,7 +345,7 @@ Sem a prop `cliente`, o formulário continua no modo de cadastro. Com ela, nasce
 por `entradaDoCliente` e usa `validarEdicaoCliente`: as mesmas validações dos dados do
 cadastro, sem conferir número ou mostrar `avisoDeConferencia`. O número é fixo por decisão
 do dono, então aparece só no subtítulo, nunca como campo de edição; o foco inicial vai para
-Nome. Dias de visita pertencem a Rotas e não entram neste formulário.
+Nome. O seletor de dias de visita aparece no cadastro e na edição, depois do endereço.
 
 Salvar chama `criarCliente` ou `editarCliente` sem `await` — ver o AVISO do
 `ClientesProvider` sobre Promise que não resolve offline. O formulário guarda o cliente da
@@ -538,6 +538,11 @@ O JSON monta o objeto **campo a campo em vez de espalhar o cliente**. O tipo `Cl
 fazer dentro de um backup. O `id` entra de propósito: é o identificador do documento, e uma
 restauração futura precisa dele. O envelope tem `versao` para que um formato novo seja um
 ramo na leitura, não uma adivinhação.
+
+Os oito campos de rota do cliente entram explicitamente no JSON: `diasDeVisita`,
+`rotaDesde`, `ordemPorDia`, `ordemDoDia`, `ultimaMarca`, `ultimaMarcaEm`, `ultimoVisitado`
+e `visitadoAnterior`. Como o objeto é montado campo a campo, campo novo de cliente precisa
+ser acrescentado aqui também; caso contrário, fica fora do único backup.
 
 `criadoEm` e `atualizadoEm` viram `null` quando a escrita ainda não subiu — é o mesmo
 `serverTimestamp()` que só materializa no servidor. O arquivo registra `null` em vez de
@@ -799,6 +804,17 @@ dias depois.
 `montarCamposCliente` estoura em vez de montar documento com entrada inválida. Não é
 caminho de usuário — o formulário valida antes —, então falhar alto é melhor que gravar
 torto.
+
+`diasDeVisita` é copiado para a entrada do formulário e passa por `montarDiasDeVisita`
+antes de gravar. No cadastro, uma lista preenchida grava os dias ordenados e `rotaDesde`
+com a data local do aparelho; uma lista vazia omite os dois campos.
+
+Na edição, a entrada original continua sendo a base da comparação campo a campo. Os dias
+são comparados pelo conteúdo ordenado, fora dos grupos de campos de texto: **`rotaDesde`
+só muda quando os dias mudam**, recomeçando a agenda na data local da alteração (suposição
+registrada). Escolher os mesmos dias em outra ordem preserva os dois campos; esvaziar uma
+lista que tinha dias remove `diasDeVisita` e `rotaDesde`. Sem entrada original, a edição
+envia os dias e o início da rota, ou remove os dois se a lista estiver vazia.
 
 — referente a src/lib/cliente.ts, arquivo inteiro
 

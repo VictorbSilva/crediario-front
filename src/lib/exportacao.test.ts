@@ -124,6 +124,22 @@ describe('serializar', () => {
 })
 
 describe('paraJSON', () => {
+  it('leva os oito campos de rota presentes no cliente', () => {
+    const rota = {
+      diasDeVisita: [5, 20],
+      rotaDesde: '2026-09-21',
+      ordemPorDia: { '5': 1024, '20': 2048 },
+      ordemDoDia: { data: '2026-09-21', valor: 512 },
+      ultimaMarca: 'visitado' as const,
+      ultimaMarcaEm: '2026-09-21',
+      ultimoVisitado: '2026-09-21',
+      visitadoAnterior: '2026-09-05',
+    }
+    const conteudo = JSON.parse(paraJSON([cliente(rota)], SEM_CARNE, AGORA))
+
+    expect(conteudo.clientes[0]).toMatchObject(rota)
+  })
+
   it('embrulha em envelope com versão, para poder evoluir depois', () => {
     const carne: CarneExportavel = {
       vendas: [vendaCom('v1', 2)],

@@ -24,6 +24,12 @@ function entrada(partes: Partial<EntradaCliente> = {}): EntradaCliente {
   return { ...ENTRADA_CLIENTE_VAZIA, numero: '500', nome: 'Ana Paula Ferreira', ...partes }
 }
 
+describe('ENTRADA_CLIENTE_VAZIA', () => {
+  it('começa sem dias de visita', () => {
+    expect(ENTRADA_CLIENTE_VAZIA.diasDeVisita).toEqual([])
+  })
+})
+
 describe('entradaDoCliente', () => {
   it('preenche a entrada com os dados existentes e deixa opcionais ausentes em branco', () => {
     expect(entradaDoCliente({ numero: 12, nome: 'Ana', telefone: '(83) 99999-0000' })).toEqual({
@@ -33,6 +39,7 @@ describe('entradaDoCliente', () => {
       cpf: '',
       endereco: '',
       observacao: '',
+      diasDeVisita: [],
     })
   })
 
@@ -42,8 +49,17 @@ describe('entradaDoCliente', () => {
       cpf: '529.982.247-25',
       endereco: 'Rua A',
       observacao: 'Aviso',
+      diasDeVisita: [5, 20],
     })
     expect(entradaDoCliente({ ...dados, numero: 500 })).toEqual(dados)
+  })
+
+  it('copia a lista de dias sem compartilhar o array do cliente', () => {
+    const diasDeVisita = [5, 20]
+    const dados = entradaDoCliente({ numero: 500, nome: 'Ana', diasDeVisita })
+
+    expect(dados.diasDeVisita).toEqual([5, 20])
+    expect(dados.diasDeVisita).not.toBe(diasDeVisita)
   })
 })
 
@@ -98,7 +114,7 @@ describe('montarEdicaoCliente', () => {
       observacao: 'Aviso',
       atualizadoPor: 'abc',
     })
-    expect(remover).toEqual([])
+    expect(remover).toEqual(['diasDeVisita', 'rotaDesde'])
   })
 
   it.each(['', '   '])('remove opcionais apagados (%j), incluindo os pares de dígitos', (vazio) => {
@@ -114,8 +130,10 @@ describe('montarEdicaoCliente', () => {
     expect(remover.sort()).toEqual([
       'cpf',
       'cpfDigits',
+      'diasDeVisita',
       'endereco',
       'observacao',
+      'rotaDesde',
       'telefone',
       'telefoneDigits',
     ])
@@ -135,7 +153,7 @@ describe('montarEdicaoCliente', () => {
     expect(definir.cpf).toBe('sem CPF')
     expect(definir).not.toHaveProperty('telefoneDigits')
     expect(definir).not.toHaveProperty('cpfDigits')
-    expect(remover.sort()).toEqual(['cpfDigits', 'telefoneDigits'])
+    expect(remover.sort()).toEqual(['cpfDigits', 'diasDeVisita', 'rotaDesde', 'telefoneDigits'])
   })
 
   it('nunca define o número, datas de cadastro e criação ou o arquivamento', () => {
@@ -159,8 +177,10 @@ describe('montarEdicaoCliente', () => {
   })
 
   it('envia só o endereço alterado, preservando dados atualizados em outro aparelho', () => {
-    const original = entrada({ telefone: '9999', endereco: 'Rua A' })
-    const edicao = montarEdicaoCliente({ ...original, endereco: 'Rua B' }, contexto, original)
+    const original = entrada({ telefone: '9999', endereco: 'Rua A', diasDeVisita: [5, 20] })
+    const edicao = montarEdicaoCliente(
+      { ...original, endereco: 'Rua B', diasDeVisita: [20, 5] }, contexto, original,
+    )
     expect(edicao).toEqual({ definir: { endereco: 'Rua B', atualizadoPor: 'abc' }, remover: [] })
     const documentoAtual = { nome: 'Nome novo', telefone: '8888', telefoneDigits: '8888' }
     expect({ ...documentoAtual, ...edicao.definir }).toMatchObject(documentoAtual)
@@ -185,6 +205,52 @@ describe('montarEdicaoCliente', () => {
     expect(montarEdicaoCliente({ ...original, telefone: 'recado' }, contexto, original)).toEqual({
       definir: { telefone: 'recado', atualizadoPor: 'abc' }, remover: ['telefoneDigits'],
     })
+  })
+
+  it('preserva os campos de rota quando os dias continuam iguais em outra ordem', () => {
+    const original = entrada({ diasDeVisita: [5, 20] })
+    const edicao = montarEdicaoCliente({ ...original, diasDeVisita: [20, 5] }, contexto, original)
+
+    expect(edicao).toEqual({ definir: { atualizadoPor: 'abc' }, remover: [] })
+  })
+
+  it('ordena dias alterados e recomeça a rota na data local do aparelho', () => {
+    const original = entrada({ diasDeVisita: [5, 20] })
+    const edicao = montarEdicaoCliente(
+      { ...original, diasDeVisita: [31, 10] },
+      { ...contexto, agora: new Date(2026, 8, 21, 23, 40) },
+      original,
+    )
+
+    expect(edicao).toEqual({
+      definir: { diasDeVisita: [10, 31], rotaDesde: '2026-09-21', atualizadoPor: 'abc' },
+      remover: [],
+    })
+  })
+
+  it('remove diasDeVisita e rotaDesde quando a lista é esvaziada', () => {
+    const original = entrada({ diasDeVisita: [5, 20] })
+    const edicao = montarEdicaoCliente({ ...original, diasDeVisita: [] }, contexto, original)
+
+    expect(edicao).toEqual({
+      definir: { atualizadoPor: 'abc' }, remover: ['diasDeVisita', 'rotaDesde'],
+    })
+  })
+
+  it('não altera a rota de cliente que continua sem dias de visita', () => {
+    const original = entradaDoCliente({ numero: 500, nome: 'Ana Paula Ferreira' })
+
+    expect(montarEdicaoCliente(entrada({ diasDeVisita: [] }), contexto, original)).toEqual({
+      definir: { atualizadoPor: 'abc' }, remover: [],
+    })
+  })
+
+  it('envia os dias e o início da rota quando não recebe a entrada original', () => {
+    const { definir, remover } = montarEdicaoCliente(entrada({ diasDeVisita: [20, 5] }), contexto)
+
+    expect(definir).toMatchObject({ diasDeVisita: [5, 20], rotaDesde: '2026-09-21' })
+    expect(remover).not.toContain('diasDeVisita')
+    expect(remover).not.toContain('rotaDesde')
   })
 })
 
@@ -320,6 +386,22 @@ describe('validarCliente', () => {
 })
 
 describe('montarCamposCliente', () => {
+  it('ordena os dias de visita e grava o início da rota na data local do aparelho', () => {
+    const campos = montarCamposCliente(entrada({ diasDeVisita: [20, 5] }), {
+      ...CONTEXTO,
+      agora: new Date(2026, 8, 21, 23, 40),
+    })
+
+    expect(campos).toMatchObject({ diasDeVisita: [5, 20], rotaDesde: '2026-09-21' })
+  })
+
+  it('omite diasDeVisita e rotaDesde quando a lista está vazia', () => {
+    const campos = montarCamposCliente(entrada({ diasDeVisita: [] }), CONTEXTO)
+
+    expect(campos).not.toHaveProperty('diasDeVisita')
+    expect(campos).not.toHaveProperty('rotaDesde')
+  })
+
   it('monta o documento cheio com os derivados certos', () => {
     const campos = montarCamposCliente(
       entrada({
