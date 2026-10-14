@@ -69,12 +69,12 @@ describe('ParadaDaRota', () => {
     expect(marcacao).not.toContain('opacity-60')
   })
 
-  it('atrasado mostra desde quando; pendente de sincronização mostra a pill Pendente', () => {
+  it('visita atrasada mostra desde quando; pendente de sincronização mostra a pill Pendente', () => {
     const marcacao = html(
       { ...cliente, pendente: true },
       { ...pendente, atrasado: true, agendadoPara: '2026-10-05' },
     )
-    expect(marcacao).toContain('Atrasado desde 05/10/2026')
+    expect(marcacao).toContain('Visita pendente desde 05/10/2026')
     expect(marcacao).toMatch(/text-brand-700[^>]*>Pendente</)
   })
 

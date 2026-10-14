@@ -342,6 +342,23 @@ o pagamento contra a venda.
 > mais importa. **Isto ainda não foi testado num iPhone** — e o emulador do DevTools não é
 > garantia do comportamento de rolagem do Safari.
 
+**O item arrastado não sai da lista.** O `DndContext` usa `restrictToVerticalAxis` e
+`restrictToParentElement`, de `@dnd-kit/modifiers`: só na vertical, e só dentro do elemento pai
+do item arrastado. Esse pai é o `<ul>` da lista, porque o `setNodeRef` está no `<li>` de
+`ParadaDaRota` e o `Fragment` em volta dele não vira elemento no DOM. Se alguém embrulhar o
+`<li>` num `<div>`, o limite passa a ser esse `<div>` e o arraste fica preso dentro do próprio
+item. O separador também é um `<li>` do mesmo `<ul>`, por isso fica dentro do limite. A rolagem
+automática do `DndContext` continua valendo: numa rota maior que a tela, levar o item até a borda
+da janela ainda rola a página.
+
+**"Atrasado" na rota é visita atrasada, não parcela vencida.** Em `src/lib/rotas.ts`,
+`estado.atrasado` quer dizer que a data agendada passou sem "Visitado". Não tem relação com
+parcela vencida (`src/lib/parcelas.ts`), que esta tela não lê de propósito (ver "Zero listener
+novo" acima). O Victor confundiu os dois ao testar, e o dono vai confundir também, por isso a
+tela nunca diz "atrasado" sozinho: o KPI é "Visitas atrasadas", a pill é "Visita pendente desde
+{data}" e o separador é "Visitas de dias anteriores". Só os textos mudaram; no código os nomes
+continuam `atrasado` e `ehAtrasadoSolto`.
+
 > **AVISO**
 > **A ordem de um dia é gravada com `FieldPath`, nunca com o mapa inteiro.** `ordemPorDia` é um
 > mapa dia → valor. `updateDoc(ref, { ordemPorDia: { '5': 1500 } })` **substitui o mapa**:
@@ -353,7 +370,7 @@ o pagamento contra a venda.
 > deixaria a rota com chaves de escalas diferentes. Cada escrita leva `atualizadoEm` e
 > `atualizadoPor`, exigidos pela regra do cliente.
 
-**O separador "Atrasados" torna visível um limite que a lib impõe.** O atrasado sem posição
+**O separador "Visitas de dias anteriores" torna visível um limite que a lib impõe.** O atrasado sem posição
 gravada para hoje fica num bloco no fim, do mais antigo para o mais novo, e o arraste não
 atravessa esse bloco: soltar dentro ou depois dele encaixa o item logo antes, e mover um solto
 dentro do bloco não grava nada. Sem o separador, o dono arrastaria um atrasado, o item
