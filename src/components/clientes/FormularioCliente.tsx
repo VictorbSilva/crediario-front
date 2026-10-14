@@ -21,11 +21,13 @@ export function FormularioCliente({
 }: Readonly<{ cliente?: Cliente; aoFechar: () => void }>) {
   const { clientes, confianca, criarCliente, editarCliente } = useClientes()
 
+  const [clienteInicial] = useState(cliente)
   const [entrada, setEntrada] = useState<EntradaCliente>(() =>
     cliente ? entradaDoCliente(cliente) : ENTRADA_CLIENTE_VAZIA,
   )
   const [tocados, setTocados] = useState<Partial<Record<keyof EntradaCliente, boolean>>>({})
   const [tentouSalvar, setTentouSalvar] = useState(false)
+  const [semEmpresa, setSemEmpresa] = useState(false)
 
   const base = useId()
 
@@ -55,8 +57,12 @@ export function FormularioCliente({
     setTentouSalvar(true)
     if (Object.keys(erros).length > 0) return
 
-    if (cliente) editarCliente(cliente, entrada)
-    else criarCliente(entrada)
+    if (clienteInicial) {
+      if (!editarCliente(clienteInicial, entrada)) {
+        setSemEmpresa(true)
+        return
+      }
+    } else criarCliente(entrada)
     aoFechar()
   }
 
@@ -74,6 +80,11 @@ export function FormularioCliente({
       aoFechar={aoFechar}
     >
       {aviso ? <Nota tom="alerta">{aviso}</Nota> : null}
+      {semEmpresa ? (
+        <Nota tom="alerta">
+          Não foi possível salvar: nenhuma empresa está vinculada a esta conta.
+        </Nota>
+      ) : null}
 
       {cliente ? null : (
         <Campo

@@ -295,9 +295,19 @@ cadastro, sem conferir número ou mostrar `avisoDeConferencia`. O número é fix
 do dono, então aparece só no subtítulo, nunca como campo de edição; o foco inicial vai para
 Nome. Dias de visita pertencem a Rotas e não entram neste formulário.
 
-Salvar chama `criarCliente` ou `editarCliente` e fecha na mesma linha, sem `await` — ver o
-AVISO do `ClientesProvider` sobre Promise que não resolve offline. A edição recompõe
-`nomeBusca` de `nome` e preserva `numero`, `cadastradoEm`, `criadoEm` e `arquivado`.
+Salvar chama `criarCliente` ou `editarCliente` sem `await` — ver o AVISO do
+`ClientesProvider` sobre Promise que não resolve offline. O formulário guarda o cliente da
+abertura para comparar os dados: mudanças posteriores do listener não substituem essa
+base. Salvar sem alteração fecha sem escrita e preserva carimbo e autoria. Com alteração,
+o update leva só os campos modificados e seus derivados, preservando mudanças de outro
+aparelho em campos que o dono não editou. Mudanças simultâneas no mesmo campo continuam
+sujeitas a last-write-wins. A edição recompõe `nomeBusca` de `nome` e preserva `numero`,
+`cadastradoEm`, `criadoEm` e `arquivado`.
+
+A página monta o formulário com `key={cliente.id}`: trocar a rota com ele aberto remonta
+o estado para o cliente novo. `editarCliente` devolve `false` se faltar `businessId`; nesse
+caso o formulário fica aberto e mostra o motivo. `true` indica que pode fechar, por não
+haver mudanças ou porque a escrita entrou na fila, nunca confirmação do servidor.
 
 Apagar um opcional **remove o campo do documento**, nunca grava string vazia. Telefone e
 CPF removem também seus pares de dígitos; texto sem dígitos preserva o texto e remove o

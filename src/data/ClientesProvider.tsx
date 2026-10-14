@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore'
 import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'
 import { useAuth } from '@/auth/useAuth'
-import { montarCamposCliente, montarEdicaoCliente } from '@/lib/cliente'
+import { entradaDoCliente, montarCamposCliente, montarEdicaoCliente } from '@/lib/cliente'
 import type { EntradaCliente } from '@/lib/cliente'
 import { identificarDispositivo } from '@/lib/dispositivo'
 import { db } from '@/lib/firebase'
@@ -162,12 +162,14 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
 
   const editarCliente = useCallback(
     (cliente: Cliente, entrada: EntradaCliente) => {
-      if (!businessId) return
+      if (!businessId) return false
 
-      const { definir, remover } = montarEdicaoCliente(entrada, {
-        agora: new Date(),
-        dispositivo: identificarDispositivo(),
-      })
+      const { definir, remover } = montarEdicaoCliente(
+        entrada,
+        { agora: new Date(), dispositivo: identificarDispositivo() },
+        entradaDoCliente(cliente),
+      )
+      if (Object.keys(definir).length === 1 && remover.length === 0) return true
       const referencia = doc(db, 'businesses', businessId, 'clients', cliente.id)
 
       updateDoc(referencia, {
@@ -177,6 +179,7 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
       }).catch((causa: unknown) => {
         registrarFalha(`Não foi possível salvar as alterações de ${cliente.nome}.`, causa)
       })
+      return true
     },
     [businessId, registrarFalha],
   )

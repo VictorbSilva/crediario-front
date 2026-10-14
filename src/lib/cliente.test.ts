@@ -148,6 +148,44 @@ describe('montarEdicaoCliente', () => {
   it('recusa nome feito só de acentos combinantes', () => {
     expect(() => montarEdicaoCliente(entrada({ nome: '\u0301\u0302' }), contexto)).toThrow(TypeError)
   })
+
+  it('não monta alterações quando o conteúdo limpo continua igual ao da abertura', () => {
+    const original = entrada({ nome: 'Ana Paula', telefone: '9999' })
+    expect(montarEdicaoCliente(
+      { ...original, nome: ' Ana   Paula ', telefone: ' 9999 ', endereco: '  ' },
+      contexto,
+      original,
+    )).toEqual({ definir: { atualizadoPor: 'abc' }, remover: [] })
+  })
+
+  it('envia só o endereço alterado, preservando dados atualizados em outro aparelho', () => {
+    const original = entrada({ telefone: '9999', endereco: 'Rua A' })
+    const edicao = montarEdicaoCliente({ ...original, endereco: 'Rua B' }, contexto, original)
+    expect(edicao).toEqual({ definir: { endereco: 'Rua B', atualizadoPor: 'abc' }, remover: [] })
+    const documentoAtual = { nome: 'Nome novo', telefone: '8888', telefoneDigits: '8888' }
+    expect({ ...documentoAtual, ...edicao.definir }).toMatchObject(documentoAtual)
+  })
+
+  it('mantém nome e nomeBusca juntos quando só a grafia do nome muda', () => {
+    const original = entrada({ nome: 'Ana' })
+    expect(montarEdicaoCliente({ ...original, nome: 'Ána' }, contexto, original)).toEqual({
+      definir: { nome: 'Ána', nomeBusca: 'ana', atualizadoPor: 'abc' }, remover: [],
+    })
+  })
+
+  it('remove somente os opcionais apagados na edição', () => {
+    const original = entrada({ telefone: '9999', cpf: '529.982.247-25' })
+    expect(montarEdicaoCliente({ ...original, telefone: '' }, contexto, original)).toEqual({
+      definir: { atualizadoPor: 'abc' }, remover: ['telefone', 'telefoneDigits'],
+    })
+  })
+
+  it('remove o derivado antigo quando um texto alterado não tem dígitos', () => {
+    const original = entrada({ telefone: 'sem número' })
+    expect(montarEdicaoCliente({ ...original, telefone: 'recado' }, contexto, original)).toEqual({
+      definir: { telefone: 'recado', atualizadoPor: 'abc' }, remover: ['telefoneDigits'],
+    })
+  })
 })
 
 describe('parseNumeroCadastro', () => {
