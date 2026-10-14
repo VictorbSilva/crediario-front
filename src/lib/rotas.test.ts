@@ -336,17 +336,51 @@ describe('arrasteNaRotaDeHoje — bloco de atrasados soltos (B1)', () => {
   })
 
   it('encaixa um atrasado com posição antes do bloco usando a última chave fixa', () => {
-    const todos = [...clientes, cliente({ id: 'P', numero: 5, diasDeVisita: [4], ordemDoDia: { data: hoje, valor: 2500 } })]
-    const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(todos, hoje), 2, 4, hoje, todos)
-    expect(alteracoes).toEqual([{ clienteId: 'P', tipo: 'hoje', data: hoje, valor: 3000 }])
+    const todos = [
+      ...clientes,
+      cliente({ id: 'P', numero: 5, diasDeVisita: [4], ordemDoDia: { data: hoje, valor: 2500 } }),
+      cliente({ id: 'C', numero: 6, ordemPorDia: { '5': 5000 } }),
+    ]
+    const antes = rotas.rotaDeHoje(todos, hoje).map((item) => item.cliente.id)
+    expect(antes).toEqual(['A', 'B', 'P', 'C', 'X', 'Y'])
+    const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(todos, hoje), 2, 5, hoje, todos)
+    expect(alteracoes).toEqual([{ clienteId: 'P', tipo: 'hoje', data: hoje, valor: 6000 }])
     expect(rotas.rotaDeHoje(aplicarReordenacoes(todos, alteracoes), hoje).map((item) => item.cliente.id))
-      .toEqual(['A', 'B', 'P', 'X', 'Y'])
+      .toEqual(['A', 'B', 'C', 'P', 'X', 'Y'])
   })
 
-  it('usa PASSO sem vizinho fixo, sem gravar a chave temporária dos soltos', () => {
-    const todos = [clientes[0], clientes[2], clientes[3]]
+  it('não grava ao encaixar o único fixo na posição que ele já ocupava', () => {
+    const todos = [{ ...clientes[0], ordemPorDia: { '5': 2500 } }, clientes[2], clientes[3]]
     const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(todos, hoje), 0, 2, hoje, todos)
-    expect(alteracoes).toEqual([{ clienteId: 'A', tipo: 'dia', dia: 5, valor: rotas.PASSO }])
+    expect(alteracoes).toEqual([])
+    expect(aplicarReordenacoes(todos, alteracoes)).toEqual(todos)
+  })
+
+  it('não grava ao devolver o último fixo à posição original, preservando o dia inteiro', () => {
+    const data = '2026-10-13'
+    const todos = [
+      cliente({ id: 'A', numero: 1, diasDeVisita: [13], ordemPorDia: { '13': 1000 } }),
+      cliente({ id: 'B', numero: 2, diasDeVisita: [13], ordemPorDia: { '13': 2500 } }),
+      cliente({ id: 'S', numero: 3, diasDeVisita: [12] }),
+      cliente({ id: 'fora', numero: 4, diasDeVisita: [13], rotaDesde: '2026-10-14', ordemPorDia: { '13': 2250 } }),
+    ]
+    const lista = rotas.rotaDeHoje(todos, data)
+    const antes = structuredClone(todos)
+    expect(lista.map((item) => item.cliente.id)).toEqual(['A', 'B', 'S'])
+    const alteracoes = rotas.arrasteNaRotaDeHoje(lista, 1, 2, data, todos)
+    expect(alteracoes).toEqual([])
+    const depois = aplicarReordenacoes(todos, alteracoes)
+    expect(rotas.rotaDeHoje(depois, data)).toEqual(lista)
+    expect(rotas.rotaDoDia(depois, 13).map((item) => item.cliente.id)).toEqual(['A', 'fora', 'B'])
+    expect(todos).toEqual(antes)
+  })
+
+  it('preserva a chave temporária quando o atrasado com posição volta ao mesmo lugar', () => {
+    const todos = [...clientes, cliente({ id: 'P', numero: 5, diasDeVisita: [4], ordemDoDia: { data: hoje, valor: 2500 } })]
+    const lista = rotas.rotaDeHoje(todos, hoje)
+    const alteracoes = rotas.arrasteNaRotaDeHoje(lista, 2, 4, hoje, todos)
+    expect(alteracoes).toEqual([])
+    expect(rotas.rotaDeHoje(aplicarReordenacoes(todos, alteracoes), hoje)).toEqual(lista)
   })
 
   it('não grava quando a lista inteira é um bloco de soltos', () => {

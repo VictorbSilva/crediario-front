@@ -148,6 +148,7 @@ export function arrasteNaRotaDeHoje(
     if (solto(movido)) return []
     para = inicioDosSoltos
   }
+  if (para === de) return []
   nova.splice(para, 0, movido)
   const proximo = nova[para + 1]
   const chave = chaveEntre(nova[para - 1]?.chave ?? null, proximo && !solto(proximo) ? proximo.chave : null)

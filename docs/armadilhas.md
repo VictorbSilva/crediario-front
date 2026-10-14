@@ -671,6 +671,9 @@ não serve como vizinho na borda do trecho fixo. Mover um solto dentro do bloco 
 grava nada; mover para cima do bloco grava uma posição de hoje entre os vizinhos fixos.
 As chaves dos soltos são calculadas de novo em cada montagem: persistir esses números
 em `ordemPorDia` levaria uma posição temporária para os meses seguintes.
+Se o encaixe antes do bloco devolve o item à posição original, o arraste retorna `[]`
+antes de calcular a chave. Regravar sem mover alteraria sua posição nos meses seguintes
+em relação aos clientes do mesmo dia que não aparecem hoje.
 
 **Ordem fracionária evita regravar os vizinhos.** Um arraste devolve uma alteração:
 a média das chaves dos novos vizinhos, ou um `PASSO` antes/depois na borda. Se a média
