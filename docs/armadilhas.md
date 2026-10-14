@@ -631,6 +631,11 @@ Rota é por **dia do mês** e seus fatos pertencem ao cliente: `diasDeVisita`,
 estrutural `ClienteNaRota`, sem Firestore ou tela, e devolve alterações para quem grava.
 `montarDiasDeVisita` aceita apenas inteiros de 1 a 31 sem repetição e ordena uma cópia.
 
+- **Ordem inválida:** `ordemPorDia` não numérica ou não finita usa `BASE_SEM_ORDEM + numero`; `ordemDoDia.valor` inválido volta a ser solto e o máximo só considera chaves finitas, para um documento ruim não quebrar Rotas.
+- **Índice inválido:** `de` e `para` precisam ser inteiros de 0 a `itens.length - 1`; fora disso, ambos os arrastes devolvem `[]`, evitando escrita indevida por erro do handler.
+- **Visita futura:** `visitadoAte` ignora `ultimoVisitado > hoje` em `estadoNaRota`, `marcarVisitado` e `desmarcar`, para o relógio adiantado não esconder o cliente nem levar a data futura para `visitadoAnterior`.
+- **Limitação aceita:** Ausente → Visitado → Desmarcar perde a marca de Ausente; ela é informativa e sua perda não altera pendência nem rota, então o modelo de desfazer de um nível permanece.
+
 **Pendente é derivado, nunca gravado.** `agendaRecente` escolhe a maior data até hoje
 entre os dias de visita no mês atual e no anterior. Sem Visitado cobrindo essa agenda,
 o cliente segue pendente no dia seguinte, inclusive na virada do mês. Ausente registra

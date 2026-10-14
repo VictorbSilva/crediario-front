@@ -49,8 +49,14 @@ export type EstadoNaRota = {
   ausenteHoje: boolean
 }
 
+function visitadoAte(cliente: ClienteNaRota, hoje: string): string | undefined {
+  const visitado = cliente.ultimoVisitado
+  return visitado && visitado <= hoje ? visitado : undefined
+}
+
 export function estadoNaRota(cliente: ClienteNaRota, hoje: string): EstadoNaRota {
   const agenda = agendaRecente(cliente, hoje)
+  const ultimoVisitado = visitadoAte(cliente, hoje)
   const estado: EstadoNaRota = {
     situacao: 'fora',
     atrasado: agenda !== null && agenda.data < hoje,
@@ -59,8 +65,8 @@ export function estadoNaRota(cliente: ClienteNaRota, hoje: string): EstadoNaRota
     ausenteHoje: cliente.ultimaMarca === 'ausente' && cliente.ultimaMarcaEm === hoje,
   }
   if (cliente.arquivado || !agenda) return estado
-  if (cliente.ultimoVisitado === hoje) return { ...estado, situacao: 'visitado' }
-  if (cliente.ultimoVisitado && cliente.ultimoVisitado >= agenda.data) return estado
+  if (ultimoVisitado === hoje) return { ...estado, situacao: 'visitado' }
+  if (ultimoVisitado && ultimoVisitado >= agenda.data) return estado
   return { ...estado, situacao: 'pendente' }
 }
 
@@ -70,6 +76,11 @@ function compararChaves<C extends ClienteNaRota>(a: { cliente: C; chave: number 
   return a.chave - b.chave || a.cliente.numero - b.cliente.numero
 }
 
+function chaveDoDia(cliente: ClienteNaRota, dia: number): number {
+  const valor = cliente.ordemPorDia?.[String(dia)]
+  return typeof valor === 'number' && Number.isFinite(valor) ? valor : BASE_SEM_ORDEM + cliente.numero
+}
+
 export function rotaDeHoje<C extends ClienteNaRota>(clientes: readonly C[], hoje: string): ItemDaRota<C>[] {
   const itens: ItemDaRota<C>[] = []
   const atrasados: { cliente: C; estado: EstadoNaRota }[] = []
@@ -77,9 +88,9 @@ export function rotaDeHoje<C extends ClienteNaRota>(clientes: readonly C[], hoje
     const estado = estadoNaRota(cliente, hoje)
     if (estado.situacao === 'fora') continue
     if (!estado.atrasado) {
-      const chave = cliente.ordemPorDia?.[String(estado.diaAgendado)] ?? BASE_SEM_ORDEM + cliente.numero
+      const chave = chaveDoDia(cliente, estado.diaAgendado!)
       itens.push({ cliente, estado, chave })
-    } else if (cliente.ordemDoDia?.data === hoje) {
+    } else if (cliente.ordemDoDia?.data === hoje && Number.isFinite(cliente.ordemDoDia.valor)) {
       itens.push({ cliente, estado, chave: cliente.ordemDoDia.valor })
     } else {
       atrasados.push({ cliente, estado })
@@ -87,7 +98,8 @@ export function rotaDeHoje<C extends ClienteNaRota>(clientes: readonly C[], hoje
   }
   atrasados.sort((a, b) => (a.estado.agendadoPara ?? '').localeCompare(b.estado.agendadoPara ?? '')
     || a.cliente.numero - b.cliente.numero)
-  const maior = itens.length ? Math.max(...itens.map((item) => item.chave)) : 0
+  const chaves = itens.map((item) => item.chave).filter(Number.isFinite)
+  const maior = chaves.length ? Math.max(...chaves) : 0
   atrasados.forEach((item, i) => itens.push({ ...item, chave: maior + PASSO * (i + 1) }))
   return itens.sort(compararChaves)
 }
@@ -96,7 +108,7 @@ export type ItemDoDia<C extends ClienteNaRota> = { cliente: C; chave: number }
 
 export function rotaDoDia<C extends ClienteNaRota>(clientes: readonly C[], dia: number): ItemDoDia<C>[] {
   return clientes.filter((cliente) => !cliente.arquivado && cliente.diasDeVisita?.includes(dia))
-    .map((cliente) => ({ cliente, chave: cliente.ordemPorDia?.[String(dia)] ?? BASE_SEM_ORDEM + cliente.numero }))
+    .map((cliente) => ({ cliente, chave: chaveDoDia(cliente, dia) }))
     .sort(compararChaves)
 }
 
@@ -122,10 +134,15 @@ export type Reordenacao =
   | { clienteId: string; tipo: 'dia'; dia: number; valor: number }
   | { clienteId: string; tipo: 'hoje'; data: string; valor: number }
 
+function indiceDeArrasteValido(indice: number, tamanho: number): boolean {
+  return Number.isInteger(indice) && indice >= 0 && indice < tamanho
+}
+
 function reordenar<T extends { chave: number }>(
   itens: readonly T[], de: number, para: number,
   alteracao: (item: T, valor: number) => Reordenacao,
 ): Reordenacao[] {
+  if (!indiceDeArrasteValido(de, itens.length) || !indiceDeArrasteValido(para, itens.length)) return []
   if (de === para) return []
   const nova = [...itens]
   const [movido] = nova.splice(de, 1)
@@ -139,8 +156,10 @@ export function arrasteNaRotaDeHoje(
   itens: readonly ItemDaRota<ClienteNaRota>[], de: number, para: number, hoje: string,
   todos: readonly ClienteNaRota[],
 ): Reordenacao[] {
+  if (!indiceDeArrasteValido(de, itens.length) || !indiceDeArrasteValido(para, itens.length)) return []
   if (de === para) return []
-  const solto = (item: ItemDaRota<ClienteNaRota>) => item.estado.atrasado && item.cliente.ordemDoDia?.data !== hoje
+  const solto = (item: ItemDaRota<ClienteNaRota>) => item.estado.atrasado
+    && (item.cliente.ordemDoDia?.data !== hoje || !Number.isFinite(item.cliente.ordemDoDia?.valor))
   const nova = [...itens]
   const [movido] = nova.splice(de, 1)
   const inicioDosSoltos = nova.findIndex(solto)
@@ -179,9 +198,10 @@ export type AlteracaoDeVisita = { definir: Record<string, string>; remover: stri
 
 export function marcarVisitado(cliente: ClienteNaRota, hoje: string): AlteracaoDeVisita {
   const definir: Record<string, string> = { ultimaMarca: 'visitado', ultimaMarcaEm: hoje, ultimoVisitado: hoje }
-  if (cliente.ultimoVisitado === hoje) return { definir, remover: [] }
-  if (cliente.ultimoVisitado) {
-    definir.visitadoAnterior = cliente.ultimoVisitado
+  const ultimoVisitado = visitadoAte(cliente, hoje)
+  if (ultimoVisitado === hoje) return { definir, remover: [] }
+  if (ultimoVisitado) {
+    definir.visitadoAnterior = ultimoVisitado
     return { definir, remover: [] }
   }
   return { definir, remover: ['visitadoAnterior'] }
@@ -193,7 +213,7 @@ export function marcarAusente(cliente: ClienteNaRota, hoje: string): AlteracaoDe
 }
 
 export function desmarcar(cliente: ClienteNaRota, hoje: string): AlteracaoDeVisita {
-  if (cliente.ultimoVisitado === hoje) {
+  if (visitadoAte(cliente, hoje) === hoje) {
     const definir: Record<string, string> = {}
     const remover = ['visitadoAnterior', 'ultimaMarca', 'ultimaMarcaEm']
     if (cliente.visitadoAnterior) definir.ultimoVisitado = cliente.visitadoAnterior

@@ -224,6 +224,76 @@ describe('rotaDoDia', () => {
   })
 })
 
+describe('valores de ordem inválidos — padrão sem erro (C1)', () => {
+  const hoje = '2026-10-05'
+
+  it.each([NaN, Infinity, -Infinity, 'abc'])('ignora ordemPorDia inválida (%s) nas duas rotas', (valor) => {
+    const clientes = [
+      cliente({ id: 'ruim', numero: 4, ordemPorDia: { '5': valor as unknown as number } }),
+      cliente({ id: 'sem-ordem', numero: 3 }),
+      cliente({ id: 'B', numero: 2, ordemPorDia: { '5': 2000 } }),
+      cliente({ id: 'A', numero: 1, ordemPorDia: { '5': 1000 } }),
+      cliente({ id: 'solto', numero: 5, diasDeVisita: [4] }),
+    ]
+    const doDia = rotas.rotaDoDia(clientes, 5)
+    expect(doDia.map((item) => item.cliente.id)).toEqual(['A', 'B', 'sem-ordem', 'ruim'])
+    expect(doDia.map((item) => item.chave)).toEqual([1000, 2000, 1_000_003, 1_000_004])
+    const deHoje = rotas.rotaDeHoje(clientes, hoje)
+    expect(deHoje.map((item) => item.cliente.id)).toEqual(['A', 'B', 'sem-ordem', 'ruim', 'solto'])
+    expect(deHoje.map((item) => item.chave)).toEqual([1000, 2000, 1_000_003, 1_000_004, 1_001_004])
+    expect(deHoje.every((item) => Number.isFinite(item.chave))).toBe(true)
+  })
+
+  it.each([NaN, Infinity, -Infinity, 'abc'])('ordemDoDia inválida (%s) volta ao bloco de soltos, inclusive no arraste', (valor) => {
+    const clientes = [
+      cliente({ id: 'A', numero: 1, ordemPorDia: { '5': 1000 } }),
+      cliente({ id: 'B', numero: 2, ordemPorDia: { '5': 2000 } }),
+      cliente({ id: 'ruim', numero: 3, diasDeVisita: [4], ordemDoDia: { data: hoje, valor: valor as unknown as number } }),
+      cliente({ id: 'antigo', numero: 4, diasDeVisita: [3] }),
+    ]
+    const lista = rotas.rotaDeHoje(clientes, hoje)
+    expect(lista.map((item) => item.cliente.id)).toEqual(['A', 'B', 'antigo', 'ruim'])
+    expect(lista.map((item) => item.chave)).toEqual([1000, 2000, 3000, 4000])
+    expect(rotas.arrasteNaRotaDeHoje(lista, 3, 2, hoje, clientes)).toEqual([])
+  })
+
+  it('preserva ordens finitas zero, negativas e fracionárias', () => {
+    const clientes = [
+      cliente({ id: 'fracao', numero: 1, ordemPorDia: { '5': 1.5 } }),
+      cliente({ id: 'zero', numero: 2, ordemPorDia: { '5': 0 } }),
+      cliente({ id: 'negativo', numero: 3, ordemPorDia: { '5': -1000 } }),
+    ]
+    expect(rotas.rotaDoDia(clientes, 5).map((item) => item.chave)).toEqual([-1000, 0, 1.5])
+    expect(rotas.rotaDeHoje(clientes, hoje).map((item) => item.chave)).toEqual([-1000, 0, 1.5])
+  })
+})
+
+describe('índices de arraste inválidos — sem escrita (C2)', () => {
+  const hoje = '2026-10-05'
+  const clientes = [1, 2, 3].map((numero) => cliente({
+    id: String(numero), numero, ordemPorDia: { '5': numero * rotas.PASSO },
+  }))
+
+  it.each([
+    [0, 9], [-1, 1], [0, 1.5], [9, 0], [1, -1], [1.5, 0],
+    [NaN, 1], [1, NaN], [Infinity, 1], [1, Infinity],
+  ])('não grava de %s para %s em nenhuma das rotas', (de, para) => {
+    const deHoje = rotas.rotaDeHoje(clientes, hoje)
+    const doDia = rotas.rotaDoDia(clientes, 5)
+    const antes = structuredClone(clientes)
+    expect(rotas.arrasteNaRotaDeHoje(deHoje, de, para, hoje, clientes)).toEqual([])
+    expect(rotas.arrasteNaRotaDoDia(doDia, de, para, 5)).toEqual([])
+    expect(clientes).toEqual(antes)
+    expect(deHoje).toEqual(rotas.rotaDeHoje(clientes, hoje))
+    expect(doDia).toEqual(rotas.rotaDoDia(clientes, 5))
+  })
+
+  it('não grava em listas vazias', () => {
+    expect(rotas.arrasteNaRotaDeHoje([], 0, 1, hoje, [])).toEqual([])
+    expect(rotas.arrasteNaRotaDoDia([], 0, 1, 5)).toEqual([])
+  })
+})
+
 describe('contagemPorDia', () => {
   it('conta cada dia dos clientes ativos, sem depender de visitas ou ordem', () => {
     expect(rotas.contagemPorDia([
@@ -587,6 +657,40 @@ describe('desmarcar', () => {
     const desmarcado = aplicar(segunda, rotas.desmarcar(segunda, hoje))
     expect(desmarcado.ultimoVisitado).toBe(c.ultimoVisitado)
     expect(rotas.estadoNaRota(desmarcado, hoje)).toEqual(rotas.estadoNaRota(c, hoje))
+  })
+})
+
+describe('visita no futuro é ignorada (C3)', () => {
+  const hoje = '2026-10-13'
+  const c = cliente({
+    diasDeVisita: [13], ultimoVisitado: '2026-10-20', visitadoAnterior: '2026-09-13',
+    ultimaMarca: 'visitado', ultimaMarcaEm: '2026-10-20',
+  })
+
+  it('mantém o cliente pendente e presente na rota de hoje', () => {
+    expect(rotas.estadoNaRota(c, hoje)).toEqual({
+      situacao: 'pendente', atrasado: false, agendadoPara: hoje, diaAgendado: 13, ausenteHoje: false,
+    })
+    expect(rotas.rotaDeHoje([c], hoje).map((item) => item.cliente.id)).toEqual([c.id])
+  })
+
+  it('marcar de novo substitui a visita futura e remove visitadoAnterior', () => {
+    const antes = structuredClone(c)
+    const alteracao = rotas.marcarVisitado(c, hoje)
+    expect(alteracao).toEqual({
+      definir: { ultimaMarca: 'visitado', ultimaMarcaEm: hoje, ultimoVisitado: hoje }, remover: ['visitadoAnterior'],
+    })
+    const marcado = aplicar(c, alteracao)
+    expect(marcado.ultimoVisitado).toBe(hoje)
+    expect(marcado.visitadoAnterior).toBeUndefined()
+    expect(rotas.estadoNaRota(marcado, hoje).situacao).toBe('visitado')
+    expect(c).toEqual(antes)
+  })
+
+  it('desmarcar a visita futura não altera o cliente', () => {
+    const alteracao = rotas.desmarcar(c, hoje)
+    expect(alteracao).toEqual({ definir: {}, remover: [] })
+    expect(aplicar(c, alteracao)).toEqual(c)
   })
 })
 
