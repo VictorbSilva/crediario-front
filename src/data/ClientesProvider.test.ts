@@ -2,11 +2,12 @@ import { createElement, useContext } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { FieldPath, doc } from 'firebase/firestore'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Mock } from 'vitest'
 import { entradaDoCliente } from '@/lib/cliente'
 import type { Reordenacao } from '@/lib/rotas'
 import type { Cliente } from '@/types/cliente'
 import { ClientesContext } from './clientes-context'
-import type { ClientesContextValue } from './clientes-context'
+import type { ClientesContextValue, FalhaDeEscrita } from './clientes-context'
 import { ClientesProvider } from './ClientesProvider'
 
 const simulado = vi.hoisted(() => ({
@@ -14,6 +15,19 @@ const simulado = vi.hoisted(() => ({
   updateDoc: vi.fn(() => Promise.resolve()),
   lote: { update: vi.fn(), commit: vi.fn(() => Promise.resolve()) },
   writeBatch: vi.fn(),
+  setters: [] as Mock[],
+}))
+
+// renderToStaticMarkup não monta nada, então um setState real seria descartado e `falhas`
+// jamais seria observável. Cada setter vira um espião; `falhasEmpilhadas` reaplica as
+// atualizações em função que o provider mandou para `setFalhas`.
+vi.mock('react', async (importOriginal) => ({
+  ...await importOriginal<typeof import('react')>(),
+  useState: (inicial: unknown) => {
+    const setter = vi.fn()
+    simulado.setters.push(setter)
+    return [typeof inicial === 'function' ? inicial() : inicial, setter]
+  },
 }))
 
 vi.mock('@/auth/useAuth', () => ({ useAuth: () => ({ businessId: simulado.businessId }) }))
@@ -56,8 +70,17 @@ function contexto(): ClientesContextValue {
   return valor
 }
 
+function falhasEmpilhadas(): FalhaDeEscrita[] {
+  type Atualizacao = (anteriores: FalhaDeEscrita[]) => FalhaDeEscrita[]
+  return simulado.setters
+    .flatMap((setter) => setter.mock.calls.map(([argumento]) => argumento as unknown))
+    .filter((argumento): argumento is Atualizacao => typeof argumento === 'function')
+    .reduce<FalhaDeEscrita[]>((lista, atualizar) => atualizar(lista), [])
+}
+
 beforeEach(() => {
   simulado.businessId = 'loja-treino'
+  simulado.setters.length = 0
   vi.clearAllMocks()
   simulado.writeBatch.mockReturnValue(simulado.lote)
 })
@@ -151,9 +174,14 @@ describe('marcarNaRota', () => {
     simulado.updateDoc.mockReturnValueOnce(Promise.reject(causa))
     const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     contexto().marcarNaRota(cliente, 'visitado')
+    expect(falhasEmpilhadas()).toEqual([])
     await Promise.resolve()
     await Promise.resolve()
     expect(erro).toHaveBeenCalledWith('[clientes]', 'Não foi possível marcar a visita de Ana.', causa)
+    expect(falhasEmpilhadas()).toEqual([{
+      id: expect.any(String), mensagem: 'Não foi possível marcar a visita de Ana.',
+      quando: expect.any(Date),
+    }])
     erro.mockRestore()
   })
 })
@@ -216,10 +244,15 @@ describe('reordenarRota', () => {
     contexto().reordenarRota([doDia])
     simulado.lote.commit.mockReturnValueOnce(Promise.reject(causa))
     contexto().reordenarRota([doDia, dehoje])
+    expect(falhasEmpilhadas()).toEqual([])
     await Promise.resolve()
     await Promise.resolve()
     expect(erro).toHaveBeenCalledTimes(2)
     expect(erro).toHaveBeenCalledWith('[clientes]', 'Não foi possível salvar a nova ordem da rota.', causa)
+    expect(falhasEmpilhadas().map((falha) => falha.mensagem)).toEqual([
+      'Não foi possível salvar a nova ordem da rota.',
+      'Não foi possível salvar a nova ordem da rota.',
+    ])
     erro.mockRestore()
   })
 })
