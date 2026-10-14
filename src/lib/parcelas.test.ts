@@ -265,8 +265,14 @@ describe('resumoDaVenda', () => {
 
 describe('montarCarne', () => {
   const vendas = [
-    { id: 'v1', dataVenda: '2026-04-19', multaPercentual: 2, jurosPercentualDia: 0.1 },
-    { id: 'v2', dataVenda: '2026-09-02' },
+    {
+      id: 'v1',
+      dataVenda: '2026-04-19',
+      numeroParcelas: 2,
+      multaPercentual: 2,
+      jurosPercentualDia: 0.1,
+    },
+    { id: 'v2', dataVenda: '2026-09-02', numeroParcelas: 1 },
   ]
 
   const parcelas = [
@@ -276,6 +282,32 @@ describe('montarCarne', () => {
   ]
 
   const pagamentos = [{ ...pagamento({ id: 'g1', valorCentavos: 10000 }), saleId: 'v1' }]
+
+  describe('carnê que ainda não chegou inteiro neste aparelho', () => {
+    const venda = { id: 'v3', dataVenda: '2026-04-19', numeroParcelas: 3 }
+    const tres = [
+      { ...parcela({ id: 'x', numero: 1, vencimento: '2026-05-19' }), saleId: 'v3' },
+      { ...parcela({ id: 'y', numero: 2, vencimento: '2026-06-19' }), saleId: 'v3' },
+      { ...parcela({ id: 'z', numero: 3, vencimento: '2026-07-19' }), saleId: 'v3' },
+    ]
+    const quitandoTudo = [{ ...pagamento({ id: 'g9', valorCentavos: 30000 }), saleId: 'v3' }]
+
+    it('não chama de quitada a venda com parcelas faltando, mesmo com as presentes pagas', () => {
+      const [carne] = montarCarne([venda], tres.slice(0, 2), quitandoTudo, HOJE)
+
+      expect(carne.parcelas.every((item) => item.estado.situacao === 'paga')).toBe(true)
+      expect(carne.completa).toBe(false)
+      expect(carne.resumo.quitada).toBe(false)
+    })
+
+    it('com todas as parcelas presentes, é completa e o resumo é o de sempre', () => {
+      const [carne] = montarCarne([venda], tres, quitandoTudo, HOJE)
+
+      expect(carne.completa).toBe(true)
+      expect(carne.resumo).toEqual(resumoDaVenda(tres, quitandoTudo, {}, HOJE))
+      expect(carne.resumo.quitada).toBe(true)
+    })
+  })
 
   it('mantém parcelas e principal pago da venda cancelada, sem saldo nem vencidas', () => {
     const daVenda = [
@@ -358,8 +390,8 @@ describe('montarCarne', () => {
 
 describe('saldoDoCliente', () => {
   const vendas = [
-    { id: 'v1', dataVenda: '2026-04-19', cancelada: true, multaPercentual: 2 },
-    { id: 'v2', dataVenda: '2026-05-19' },
+    { id: 'v1', dataVenda: '2026-04-19', numeroParcelas: 1, cancelada: true, multaPercentual: 2 },
+    { id: 'v2', dataVenda: '2026-05-19', numeroParcelas: 1 },
   ]
   const parcelas = [
     { ...parcela({ id: 'a', vencimento: '2026-06-19' }), saleId: 'v1' },
@@ -388,7 +420,10 @@ describe('saldoDoCliente', () => {
   })
 
   it('soma os carnês do cliente inteiro', () => {
-    const vendas = [{ id: 'v1', dataVenda: '2026-04-19' }, { id: 'v2', dataVenda: '2026-09-02' }]
+    const vendas = [
+      { id: 'v1', dataVenda: '2026-04-19', numeroParcelas: 1 },
+      { id: 'v2', dataVenda: '2026-09-02', numeroParcelas: 1 },
+    ]
     const parcelas = [
       { ...parcela({ id: 'a', vencimento: '2026-10-19' }), saleId: 'v1' },
       { ...parcela({ id: 'c', vencimento: '2026-11-02' }), saleId: 'v2' },
@@ -398,7 +433,7 @@ describe('saldoDoCliente', () => {
   })
 
   it('só chama de quitado quando todos os carnês fecharam', () => {
-    const vendas = [{ id: 'v1', dataVenda: '2026-04-19' }]
+    const vendas = [{ id: 'v1', dataVenda: '2026-04-19', numeroParcelas: 1 }]
     const parcelas = [{ ...parcela({ id: 'a' }), saleId: 'v1' }]
     const quitando = [{ ...pagamento({ valorCentavos: 10000 }), saleId: 'v1' }]
 

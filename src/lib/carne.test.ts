@@ -56,6 +56,20 @@ describe('situacaoDaVenda', () => {
     expect(situacaoDaVenda({ ...base, quitada: true }, true)).toBe('cancelada')
   })
 
+  it('cancelada vence também a venda incompleta neste aparelho', () => {
+    expect(situacaoDaVenda({ ...base, quitada: true }, true, false)).toBe('cancelada')
+  })
+
+  it('incompleta neste aparelho vence a quitação calculada sobre o que chegou', () => {
+    expect(situacaoDaVenda({ ...base, quitada: true }, false, false)).toBe('incompleta')
+    expect(situacaoDaVenda({ ...base, parcelasVencidas: 1 }, false, false)).toBe('incompleta')
+  })
+
+  it('completa explícita lê igual à chamada sem os argumentos novos', () => {
+    expect(situacaoDaVenda({ ...base, quitada: true }, false, true)).toBe('quitada')
+    expect(situacaoDaVenda({ ...base, parcelasVencidas: 1 }, false, true)).toBe('atrasada')
+  })
+
   it('uma parcela vencida basta para a venda estar atrasada', () => {
     expect(situacaoDaVenda({ ...base, parcelasVencidas: 1 })).toBe('atrasada')
   })

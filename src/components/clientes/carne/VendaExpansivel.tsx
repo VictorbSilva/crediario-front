@@ -25,6 +25,7 @@ const rotulos: Record<SituacaoVenda, string> = {
   quitada: 'Quitada',
   atrasada: 'Atrasada',
   'em-dia': 'Em dia',
+  incompleta: 'Incompleta neste aparelho',
 }
 
 const tons: Record<SituacaoVenda, TomStatus> = {
@@ -32,6 +33,7 @@ const tons: Record<SituacaoVenda, TomStatus> = {
   quitada: 'neutro',
   atrasada: 'perigo',
   'em-dia': 'sucesso',
+  incompleta: 'alerta',
 }
 
 type VendaExpansivelProps = Readonly<{
@@ -59,7 +61,7 @@ export function VendaExpansivel({
   aoCancelarVenda,
 }: VendaExpansivelProps) {
   const { venda, parcelas, resumo } = carne
-  const situacao = situacaoDaVenda(resumo, carne.cancelada)
+  const situacao = situacaoDaVenda(resumo, carne.cancelada, carne.completa)
   const painelId = `carne-${venda.id}`
 
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false)

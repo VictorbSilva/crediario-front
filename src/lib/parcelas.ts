@@ -217,6 +217,7 @@ export function resumoDaVenda(
 export type VendaConhecida = TaxasDeSimulacao & {
   id: string
   dataVenda: string
+  numeroParcelas: number
   cancelada?: boolean
 }
 
@@ -235,6 +236,11 @@ export type ParcelaComEstado = {
 export type VendaComCarne<V extends VendaConhecida = VendaConhecida> = {
   venda: V
   cancelada: boolean
+  /**
+   * Todas as parcelas do plano chegaram neste aparelho. Com o cache parcial,
+   * somar só as que chegaram pode dar "quitada" para uma venda em aberto.
+   */
+  completa: boolean
   parcelas: ParcelaComEstado[]
   resumo: ResumoDaVenda
 }
@@ -275,21 +281,28 @@ export function montarCarne<V extends VendaConhecida>(
     })
 
     const resumo = resumoDaVenda(daVenda, pagas, venda, hoje)
+    const completa = daVenda.length >= venda.numeroParcelas
+
+    let resumoFinal = resumo
+    if (cancelada) {
+      resumoFinal = {
+        ...resumo,
+        abertoCentavos: 0,
+        encargosCentavos: 0,
+        totalComEncargosCentavos: 0,
+        parcelasVencidas: 0,
+        quitada: false,
+      }
+    } else if (!completa) {
+      resumoFinal = { ...resumo, quitada: false }
+    }
 
     return {
       venda,
       cancelada,
+      completa,
       parcelas: comEstado,
-      resumo: cancelada
-        ? {
-            ...resumo,
-            abertoCentavos: 0,
-            encargosCentavos: 0,
-            totalComEncargosCentavos: 0,
-            parcelasVencidas: 0,
-            quitada: false,
-          }
-        : resumo,
+      resumo: resumoFinal,
     }
   })
 }

@@ -17,6 +17,9 @@ type Cobranca = {
   abertoDaVendaCentavos: number
 }
 
+const AVISO_NAO_BAIXADO =
+  'Pode haver vendas que só o outro aparelho conhece. Conecte à internet e espere carregar antes de lançar uma venda.'
+
 type CarneDoClienteProps = Readonly<{
   dados: DadosDoCarne
   /** Só a página escreve; o painel lateral é leitura. */
@@ -29,6 +32,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
     pagamentos,
     saldo,
     carregando,
+    confianca,
     erro,
     hoje,
     falhas,
@@ -53,6 +57,8 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
   }
 
   const emAberto = carnes.filter((carne) => !carne.cancelada && !carne.resumo.quitada).length
+  const naoBaixado = carnes.length === 0 && confianca === 'parcial'
+  const incompleto = carnes.some((carne) => !carne.completa && !carne.cancelada)
 
   const avisos = falhas.length > 0 && (
     <div className="flex flex-col gap-2">
@@ -85,7 +91,11 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
   const formularios = (
     <>
       {lancandoVenda ? (
-        <FormularioVenda aoSalvar={registrarVenda} aoFechar={() => setLancandoVenda(false)} />
+        <FormularioVenda
+          aoSalvar={registrarVenda}
+          aoFechar={() => setLancandoVenda(false)}
+          aviso={naoBaixado ? AVISO_NAO_BAIXADO : undefined}
+        />
       ) : null}
 
       {cobranca ? (
@@ -113,7 +123,13 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
     return (
       <div className="flex flex-col gap-3.5">
         {avisos}
-        <EmptyState>Nenhuma venda registrada para este cliente ainda.</EmptyState>
+        {naoBaixado ? (
+          <Nota tom="alerta" titulo="Este carnê ainda não foi baixado neste aparelho">
+            {AVISO_NAO_BAIXADO}
+          </Nota>
+        ) : (
+          <EmptyState>Nenhuma venda registrada para este cliente ainda.</EmptyState>
+        )}
         {botaoDeVenda ? <div className="flex">{botaoDeVenda}</div> : null}
         {formularios}
       </div>
@@ -123,6 +139,13 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
   return (
     <div className="flex flex-col gap-3.5">
       {avisos}
+
+      {incompleto ? (
+        <Nota tom="alerta">
+          Parte deste carnê ainda não chegou neste aparelho. O saldo pode estar menor do que o
+          real.
+        </Nota>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Kpi
