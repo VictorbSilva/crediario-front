@@ -1,9 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing'
-import { deleteDoc, deleteField, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
+import { FieldPath, deleteDoc, deleteField, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import {
   UID_DONO,
+  UID_INTRUSO,
   caminhoCliente,
   clienteComoOAppEscreve,
   clienteValido,
@@ -371,5 +372,163 @@ describe('clients — exclusão', () => {
       atualizadoPor: 'importacao',
     })
     expect(await veredito(deleteDoc(doc(bancoDono(), caminhoCliente('c1'))))).toBe('negado')
+  })
+})
+
+describe('clients — rota', () => {
+  const rotaCompleta = {
+    diasDeVisita: [5, 20],
+    rotaDesde: '2026-10-14',
+    ordemPorDia: { '5': 1000, '20': 2500.5 },
+    ordemDoDia: { data: '2026-10-14', valor: 1500 },
+    ultimaMarca: 'ausente',
+    ultimaMarcaEm: '2026-10-14',
+    ultimoVisitado: '2026-10-05',
+    visitadoAnterior: '2026-09-20',
+  }
+
+  function bancoIntruso(): Firestore {
+    return ambiente.authenticatedContext(UID_INTRUSO).firestore() as unknown as Firestore
+  }
+
+  async function semearSemRota(clientId: string, extra: Record<string, unknown> = {}) {
+    await semear(clientId, {
+      numero: 7,
+      nome: 'Maria Aparecida Santos',
+      nomeBusca: 'maria aparecida santos',
+      cadastradoEm: '2026-01-01',
+      criadoEm: new Date('2026-01-01'),
+      atualizadoEm: new Date('2026-01-01'),
+      atualizadoPor: 'importacao',
+      ...extra,
+    })
+  }
+
+  it('aceita todos os campos de rota preenchidos', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), caminhoCliente('c1')), clienteValido(rotaCompleta)))).toBe('permitido')
+  })
+
+  it('aceita diasDeVisita vazio', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), caminhoCliente('c1')), clienteValido({ diasDeVisita: [] })))).toBe('permitido')
+  })
+
+  const diasInvalidos: Array<[string, unknown]> = [
+    ['com o dia 0', [0]],
+    ['com o dia 32', [32]],
+    ['com dia repetido', [5, 5]],
+    ['com dia em string', ['5']],
+    ['que não é lista', 5],
+  ]
+
+  for (const [caso, valor] of diasInvalidos) {
+    it(`recusa diasDeVisita ${caso}`, async () => {
+      expect(await veredito(setDoc(
+          doc(bancoDono(), caminhoCliente('c1')),
+          clienteValido({ diasDeVisita: valor }),
+        ))).toBe('negado')
+    })
+  }
+
+  it('recusa rotaDesde fora do formato de data civil', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        clienteValido({ rotaDesde: '14/10/2026' }),
+      ))).toBe('negado')
+  })
+
+  const ordensPorDiaInvalidas: Array<[string, unknown]> = [
+    ["com a chave '32'", { '32': 1000 }],
+    ["com a chave 'cinco'", { cinco: 1000 }],
+    ['que não é mapa', [1000, 2500.5]],
+  ]
+
+  for (const [caso, valor] of ordensPorDiaInvalidas) {
+    it(`recusa ordemPorDia ${caso}`, async () => {
+      expect(await veredito(setDoc(
+          doc(bancoDono(), caminhoCliente('c1')),
+          clienteValido({ ordemPorDia: valor }),
+        ))).toBe('negado')
+    })
+  }
+
+  const ordensDoDiaInvalidas: Array<[string, unknown]> = [
+    ['sem valor', { data: '2026-10-14' }],
+    ['com chave extra', { data: '2026-10-14', valor: 1500, dia: 14 }],
+    ['com data inválida', { data: '14/10/2026', valor: 1500 }],
+    ['com valor em string', { data: '2026-10-14', valor: '1' }],
+  ]
+
+  for (const [caso, valor] of ordensDoDiaInvalidas) {
+    it(`recusa ordemDoDia ${caso}`, async () => {
+      expect(await veredito(setDoc(
+          doc(bancoDono(), caminhoCliente('c1')),
+          clienteValido({ ordemDoDia: valor }),
+        ))).toBe('negado')
+    })
+  }
+
+  it('recusa ultimaMarca fora de visitado e ausente', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        clienteValido({ ultimaMarca: 'pago', ultimaMarcaEm: '2026-10-14' }),
+      ))).toBe('negado')
+  })
+
+  it('recusa ultimaMarca sem ultimaMarcaEm', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        clienteValido({ ultimaMarca: 'visitado' }),
+      ))).toBe('negado')
+  })
+
+  it('recusa ultimaMarcaEm sem ultimaMarca', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        clienteValido({ ultimaMarcaEm: '2026-10-14' }),
+      ))).toBe('negado')
+  })
+
+  it('recusa visitadoAnterior sem ultimoVisitado', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        clienteValido({ visitadoAnterior: '2026-09-20' }),
+      ))).toBe('negado')
+  })
+
+  it('aceita gravar um dia de ordemPorDia por FieldPath em cliente sem rota', async () => {
+    await semearSemRota('c1')
+    const referencia = doc(bancoDono(), caminhoCliente('c1'))
+    expect(await veredito(updateDoc(
+        referencia,
+        new FieldPath('ordemPorDia', '5'), 1500,
+        'atualizadoEm', serverTimestamp(),
+      ))).toBe('permitido')
+    expect((await getDoc(referencia)).data()!.ordemPorDia).toEqual({ '5': 1500 })
+  })
+
+  it('recusa gravar por FieldPath um dia de ordemPorDia que não existe', async () => {
+    await semearSemRota('c1')
+    expect(await veredito(updateDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        new FieldPath('ordemPorDia', '40'), 1500,
+        'atualizadoEm', serverTimestamp(),
+      ))).toBe('negado')
+  })
+
+  it('aceita remover ultimaMarca e ultimaMarcaEm juntos', async () => {
+    await semearSemRota('c1', { ultimaMarca: 'visitado', ultimaMarcaEm: '2026-10-05' })
+    expect(await veredito(updateDoc(doc(bancoDono(), caminhoCliente('c1')), {
+        ultimaMarca: deleteField(),
+        ultimaMarcaEm: deleteField(),
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('permitido')
+  })
+
+  it('recusa intruso gravando diasDeVisita', async () => {
+    await semearSemRota('c1')
+    expect(await veredito(updateDoc(doc(bancoIntruso(), caminhoCliente('c1')), {
+        diasDeVisita: [5],
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
   })
 })
