@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as rotas from './rotas'
-import type { AlteracaoDeVisita, ClienteNaRota, ItemDaRota } from './rotas'
+import type { AlteracaoDeVisita, ClienteNaRota, ItemDaRota, Reordenacao } from './rotas'
 
 function cliente(campos: Partial<ClienteNaRota> = {}): ClienteNaRota {
   return { id: 'cliente', numero: 1, diasDeVisita: [5], ...campos }
@@ -10,6 +10,20 @@ function aplicar(c: ClienteNaRota, alteracao: AlteracaoDeVisita): ClienteNaRota 
   const alterado = Object.assign({}, c, alteracao.definir)
   for (const campo of alteracao.remover) Reflect.deleteProperty(alterado, campo)
   return alterado
+}
+
+function aplicarReordenacoes(clientes: readonly ClienteNaRota[], alteracoes: readonly Reordenacao[]): ClienteNaRota[] {
+  return clientes.map((c) => {
+    let alterado = { ...c }
+    for (const alteracao of alteracoes.filter((a) => a.clienteId === c.id)) {
+      if (alteracao.tipo === 'dia') {
+        alterado = { ...alterado, ordemPorDia: { ...alterado.ordemPorDia, [String(alteracao.dia)]: alteracao.valor } }
+      } else {
+        alterado = { ...alterado, ordemDoDia: { data: alteracao.data, valor: alteracao.valor } }
+      }
+    }
+    return alterado
+  })
 }
 
 describe('dataDaVisita', () => {
@@ -50,6 +64,24 @@ describe('agendaRecente', () => {
   it.each([[30, 31], [31, 30]])('desempata dias que caem em 30 de novembro (%j)', (...diasDeVisita) => {
     expect(rotas.agendaRecente(cliente({ diasDeVisita }), '2026-11-30'))
       .toEqual({ data: '2026-11-30', dia: 30 })
+  })
+
+  it.each([
+    { hoje: '2027-02-28', dias: [29, 31], dia: 29 },
+    { hoje: '2027-02-28', dias: [31, 29], dia: 29 },
+    { hoje: '2027-02-28', dias: [28, 31], dia: 28 },
+    { hoje: '2027-02-28', dias: [31, 28], dia: 28 },
+    { hoje: '2027-03-01', dias: [31, 30, 29], dia: 29 },
+    { hoje: '2027-03-01', dias: [29, 30, 31], dia: 29 },
+    { hoje: '2028-02-29', dias: [31, 30, 29], dia: 29 },
+    { hoje: '2026-11-30', dias: [31, 30], dia: 30 },
+    { hoje: '2026-11-30', dias: [31], dia: 31 },
+  ])('desempata agendas limitadas usando apenas dias configurados (C2: %j)', ({ hoje, dias, dia }) => {
+    const c = cliente({ diasDeVisita: dias })
+    const data = hoje === '2027-03-01' ? '2027-02-28' : hoje
+    expect(rotas.agendaRecente(c, hoje)).toEqual({ data, dia })
+    expect(rotas.estadoNaRota(c, hoje).diaAgendado).toBe(dia)
+    expect(dias).toContain(dia)
   })
 })
 
@@ -228,7 +260,7 @@ describe('arrasteNaRotaDeHoje', () => {
   it('gera uma única alteração entre os novos vizinhos sem modificar a lista', () => {
     const lista = itens()
     const antes = structuredClone(lista)
-    expect(rotas.arrasteNaRotaDeHoje(lista, 0, 2, hoje))
+    expect(rotas.arrasteNaRotaDeHoje(lista, 0, 2, hoje, lista.map((item) => item.cliente)))
       .toEqual([{ clienteId: '1', tipo: 'dia', dia: 5, valor: 3500 }])
     expect(lista).toEqual(antes)
   })
@@ -236,12 +268,14 @@ describe('arrasteNaRotaDeHoje', () => {
   it.each([
     [3, 0, '4', 0], [0, 3, '1', 5000], [2, 1, '3', 1500],
   ])('move de %i para %i', (de, para, clienteId, valor) => {
-    expect(rotas.arrasteNaRotaDeHoje(itens(), de, para, hoje))
+    const lista = itens()
+    expect(rotas.arrasteNaRotaDeHoje(lista, de, para, hoje, lista.map((item) => item.cliente)))
       .toEqual([{ clienteId, tipo: 'dia', dia: 5, valor }])
   })
 
   it('não escreve quando a posição não muda', () => {
-    expect(rotas.arrasteNaRotaDeHoje(itens(), 1, 1, hoje)).toEqual([])
+    const lista = itens()
+    expect(rotas.arrasteNaRotaDeHoje(lista, 1, 1, hoje, lista.map((item) => item.cliente))).toEqual([])
   })
 
   it('gera tipo hoje ao arrastar um atrasado, mesmo visitado hoje', () => {
@@ -249,21 +283,134 @@ describe('arrasteNaRotaDeHoje', () => {
     lista[3].cliente.diasDeVisita = [4]
     lista[3].cliente.ultimoVisitado = hoje
     lista[3].estado = rotas.estadoNaRota(lista[3].cliente, hoje)
-    expect(rotas.arrasteNaRotaDeHoje(lista, 3, 1, hoje))
+    expect(rotas.arrasteNaRotaDeHoje(lista, 3, 1, hoje, lista.map((item) => item.cliente)))
       .toEqual([{ clienteId: '4', tipo: 'hoje', data: hoje, valor: 1500 }])
   })
 
   it('rebalanceia a lista inteira na ordem nova quando acaba a precisão', () => {
     const lista = itens([1, 1 + Number.EPSILON, 1000])
     lista[1].cliente.diasDeVisita = [4]
+    lista[1].cliente.ordemDoDia = { data: hoje, valor: lista[1].chave }
     lista[1].estado = rotas.estadoNaRota(lista[1].cliente, hoje)
     const antes = structuredClone(lista)
-    expect(rotas.arrasteNaRotaDeHoje(lista, 2, 1, hoje)).toEqual([
+    expect(rotas.arrasteNaRotaDeHoje(lista, 2, 1, hoje, lista.map((item) => item.cliente))).toEqual([
       { clienteId: '1', tipo: 'dia', dia: 5, valor: 1000 },
       { clienteId: '3', tipo: 'dia', dia: 5, valor: 2000 },
       { clienteId: '2', tipo: 'hoje', data: hoje, valor: 3000 },
     ])
     expect(lista).toEqual(antes)
+  })
+})
+
+describe('arrasteNaRotaDeHoje — bloco de atrasados soltos (B1)', () => {
+  const hoje = '2026-10-05'
+  const clientes = [
+    cliente({ id: 'A', numero: 1, ordemPorDia: { '5': 1000 } }),
+    cliente({ id: 'B', numero: 2, ordemPorDia: { '5': 2000 } }),
+    cliente({ id: 'X', numero: 3, diasDeVisita: [2] }),
+    cliente({ id: 'Y', numero: 4, diasDeVisita: [3], ordemDoDia: { data: '2026-10-04', valor: 100 } }),
+  ]
+
+  it.each([1, 2, 3])('encaixa o cliente do dia antes do bloco ao mover para %i', (para) => {
+    const lista = rotas.rotaDeHoje(clientes, hoje)
+    const antes = structuredClone(lista)
+    const alteracoes = rotas.arrasteNaRotaDeHoje(lista, 0, para, hoje, clientes)
+    expect(alteracoes).toEqual([{ clienteId: 'A', tipo: 'dia', dia: 5, valor: 3000 }])
+    expect(rotas.rotaDeHoje(aplicarReordenacoes(clientes, alteracoes), hoje).map((item) => item.cliente.id))
+      .toEqual(['B', 'A', 'X', 'Y'])
+    expect(lista).toEqual(antes)
+  })
+
+  it.each([[2, 3], [3, 2]])('não grava ao mover um solto dentro do bloco (%i → %i)', (de, para) => {
+    const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(clientes, hoje), de, para, hoje, clientes)
+    expect(alteracoes).toEqual([])
+    expect(rotas.rotaDeHoje(aplicarReordenacoes(clientes, alteracoes), hoje).map((item) => item.cliente.id))
+      .toEqual(['A', 'B', 'X', 'Y'])
+  })
+
+  it('posiciona um solto acima do bloco entre vizinhos fixos', () => {
+    const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(clientes, hoje), 3, 1, hoje, clientes)
+    expect(alteracoes).toEqual([{ clienteId: 'Y', tipo: 'hoje', data: hoje, valor: 1500 }])
+    expect(rotas.rotaDeHoje(aplicarReordenacoes(clientes, alteracoes), hoje).map((item) => item.cliente.id))
+      .toEqual(['A', 'Y', 'B', 'X'])
+  })
+
+  it('encaixa um atrasado com posição antes do bloco usando a última chave fixa', () => {
+    const todos = [...clientes, cliente({ id: 'P', numero: 5, diasDeVisita: [4], ordemDoDia: { data: hoje, valor: 2500 } })]
+    const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(todos, hoje), 2, 4, hoje, todos)
+    expect(alteracoes).toEqual([{ clienteId: 'P', tipo: 'hoje', data: hoje, valor: 3000 }])
+    expect(rotas.rotaDeHoje(aplicarReordenacoes(todos, alteracoes), hoje).map((item) => item.cliente.id))
+      .toEqual(['A', 'B', 'P', 'X', 'Y'])
+  })
+
+  it('usa PASSO sem vizinho fixo, sem gravar a chave temporária dos soltos', () => {
+    const todos = [clientes[0], clientes[2], clientes[3]]
+    const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(todos, hoje), 0, 2, hoje, todos)
+    expect(alteracoes).toEqual([{ clienteId: 'A', tipo: 'dia', dia: 5, valor: rotas.PASSO }])
+  })
+
+  it('não grava quando a lista inteira é um bloco de soltos', () => {
+    expect(rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(clientes.slice(2), hoje), 1, 0, hoje, clientes)).toEqual([])
+  })
+})
+
+describe('arrasteNaRotaDeHoje — rebalanceamento do dia inteiro (C3)', () => {
+  const hoje = '2026-10-05'
+  const todos = [
+    cliente({ id: 'A', numero: 1, ordemPorDia: { '5': 1 } }),
+    cliente({ id: 'B', numero: 2, ordemPorDia: { '5': 1 + Number.EPSILON } }),
+    cliente({ id: 'C', numero: 3, ordemPorDia: { '5': 1000 } }),
+    cliente({ id: 'solto', numero: 4, diasDeVisita: [4] }),
+    cliente({ id: 'fora-2', numero: 6, rotaDesde: '2026-10-06', ordemPorDia: { '5': 700 } }),
+    cliente({ id: 'fora-1', numero: 5, rotaDesde: '2026-10-06', ordemPorDia: { '5': 500 } }),
+    cliente({ id: 'arquivado', numero: 7, arquivado: true }),
+    cliente({ id: 'outro-dia', numero: 8, diasDeVisita: [20], rotaDesde: '2026-10-06' }),
+  ]
+
+  it('anexa clientes fora de hoje na ordem atual do dia e posiciona os soltos', () => {
+    const lista = rotas.rotaDeHoje(todos, hoje)
+    const antes = structuredClone(todos)
+    const alteracoes = rotas.arrasteNaRotaDeHoje(lista, 2, 1, hoje, todos)
+    expect(alteracoes).toEqual([
+      { clienteId: 'A', tipo: 'dia', dia: 5, valor: 1000 },
+      { clienteId: 'C', tipo: 'dia', dia: 5, valor: 2000 },
+      { clienteId: 'B', tipo: 'dia', dia: 5, valor: 3000 },
+      { clienteId: 'solto', tipo: 'hoje', data: hoje, valor: 4000 },
+      { clienteId: 'fora-1', tipo: 'dia', dia: 5, valor: 5000 },
+      { clienteId: 'fora-2', tipo: 'dia', dia: 5, valor: 6000 },
+    ])
+    const depois = aplicarReordenacoes(todos, alteracoes)
+    expect(rotas.rotaDeHoje(depois, hoje).map((item) => item.cliente.id)).toEqual(['A', 'C', 'B', 'solto'])
+    expect(rotas.rotaDoDia(depois, 5).map((item) => item.cliente.id)).toEqual(['A', 'C', 'B', 'fora-1', 'fora-2'])
+    expect(todos).toEqual(antes)
+    expect(lista).toEqual(rotas.rotaDeHoje(todos, hoje))
+  })
+
+  it('arraste simples continua gerando uma alteração mesmo com clientes fora da lista', () => {
+    expect(rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(todos, hoje), 2, 0, hoje, todos))
+      .toEqual([{ clienteId: 'C', tipo: 'dia', dia: 5, valor: -999 }])
+  })
+
+  it('completa cada dia agendado presente, usando o tamanho da lista de hoje em todos eles', () => {
+    const data = '2026-11-30'
+    const clientes = [
+      cliente({ id: 'A', numero: 1, diasDeVisita: [30], ordemPorDia: { '30': 1 } }),
+      cliente({ id: 'B', numero: 2, diasDeVisita: [31], ordemPorDia: { '31': 1 + Number.EPSILON } }),
+      cliente({ id: 'C', numero: 3, diasDeVisita: [30], ordemPorDia: { '30': 1000 } }),
+      cliente({ id: 'fora-30', numero: 4, diasDeVisita: [30], rotaDesde: '2026-12-01', ordemPorDia: { '30': 500 } }),
+      cliente({ id: 'fora-31', numero: 5, diasDeVisita: [31], rotaDesde: '2026-12-01', ordemPorDia: { '31': 600 } }),
+    ]
+    const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(clientes, data), 2, 1, data, clientes)
+    expect(alteracoes).toEqual([
+      { clienteId: 'A', tipo: 'dia', dia: 30, valor: 1000 },
+      { clienteId: 'C', tipo: 'dia', dia: 30, valor: 2000 },
+      { clienteId: 'B', tipo: 'dia', dia: 31, valor: 3000 },
+      { clienteId: 'fora-30', tipo: 'dia', dia: 30, valor: 4000 },
+      { clienteId: 'fora-31', tipo: 'dia', dia: 31, valor: 4000 },
+    ])
+    const depois = aplicarReordenacoes(clientes, alteracoes)
+    expect(rotas.rotaDoDia(depois, 30).map((item) => item.cliente.id)).toEqual(['A', 'C', 'fora-30'])
+    expect(rotas.rotaDoDia(depois, 31).map((item) => item.cliente.id)).toEqual(['B', 'fora-31'])
   })
 })
 
@@ -325,6 +472,18 @@ describe('marcarVisitado', () => {
 })
 
 describe('marcarAusente', () => {
+  it('não altera a visita ao marcar Ausente depois de Visitado no mesmo dia (C1)', () => {
+    const hoje = '2026-10-07'
+    const visitado = aplicar(cliente(), rotas.marcarVisitado(cliente(), hoje))
+    const antes = structuredClone(visitado)
+    const alteracao = rotas.marcarAusente(visitado, hoje)
+    expect(alteracao).toEqual({ definir: {}, remover: [] })
+    const depois = aplicar(visitado, alteracao)
+    expect(rotas.estadoNaRota(depois, hoje)).toEqual(rotas.estadoNaRota(visitado, hoje))
+    expect(rotas.estadoNaRota(depois, hoje)).toMatchObject({ situacao: 'visitado', ausenteHoje: false })
+    expect(visitado).toEqual(antes)
+  })
+
   it('registra só a tentativa, sem modificar visitas anteriores nem o cliente', () => {
     const c = cliente({ ultimoVisitado: '2026-09-05', visitadoAnterior: '2026-08-05' })
     const antes = structuredClone(c)

@@ -33,7 +33,7 @@ export function agendaRecente(cliente: ClienteNaRota, hoje: string): { data: str
     for (const dia of cliente.diasDeVisita ?? []) {
       const data = dataDaVisita(periodo.ano, periodo.mes, dia)
       if (data > hoje || (cliente.rotaDesde && data < cliente.rotaDesde)) continue
-      if (!recente || data > recente.data || (data === recente.data && dia === Number(data.slice(8)))) {
+      if (!recente || data > recente.data || (data === recente.data && dia < recente.dia)) {
         recente = { data, dia }
       }
     }
@@ -137,11 +137,35 @@ function reordenar<T extends { chave: number }>(
 
 export function arrasteNaRotaDeHoje(
   itens: readonly ItemDaRota<ClienteNaRota>[], de: number, para: number, hoje: string,
+  todos: readonly ClienteNaRota[],
 ): Reordenacao[] {
-  return reordenar(itens, de, para, (item, valor) => {
+  if (de === para) return []
+  const solto = (item: ItemDaRota<ClienteNaRota>) => item.estado.atrasado && item.cliente.ordemDoDia?.data !== hoje
+  const nova = [...itens]
+  const [movido] = nova.splice(de, 1)
+  const inicioDosSoltos = nova.findIndex(solto)
+  if (inicioDosSoltos !== -1 && para >= inicioDosSoltos) {
+    if (solto(movido)) return []
+    para = inicioDosSoltos
+  }
+  nova.splice(para, 0, movido)
+  const proximo = nova[para + 1]
+  const chave = chaveEntre(nova[para - 1]?.chave ?? null, proximo && !solto(proximo) ? proximo.chave : null)
+  const alteracao = (item: ItemDaRota<ClienteNaRota>, valor: number): Reordenacao => {
     if (item.estado.atrasado) return { clienteId: item.cliente.id, tipo: 'hoje', data: hoje, valor }
     return { clienteId: item.cliente.id, tipo: 'dia', dia: item.estado.diaAgendado!, valor }
-  })
+  }
+  if (chave !== null) return [alteracao(movido, chave)]
+  const alteracoes = nova.map((item, i) => alteracao(item, PASSO * (i + 1)))
+  const presentes = new Set(nova.map((item) => item.cliente.id))
+  const dias = new Set(nova.filter((item) => !item.estado.atrasado).map((item) => item.estado.diaAgendado!))
+  for (const dia of dias) {
+    const foraDeHoje = rotaDoDia(todos, dia).filter((item) => !presentes.has(item.cliente.id))
+    foraDeHoje.forEach((item, j) => alteracoes.push({
+      clienteId: item.cliente.id, tipo: 'dia', dia, valor: PASSO * (nova.length + j + 1),
+    }))
+  }
+  return alteracoes
 }
 
 export function arrasteNaRotaDoDia(
@@ -162,7 +186,8 @@ export function marcarVisitado(cliente: ClienteNaRota, hoje: string): AlteracaoD
   return { definir, remover: ['visitadoAnterior'] }
 }
 
-export function marcarAusente(_cliente: ClienteNaRota, hoje: string): AlteracaoDeVisita {
+export function marcarAusente(cliente: ClienteNaRota, hoje: string): AlteracaoDeVisita {
+  if (cliente.ultimoVisitado === hoje) return { definir: {}, remover: [] }
   return { definir: { ultimaMarca: 'ausente', ultimaMarcaEm: hoje }, remover: [] }
 }
 

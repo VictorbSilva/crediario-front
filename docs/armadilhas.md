@@ -638,12 +638,22 @@ só a tentativa e não encerra a pendência; `ausenteHoje` vale apenas na data d
 Visitado hoje continua na lista, na mesma posição. Desfazer volta `ultimoVisitado` para
 `visitadoAnterior` (um nível); marcar duas vezes no mesmo dia preserva esse retorno.
 
+**Ausente depois de Visitado no mesmo dia não faz nada (C1).** `marcarAusente` devolve
+uma alteração vazia quando `ultimoVisitado === hoje`. Isso impede a combinação
+"visitado e ausente hoje" e preserva a visita, que `desmarcar` desfaz em um nível.
+
 **`rotaDesde` corta agendas anteriores a ela.** Colocar um cliente no dia 5 em 10 de
 outubro não cria uma pendência de 5 de outubro. A data igual a `rotaDesde` conta.
 Datas são strings civis `'YYYY-MM-DD'`, comparadas como strings; não há hora na rota.
 `dataDaVisita` recebe mês de 1 a 12 e converte para o mês de 0 a 11 de `diasNoMes`.
 Dia 31 em mês curto cai no último dia do mês, como no vencimento. Se 30 e 31 caem
-juntos em 30 de novembro, a agenda usa o dia 30, independentemente da ordem da lista.
+juntos em 30 de novembro, a agenda usa o dia 30. **Quando vários dias caem na mesma
+data (C2), ganha o dia da data se estiver configurado; senão, ganha o menor dia
+configurado entre os candidatos.** O dia da data é também o menor dos candidatos
+quando está configurado, porque os demais foram limitados para baixo. Assim, em
+28/02/2027, `[29, 31]` e `[31, 29]` usam 29; `[28, 31]` usa 28. Um dia 31 sozinho
+continua usando 31. O desempate nunca inventa um dia fora de `diasDeVisita` e não
+depende da ordem dos dias ou dos meses percorridos, preservando a chave de `ordemPorDia`.
 
 **A ordem não é recalculada por endereço ou nome.** No dia agendado, a chave vem de
 `ordemPorDia[String(dia)]`; sem ela, vem de `BASE_SEM_ORDEM + numero`, usando o número
@@ -652,13 +662,32 @@ por data agendada e depois número, separados por `PASSO`. Arrastar um atrasado 
 `ordemDoDia = { data: hoje, valor }`, que só vale naquela data; arrastar alguém do dia
 altera a ordem daquele dia do mês.
 
+**O bloco de atrasados soltos é intransponível (B1).** Solto é o atrasado sem
+`ordemDoDia` com `data === hoje`; o bloco fica no fim, do mais antigo para o mais novo.
+Ao arrastar um cliente do dia ou um atrasado com posição para dentro ou depois desse
+bloco, o item é encaixado antes dele: a nova chave fica um `PASSO` depois da última
+chave fixa restante, ou é `PASSO` se não houver nenhuma. A chave de um solto também
+não serve como vizinho na borda do trecho fixo. Mover um solto dentro do bloco não
+grava nada; mover para cima do bloco grava uma posição de hoje entre os vizinhos fixos.
+As chaves dos soltos são calculadas de novo em cada montagem: persistir esses números
+em `ordemPorDia` levaria uma posição temporária para os meses seguintes.
+
 **Ordem fracionária evita regravar os vizinhos.** Um arraste devolve uma alteração:
 a média das chaves dos novos vizinhos, ou um `PASSO` antes/depois na borda. Se a média
 não fica estritamente entre os vizinhos, acabou a precisão numérica: só então a lista
-inteira daquele dia é rebalanceada na ordem nova com `PASSO * (i + 1)`. Na rota de hoje,
-cada item rebalanceado mantém seu destino: ordem por dia para os do dia, temporária
-para os atrasados. Posição sem mudança não produz escrita. As funções não modificam
-as listas nem os clientes recebidos.
+é rebalanceada na ordem nova com `PASSO * (i + 1)`. Na rota de hoje, cada item
+rebalanceado mantém seu destino: ordem por dia para os do dia, temporária para os
+atrasados, incluindo os soltos. Posição sem mudança não produz escrita. As funções
+não modificam as listas nem os clientes recebidos.
+
+**O rebalanceamento de hoje leva o dia inteiro (C3).** `arrasteNaRotaDeHoje` recebe
+`todos`, além dos itens de hoje. Sem precisão, primeiro rebalanceia a lista de hoje
+na ordem já ajustada pelo B1. Para cada `diaAgendado` dos clientes do dia nessa lista,
+acrescenta os clientes de `rotaDoDia(todos, dia)` que ficaram fora de hoje, na ordem
+atual deles, com `PASSO * (n + j + 1)`: `n` é o tamanho da lista de hoje e `j` recomeça
+em zero em cada dia. Isso inclui, por exemplo, clientes com `rotaDesde` futura e evita
+deixar parte do dia na escala antiga, embaralhando os meses seguintes. Arraste simples
+continua devolvendo uma alteração; `arrasteNaRotaDoDia` mantém seu contrato.
 
 — referente a src/lib/rotas.ts e src/lib/rotas.test.ts
 
