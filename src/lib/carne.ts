@@ -2,7 +2,7 @@ import { diferencaEmDias } from './data'
 import { formatarCentavos } from './dinheiro'
 import type { ParcelaComEstado, ResumoDaVenda, TaxasDeSimulacao } from './parcelas'
 
-export type SituacaoVenda = 'quitada' | 'atrasada' | 'em-dia' | 'cancelada'
+export type SituacaoVenda = 'quitada' | 'atrasada' | 'em-dia' | 'cancelada' | 'incompleta'
 
 export type Janela = {
   visiveis: ParcelaComEstado[]
@@ -14,8 +14,18 @@ function plural(quantidade: number, singular: string, plural: string): string {
   return `${quantidade} ${quantidade === 1 ? singular : plural}`
 }
 
-export function situacaoDaVenda(resumo: ResumoDaVenda, cancelada = false): SituacaoVenda {
+/**
+ * `completa` falso quer dizer que parte das parcelas ainda não chegou neste
+ * aparelho: o resumo foi somado sobre o que chegou e não serve para dizer
+ * "quitada" nem "em dia". A cancelada já está fora do saldo e não entra no aviso.
+ */
+export function situacaoDaVenda(
+  resumo: ResumoDaVenda,
+  cancelada = false,
+  completa = true,
+): SituacaoVenda {
   if (cancelada) return 'cancelada'
+  if (!completa) return 'incompleta'
   if (resumo.quitada) return 'quitada'
 
   return resumo.parcelasVencidas > 0 ? 'atrasada' : 'em-dia'

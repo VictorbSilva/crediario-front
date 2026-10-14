@@ -17,8 +17,8 @@ import { identificarDispositivo } from '@/lib/dispositivo'
 import { db } from '@/lib/firebase'
 import { montarCarne, saldoDoCliente } from '@/lib/parcelas'
 import type { ResumoDaVenda, VendaComCarne } from '@/lib/parcelas'
-import { estadoDeSync } from '@/lib/sync'
-import type { EstadoSync } from '@/lib/sync'
+import { confiancaDaLista, estadoDeSync } from '@/lib/sync'
+import type { ConfiancaDaLista, EstadoSync } from '@/lib/sync'
 import { montarCamposPagamento, montarCamposVenda, montarCancelamentoVenda } from '@/lib/venda'
 import type { EntradaPagamento, EntradaVenda } from '@/lib/venda'
 import type { Pagamento, Parcela, Venda } from '@/types/venda'
@@ -38,6 +38,49 @@ function marcarPronto(atual: string[], clienteId: string, colecao: Colecao): str
   const doCliente = atual.filter((item) => item.startsWith(`${clienteId}:`))
 
   return doCliente.includes(chave) ? atual : [...doCliente, chave]
+}
+
+/** O último `fromCache` de cada coleção, na mesma chave por cliente do `prontos`. */
+function marcarOrigem(
+  atual: Record<string, boolean>,
+  clienteId: string,
+  colecao: Colecao,
+  doCache: boolean,
+): Record<string, boolean> {
+  const chave = chaveDe(clienteId, colecao)
+  if (atual[chave] === doCache) return atual
+
+  const doCliente = Object.entries(atual).filter(([item]) => item.startsWith(`${clienteId}:`))
+
+  return { ...Object.fromEntries(doCliente), [chave]: doCache }
+}
+
+const PREFIXO_CARNES_SINCRONIZADOS = 'crediario:carnes-sincronizados:'
+
+function carnesLidosDoServidor(businessId: string): string[] {
+  try {
+    const lista: unknown = JSON.parse(
+      localStorage.getItem(PREFIXO_CARNES_SINCRONIZADOS + businessId) ?? '[]',
+    )
+
+    return Array.isArray(lista) ? lista.filter((item) => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function marcarCarneLidoDoServidor(businessId: string, clienteId: string): void {
+  try {
+    const lista = carnesLidosDoServidor(businessId)
+    if (lista.includes(clienteId)) return
+
+    localStorage.setItem(
+      PREFIXO_CARNES_SINCRONIZADOS + businessId,
+      JSON.stringify([...lista, clienteId]),
+    )
+  } catch {
+    return
+  }
 }
 
 function paraVenda(documento: Documento): Venda {
@@ -116,6 +159,8 @@ export type CarneDoCliente = {
   /** A data usada no cálculo, para a tela não ler o relógio por conta própria. */
   hoje: string
   carregando: boolean
+  /** `parcial` é carnê vindo só do cache num aparelho que nunca o leu do servidor. */
+  confianca: ConfiancaDaLista
   erro: string | null
   estadoSync: EstadoSync
   pendentes: number
@@ -141,13 +186,19 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
   const [prontos, setProntos] = useState<string[]>([])
   const [erro, setErro] = useState<string | null>(null)
-  const [doCache, setDoCache] = useState(true)
+  const [origem, setOrigem] = useState<Record<string, boolean>>({})
+  const [sincronizados, setSincronizados] = useState<string[]>(() =>
+    businessId ? carnesLidosDoServidor(businessId) : [],
+  )
   const [falhas, setFalhas] = useState<FalhaDeEscrita[]>([])
 
   const proximaFalha = useRef(0)
 
   useEffect(() => {
     if (!businessId || !clienteId) return
+
+    const ultimoDoCache: Partial<Record<Colecao, boolean>> = {}
+    let marcou = false
 
     const assinar = <T,>(
       nome: Colecao,
@@ -158,9 +209,18 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
         query(collection(db, 'businesses', businessId, nome), where('clientId', '==', clienteId)),
         { includeMetadataChanges: true },
         (instantaneo) => {
+          const { fromCache } = instantaneo.metadata
+
           guardar(instantaneo.docs.map(converter))
-          setDoCache(instantaneo.metadata.fromCache)
+          setOrigem((atual) => marcarOrigem(atual, clienteId, nome, fromCache))
           setProntos((atual) => marcarPronto(atual, clienteId, nome))
+
+          ultimoDoCache[nome] = fromCache
+          if (!marcou && COLECOES.every((colecao) => ultimoDoCache[colecao] === false)) {
+            marcou = true
+            marcarCarneLidoDoServidor(businessId, clienteId)
+            setSincronizados((atual) => (atual.includes(clienteId) ? atual : [...atual, clienteId]))
+          }
         },
         () => {
           setErro('Não foi possível carregar o carnê deste cliente.')
@@ -317,6 +377,7 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
     const hoje = dataLocalISO(new Date())
     const carnes = montarCarne(vendasDele, parcelasDele, pagamentosDele, hoje)
     const carregando = COLECOES.some((nome) => !prontos.includes(chaveDe(clienteId, nome)))
+    const doCache = COLECOES.some((nome) => origem[chaveDe(clienteId, nome)] !== false)
     const pendentes = [...vendasDele, ...parcelasDele, ...pagamentosDele].filter(
       (item) => item.pendente,
     ).length
@@ -327,6 +388,11 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
       saldo: saldoDoCliente(carnes),
       hoje,
       carregando,
+      confianca: confiancaDaLista({
+        carregando,
+        doCache,
+        jaSincronizouNesteAparelho: clienteId !== null && sincronizados.includes(clienteId),
+      }),
       erro,
       estadoSync: estadoDeSync({ carregando, erro: erro !== null, pendentes, doCache }),
       pendentes,
@@ -343,8 +409,9 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
     parcelas,
     pagamentos,
     prontos,
+    origem,
+    sincronizados,
     erro,
-    doCache,
     falhas,
     descartarFalha,
     registrarVenda,

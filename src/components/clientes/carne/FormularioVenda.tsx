@@ -11,9 +11,10 @@ import type { EntradaVenda } from '@/lib/venda'
 type FormuladorVendaProps = Readonly<{
   aoSalvar: (entrada: EntradaVenda) => void
   aoFechar: () => void
+  aviso?: string
 }>
 
-export function FormularioVenda({ aoSalvar, aoFechar }: FormuladorVendaProps) {
+export function FormularioVenda({ aoSalvar, aoFechar, aviso }: FormuladorVendaProps) {
   const [entrada, setEntrada] = useState<EntradaVenda>(() => entradaVendaVazia(new Date()))
   const [tocados, setTocados] = useState<Partial<Record<keyof EntradaVenda, boolean>>>({})
   const [tentouSalvar, setTentouSalvar] = useState(false)
@@ -66,6 +67,8 @@ export function FormularioVenda({ aoSalvar, aoFechar }: FormuladorVendaProps) {
       aoEnviar={enviar}
       aoFechar={aoFechar}
     >
+      {aviso ? <Nota tom="alerta">{aviso}</Nota> : null}
+
       <Campo
         id={base + '-valor'}
         rotulo="Valor total"

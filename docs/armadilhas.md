@@ -365,6 +365,49 @@ congelado depois disso; a tela esconde o botão numa venda já cancelada
 > e `canceladaEm`, que a regra já aceitava antes de `paraVenda` mapeá-los: uma venda
 > cancelada continuaria cobrando.
 
+### Carnê não baixado e carnê incompleto neste aparelho (T7)
+
+Com dois aparelhos (notebook e iPhone, 24/09/2026), o cache de um não sabe o que o outro
+lançou. Os três listeners só baixam o carnê de um cliente quando ele é aberto online, então
+abrir offline um cliente nunca aberto antes devolve três listas vazias vindas do cache.
+
+> **AVISO**
+> Lista vazia do cache **não** é "nenhuma venda". A tela dizia "Nenhuma venda registrada"
+> e oferecia "Nova venda" para um cliente que tinha carnê no outro aparelho — e o dono
+> lançaria a mesma venda de novo. Agora `confianca` vem de `confiancaDaLista` (o mesmo de
+> `src/lib/sync.ts`, sem mudança) e, com lista vazia e confiança `parcial`, a tela troca o
+> vazio por um aviso. "Nova venda" continua disponível e o formulário repete o aviso:
+> **avisa, não bloqueia**, porque bloquear impediria vender offline num aparelho que nunca
+> sincronizou, que é justamente o caso de uso.
+
+A memória de "já li este carnê do servidor neste aparelho" é **por cliente**, não por
+coleção inteira como a do `ClientesProvider`: os listeners são por `clientId`, e ter baixado
+o carnê da Maria não diz nada sobre o do João. Fica em
+`localStorage['crediario:carnes-sincronizados:<businessId>']`, um JSON com a lista de
+`clientId`. Um cliente entra na lista quando as **três** coleções dele estão ao mesmo tempo
+com `fromCache: false` — `sales` do servidor com `installments` ainda do cache não é carnê
+baixado. Grava uma vez por cliente e por assinatura, em `try/catch`; a cópia em estado
+existe para o `useMemo` reagir, e a leitura inicial é no inicializador do `useState`, pelo
+mesmo motivo do `ClientesProvider`. `fromCache` sozinho não serve de alarme pela mesma razão
+de `src/lib/sync.ts`: offline é o caso comum, e um carnê já baixado não pode virar aviso.
+
+> **AVISO**
+> `doCache` é **por coleção**, na mesma chave por cliente do `prontos`. A versão anterior
+> guardava um `doCache` só, sobrescrito pelo último listener que disparasse: `payments` do
+> servidor apagava o `fromCache: true` de `installments`. Enquanto só o `estadoSync` do
+> carnê o lia (nenhum selo consome esse), a mentira não aparecia; agora `confianca` depende
+> dele, e um `doCache` falso daria `confiavel` e esconderia o aviso com parcelas ainda vindas
+> do cache. O `doCache` do carnê é verdadeiro se qualquer uma das três coleções do cliente
+> aberto estiver no cache ou ainda sem snapshot.
+
+O outro lado é o cache **parcial**: a venda chegou, parte das parcelas não. `montarCarne`
+somava só o que chegou e podia chamar de **quitada** uma venda com parcelas em aberto no
+servidor. Por isso a contagem vem de `venda.numeroParcelas`, nunca de `parcelas.length`:
+`completa` é `parcelas presentes >= numeroParcelas`, e venda não cancelada e incompleta
+nunca é quitada — a situação vira "Incompleta neste aparelho" e a tela avisa, acima dos
+indicadores, que o saldo pode estar menor do que o real. Venda cancelada fica fora desse
+aviso: já não entra no saldo.
+
 — referente a src/data/useCarne.ts
 
 ## src/data/ClientesProvider.tsx
