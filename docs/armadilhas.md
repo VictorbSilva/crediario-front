@@ -691,11 +691,27 @@ não modificam as listas nem os clientes recebidos.
 **O rebalanceamento de hoje leva o dia inteiro (C3).** `arrasteNaRotaDeHoje` recebe
 `todos`, além dos itens de hoje. Sem precisão, primeiro rebalanceia a lista de hoje
 na ordem já ajustada pelo B1. Para cada `diaAgendado` dos clientes do dia nessa lista,
-acrescenta os clientes de `rotaDoDia(todos, dia)` que ficaram fora de hoje, na ordem
-atual deles, com `PASSO * (n + j + 1)`: `n` é o tamanho da lista de hoje e `j` recomeça
-em zero em cada dia. Isso inclui, por exemplo, clientes com `rotaDesde` futura e evita
-deixar parte do dia na escala antiga, embaralhando os meses seguintes. Arraste simples
-continua devolvendo uma alteração; `arrasteNaRotaDoDia` mantém seu contrato.
+acrescenta os clientes de `rotaDoDia(todos, dia)` que ainda não receberam uma
+reordenação para **esse dia**, na ordem atual deles, com `PASSO * (n + j + 1)`: `n` é
+o tamanho da lista de hoje e `j` recomeça em zero em cada dia. Isso inclui clientes com
+`rotaDesde` futura e clientes presentes hoje sob outro dia agendado — um cliente com
+dias 30 e 31 pode precisar das duas reordenações quando ambos caem em 30 de novembro.
+O filtro é por cliente **e dia**, para não deixar a ordem do outro dia na escala
+antiga, embaralhando os meses seguintes. Arraste simples continua devolvendo uma
+alteração; `arrasteNaRotaDoDia` mantém seu contrato.
+
+**Quem grava deve aplicar o retorno inteiro.** `AlteracaoDeVisita` vira um único
+`updateDoc` no cliente: os campos de `definir` e os de `remover` convertidos em
+`deleteField()` vão juntos. Separar os updates pode deixar `ultimaMarca` sem
+`ultimaMarcaEm` ou `visitadoAnterior` sem `ultimoVisitado`, estados recusados pela regra;
+offline, essa recusa só chega horas depois.
+
+O `Reordenacao[]` de um rebalanceamento deve ir em um único `writeBatch`, incluindo
+todas as entradas de um cliente quando houver dias diferentes. Aplicar só parte do
+retorno deixa a rota com chaves de escalas diferentes e embaralha a ordem.
+`ordemDoDia` deve ser gravado como o objeto inteiro `{ data, valor }`, nunca montado
+campo a campo por updates separados ou apenas por `FieldPath` em `valor`: a regra
+exige exatamente as duas chaves juntas, e a data precisa acompanhar a posição.
 
 — referente a src/lib/rotas.ts e src/lib/rotas.test.ts
 

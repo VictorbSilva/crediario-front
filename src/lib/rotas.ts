@@ -177,11 +177,11 @@ export function arrasteNaRotaDeHoje(
   }
   if (chave !== null) return [alteracao(movido, chave)]
   const alteracoes = nova.map((item, i) => alteracao(item, PASSO * (i + 1)))
-  const presentes = new Set(nova.map((item) => item.cliente.id))
   const dias = new Set(nova.filter((item) => !item.estado.atrasado).map((item) => item.estado.diaAgendado!))
   for (const dia of dias) {
-    const foraDeHoje = rotaDoDia(todos, dia).filter((item) => !presentes.has(item.cliente.id))
-    foraDeHoje.forEach((item, j) => alteracoes.push({
+    const reordenadosNesteDia = new Set(alteracoes.filter((a) => a.tipo === 'dia' && a.dia === dia).map((a) => a.clienteId))
+    const restantesDoDia = rotaDoDia(todos, dia).filter((item) => !reordenadosNesteDia.has(item.cliente.id))
+    restantesDoDia.forEach((item, j) => alteracoes.push({
       clienteId: item.cliente.id, tipo: 'dia', dia, valor: PASSO * (nova.length + j + 1),
     }))
   }

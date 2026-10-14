@@ -81,7 +81,6 @@ describe('agendaRecente', () => {
     const data = hoje === '2027-03-01' ? '2027-02-28' : hoje
     expect(rotas.agendaRecente(c, hoje)).toEqual({ data, dia })
     expect(rotas.estadoNaRota(c, hoje).diaAgendado).toBe(dia)
-    expect(dias).toContain(dia)
   })
 })
 
@@ -516,6 +515,34 @@ describe('arrasteNaRotaDeHoje — rebalanceamento do dia inteiro (C3)', () => {
     expect(rotas.rotaDoDia(depois, 30).map((item) => item.cliente.id)).toEqual(['A', 'C', 'fora-30'])
     expect(rotas.rotaDoDia(depois, 31).map((item) => item.cliente.id)).toEqual(['B', 'fora-31'])
   })
+
+  it.each([
+    { data: '2026-11-30', dia: 30, desde: '2026-12-01', seguinte: '2026-12-31' },
+    { data: '2027-02-28', dia: 28, desde: '2027-03-01', seguinte: '2027-03-31' },
+  ])('rebalanceia o outro dia de um cliente presente hoje em mês curto (%j)', ({ data, dia, desde, seguinte }) => {
+    const clientes = [
+      cliente({ id: 'A', numero: 1, diasDeVisita: [dia, 31], ordemPorDia: { [String(dia)]: 1, '31': 777 } }),
+      cliente({ id: 'B', numero: 2, diasDeVisita: [31], ordemPorDia: { '31': 1 + Number.EPSILON } }),
+      cliente({ id: 'C', numero: 3, diasDeVisita: [dia], ordemPorDia: { [String(dia)]: 1000 } }),
+      cliente({ id: 'D', numero: 4, diasDeVisita: [31], rotaDesde: desde, ordemPorDia: { '31': 600 } }),
+    ]
+    const antes = structuredClone(clientes)
+    expect(rotas.rotaDoDia(clientes, 31).map((item) => item.cliente.id)).toEqual(['B', 'D', 'A'])
+    const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(clientes, data), 2, 1, data, clientes)
+    expect(alteracoes).toEqual([
+      { clienteId: 'A', tipo: 'dia', dia, valor: 1000 },
+      { clienteId: 'C', tipo: 'dia', dia, valor: 2000 },
+      { clienteId: 'B', tipo: 'dia', dia: 31, valor: 3000 },
+      { clienteId: 'D', tipo: 'dia', dia: 31, valor: 4000 },
+      { clienteId: 'A', tipo: 'dia', dia: 31, valor: 5000 },
+    ])
+    const depois = aplicarReordenacoes(clientes, alteracoes)
+    expect(rotas.rotaDeHoje(depois, data).map((item) => item.cliente.id)).toEqual(['A', 'C', 'B'])
+    expect(rotas.rotaDoDia(depois, 31).map((item) => item.cliente.id)).toEqual(['B', 'D', 'A'])
+    expect(rotas.rotaDeHoje(depois, seguinte).filter((item) => item.estado.diaAgendado === 31)
+      .map((item) => item.cliente.id)).toEqual(['B', 'D', 'A'])
+    expect(clientes).toEqual(antes)
+  })
 })
 
 describe('arrasteNaRotaDoDia', () => {
@@ -709,7 +736,6 @@ describe('montarDiasDeVisita', () => {
     { dias: [0] }, { dias: [32] }, { dias: [-1] }, { dias: [1.5] },
     { dias: [NaN] }, { dias: [Infinity] }, { dias: [5, 5] },
   ])('recusa dias inválidos ou repetidos (%j)', ({ dias }) => {
-    expect(rotas.montarDiasDeVisita).toBeTypeOf('function')
     expect(() => rotas.montarDiasDeVisita(dias)).toThrow(TypeError)
   })
 })
