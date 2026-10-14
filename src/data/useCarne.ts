@@ -124,7 +124,7 @@ export type CarneDoCliente = {
   registrarVenda: (entrada: EntradaVenda) => void
   registrarPagamento: (saleId: string, entrada: EntradaPagamento) => void
   cancelarPagamento: (pagamento: Pagamento, quando: string) => void
-  cancelarVenda: (venda: Venda, quando: string) => void
+  cancelarVenda: (venda: Venda) => void
 }
 
 export type FalhaDeEscrita = {
@@ -288,13 +288,13 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
    * isso é `cancelarPagamento`, um por um.
    */
   const cancelarVenda = useCallback(
-    (venda: Venda, quando: string) => {
+    (venda: Venda) => {
       if (!businessId) return
 
       const referencia = doc(db, 'businesses', businessId, 'sales', venda.id)
 
       updateDoc(referencia, {
-        ...montarCancelamentoVenda(quando, {
+        ...montarCancelamentoVenda({
           agora: new Date(),
           dispositivo: identificarDispositivo(),
         }),

@@ -186,7 +186,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
                 : undefined
             }
             aoCancelarPagamento={permiteEscrita ? cancelarPagamento : undefined}
-            aoCancelarVenda={permiteEscrita ? (venda) => cancelarVenda(venda, hoje) : undefined}
+            aoCancelarVenda={permiteEscrita ? cancelarVenda : undefined}
           />
         ))}
       </div>

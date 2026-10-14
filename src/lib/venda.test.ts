@@ -265,14 +265,31 @@ describe('cancelamento da venda', () => {
   })
 
   it('monta exatamente o fato do cancelamento e a autoria, sem outros campos', () => {
-    expect(montarCancelamentoVenda('2026-10-13', {
-      agora: new Date(), dispositivo: 'abc',
+    expect(montarCancelamentoVenda({
+      agora: new Date(2026, 9, 13, 10, 0), dispositivo: 'abc',
     })).toEqual({ cancelada: true, canceladaEm: '2026-10-13', atualizadoPor: 'abc' })
   })
 
-  it('recusa data fora do formato civil', () => {
-    expect(montarCancelamentoVenda).toBeTypeOf('function')
-    expect(() => montarCancelamentoVenda('13/10/2026', CONTEXTO)).toThrow(TypeError)
+  it('grava o dia do momento da escrita, não o de quando a tela abriu', () => {
+    // A tela montou no dia 13 e ficou aberta; o cancelamento é confirmado
+    // depois da meia-noite. A data gravada é do dia 14 — e a regra não deixa
+    // corrigi-la depois.
+    expect(montarCancelamentoVenda({
+      agora: new Date(2026, 9, 14, 0, 5), dispositivo: 'abc',
+    }).canceladaEm).toBe('2026-10-14')
+  })
+
+  it('usa o dia civil local, não o de UTC', () => {
+    // 23:30 em São Paulo já é dia 14 em UTC.
+    expect(montarCancelamentoVenda({
+      agora: new Date(2026, 9, 13, 23, 30), dispositivo: 'abc',
+    }).canceladaEm).toBe('2026-10-13')
+  })
+
+  it('recusa momento inválido', () => {
+    expect(() => montarCancelamentoVenda({
+      agora: new Date(Number.NaN), dispositivo: 'abc',
+    })).toThrow(TypeError)
   })
 })
 
