@@ -624,6 +624,44 @@ anterior.
 
 — referente a src/data/useCarneDaEmpresa.ts
 
+## src/lib/rotas.ts
+
+Rota é por **dia do mês** e seus fatos pertencem ao cliente: `diasDeVisita`,
+`rotaDesde`, `ordemPorDia`, `ordemDoDia` e as marcas de visita. Este módulo usa o tipo
+estrutural `ClienteNaRota`, sem Firestore ou tela, e devolve alterações para quem grava.
+`montarDiasDeVisita` aceita apenas inteiros de 1 a 31 sem repetição e ordena uma cópia.
+
+**Pendente é derivado, nunca gravado.** `agendaRecente` escolhe a maior data até hoje
+entre os dias de visita no mês atual e no anterior. Sem Visitado cobrindo essa agenda,
+o cliente segue pendente no dia seguinte, inclusive na virada do mês. Ausente registra
+só a tentativa e não encerra a pendência; `ausenteHoje` vale apenas na data da marca.
+Visitado hoje continua na lista, na mesma posição. Desfazer volta `ultimoVisitado` para
+`visitadoAnterior` (um nível); marcar duas vezes no mesmo dia preserva esse retorno.
+
+**`rotaDesde` corta agendas anteriores a ela.** Colocar um cliente no dia 5 em 10 de
+outubro não cria uma pendência de 5 de outubro. A data igual a `rotaDesde` conta.
+Datas são strings civis `'YYYY-MM-DD'`, comparadas como strings; não há hora na rota.
+`dataDaVisita` recebe mês de 1 a 12 e converte para o mês de 0 a 11 de `diasNoMes`.
+Dia 31 em mês curto cai no último dia do mês, como no vencimento. Se 30 e 31 caem
+juntos em 30 de novembro, a agenda usa o dia 30, independentemente da ordem da lista.
+
+**A ordem não é recalculada por endereço ou nome.** No dia agendado, a chave vem de
+`ordemPorDia[String(dia)]`; sem ela, vem de `BASE_SEM_ORDEM + numero`, usando o número
+fixo da planilha. Atrasados sem ordem temporária entram depois da maior chave calculada,
+por data agendada e depois número, separados por `PASSO`. Arrastar um atrasado produz
+`ordemDoDia = { data: hoje, valor }`, que só vale naquela data; arrastar alguém do dia
+altera a ordem daquele dia do mês.
+
+**Ordem fracionária evita regravar os vizinhos.** Um arraste devolve uma alteração:
+a média das chaves dos novos vizinhos, ou um `PASSO` antes/depois na borda. Se a média
+não fica estritamente entre os vizinhos, acabou a precisão numérica: só então a lista
+inteira daquele dia é rebalanceada na ordem nova com `PASSO * (i + 1)`. Na rota de hoje,
+cada item rebalanceado mantém seu destino: ordem por dia para os do dia, temporária
+para os atrasados. Posição sem mudança não produz escrita. As funções não modificam
+as listas nem os clientes recebidos.
+
+— referente a src/lib/rotas.ts e src/lib/rotas.test.ts
+
 ## src/lib/parcelas.ts
 
 Onde a resposta do dono sobre pagamento parcial vira código. Todo o carnê é derivado daqui;
