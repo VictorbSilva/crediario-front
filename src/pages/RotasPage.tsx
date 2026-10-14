@@ -1,174 +1,228 @@
-import { useMemo, useState } from 'react'
-import { GripVertical } from 'lucide-react'
-import { DemoBanner } from '@/components/ui/DemoBanner'
+import { Fragment, useMemo, useState } from 'react'
+import {
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import type { Announcements, DragEndEvent, Modifier, ScreenReaderInstructions } from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { ParadaDaRota } from '@/components/rotas/ParadaDaRota'
+import { SeletorDoDia } from '@/components/rotas/SeletorDoDia'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Kpi } from '@/components/ui/Kpi'
 import { Nota } from '@/components/ui/Nota'
-import { SearchInput } from '@/components/ui/SearchInput'
-import { StatusPill } from '@/components/ui/StatusPill'
-import type { TomStatus } from '@/components/ui/StatusPill'
-import { rotasDemo } from '@/demo/dadosDemo'
-import type { SituacaoParada } from '@/demo/dadosDemo'
-import { formatarCentavosCurto } from '@/lib/dinheiro'
-import { normalizar } from '@/lib/texto'
+import { useClientes } from '@/data/useClientes'
+import { dataBonita, dataLocalISO } from '@/lib/data'
+import {
+  arrasteNaRotaDeHoje,
+  arrasteNaRotaDoDia,
+  contagemPorDia,
+  rotaDeHoje,
+  rotaDoDia,
+} from '@/lib/rotas'
+import type { ItemDaRota } from '@/lib/rotas'
+import type { Cliente } from '@/types/cliente'
 
-const rotulosParada: Record<SituacaoParada, { texto: string; tom: TomStatus }> = {
-  cobrar: { texto: 'Cobrar', tom: 'marca' },
-  pago: { texto: 'Pago', tom: 'sucesso' },
-  ausente: { texto: 'Ausente', tom: 'alerta' },
-  atrasado: { texto: 'Atrasado', tom: 'perigo' },
+const INSTRUCOES: ScreenReaderInstructions = {
+  draggable:
+    'Para mover este cliente na ordem da rota, pressione espaço ou enter. Use as setas para cima ou para baixo para escolher a posição, espaço ou enter para soltar, ou escape para cancelar.',
+}
+
+// A lista só ordena na vertical; sem isto o item acompanharia o dedo para os lados.
+const travarNoEixoVertical: Modifier = ({ transform }) => ({ ...transform, x: 0 })
+
+// Mesmo critério de `src/lib/rotas.ts` para o atrasado "solto": sem posição gravada para hoje.
+// É o início desse bloco que o separador marca.
+function ehAtrasadoSolto(item: ItemDaRota<Cliente>, hoje: string): boolean {
+  const posicao = item.cliente.ordemDoDia
+  return item.estado.atrasado && (posicao?.data !== hoje || !Number.isFinite(posicao?.valor))
 }
 
 export function RotasPage() {
-  const [busca, setBusca] = useState('')
-  const [selecionadaId, setSelecionadaId] = useState<string | null>(null)
+  const { clientes, carregando, erro, falhas, descartarFalha, marcarNaRota, reordenarRota } =
+    useClientes()
 
-  const encontradas = useMemo(() => {
-    const termo = normalizar(busca)
-    if (!termo) return rotasDemo
-    return rotasDemo.filter((rota) => normalizar(rota.nome).includes(termo))
-  }, [busca])
+  // `null` segue o dia de hoje, mesmo que o app fique aberto durante a virada da meia-noite.
+  const [escolhido, setEscolhido] = useState<number | null>(null)
 
-  const selecionada =
-    encontradas.find((rota) => rota.id === selecionadaId) ?? encontradas[0]
+  const hoje = dataLocalISO(new Date())
+  const hojeDia = Number(hoje.slice(8, 10))
+  const selecionado = escolhido ?? hojeDia
+  const ehHoje = selecionado === hojeDia
+
+  const contagem = useMemo(() => contagemPorDia(clientes), [clientes])
+  const itensHoje = useMemo(
+    () => (ehHoje ? rotaDeHoje(clientes, hoje) : []),
+    [clientes, hoje, ehHoje],
+  )
+  const itensDia = useMemo(
+    () => (ehHoje ? [] : rotaDoDia(clientes, selecionado)),
+    [clientes, selecionado, ehHoje],
+  )
+  const ids = useMemo(
+    () => (ehHoje ? itensHoje : itensDia).map((item) => item.cliente.id),
+    [ehHoje, itensHoje, itensDia],
+  )
+  const nomes = useMemo(
+    () => new Map(clientes.map((cliente) => [cliente.id, cliente.nome])),
+    [clientes],
+  )
+
+  // Mouse com distância e toque com atraso: o mesmo gesto não pode ser ao mesmo tempo
+  // rolar a lista e arrastar um item. PointerSensor fica de fora de propósito.
+  const sensores = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const nomeDe = (id: string | number) => nomes.get(String(id)) ?? 'Cliente'
+  const posicaoDe = (id: string | number) => `${ids.indexOf(String(id)) + 1} de ${ids.length}`
+  const anuncios: Announcements = {
+    onDragStart: ({ active }) => `Pegou ${nomeDe(active.id)}. Posição ${posicaoDe(active.id)}.`,
+    onDragOver: ({ active, over }) =>
+      over ? `${nomeDe(active.id)} está na posição ${posicaoDe(over.id)}.` : undefined,
+    onDragEnd: ({ active, over }) =>
+      over
+        ? `${nomeDe(active.id)} foi solto na posição ${posicaoDe(over.id)}.`
+        : `${nomeDe(active.id)} foi solto no mesmo lugar.`,
+    onDragCancel: ({ active }) => `Arrasto cancelado. ${nomeDe(active.id)} ficou onde estava.`,
+  }
+
+  function aoSoltar({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) return
+    const de = ids.indexOf(String(active.id))
+    const para = ids.indexOf(String(over.id))
+    if (de === -1 || para === -1) return
+
+    reordenarRota(
+      ehHoje
+        ? arrasteNaRotaDeHoje(itensHoje, de, para, hoje, clientes)
+        : arrasteNaRotaDoDia(itensDia, de, para, selecionado),
+    )
+  }
+
+  const inicioDosAtrasados = itensHoje.findIndex((item) => ehAtrasadoSolto(item, hoje))
+  const visitados = itensHoje.filter((item) => item.estado.situacao === 'visitado').length
+  const ausentes = itensHoje.filter((item) => item.estado.ausenteHoje).length
+  const atrasados = itensHoje.filter((item) => item.estado.atrasado).length
 
   return (
-    <>
-      <DemoBanner />
-
+    <div>
       <div className="mb-5">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Rotas</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Monte a ordem de visita e acompanhe a cobrança em campo.
+          Veja a rota de hoje e ajuste a ordem de visita de qualquer dia do mês.
         </p>
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[300px_1fr]">
-        <div>
-          <div className="mb-3">
-            <SearchInput
-              id="busca-rotas"
-              label="Buscar rotas pelo nome"
-              placeholder="Buscar rota pelo nome"
-              value={busca}
-              onChange={setBusca}
-            />
-          </div>
-
-          {encontradas.length === 0 ? (
-            <EmptyState>Nenhuma rota encontrada para esta busca.</EmptyState>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {encontradas.map((rota) => {
-                const ativa = selecionada?.id === rota.id
-                return (
-                  <li key={rota.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelecionadaId(rota.id)}
-                      className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-white p-3.5 text-left transition-colors ${
-                        ativa
-                          ? 'border-brand-600 ring-1 ring-brand-600'
-                          : 'border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-slate-900">
-                          {rota.nome}
-                        </span>
-                        <span className="mt-0.5 block text-xs text-slate-500">
-                          {rota.concluidas} de {rota.visitas} visitas
-                        </span>
-                      </span>
-                      {rota.pendentesSync > 0 ? (
-                        <StatusPill tom="marca">{rota.pendentesSync} pend.</StatusPill>
-                      ) : null}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+      {erro ? (
+        <div className="mb-4">
+          <Nota tom="alerta" titulo="Não foi possível carregar">
+            {erro}
+          </Nota>
         </div>
+      ) : null}
 
-        {selecionada ? (
-          <div>
+      {falhas.length > 0 ? (
+        <div className="mb-4 flex flex-col gap-2">
+          {falhas.map((falha) => (
+            <Nota key={falha.id} tom="alerta" titulo="Uma escrita foi recusada">
+              <span>{falha.mensagem}</span>
+              <button
+                type="button"
+                onClick={() => descartarFalha(falha.id)}
+                className="ml-2 font-semibold underline underline-offset-2"
+              >
+                Entendi
+              </button>
+            </Nota>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="grid items-start gap-5 lg:grid-cols-[320px_1fr]">
+        <section aria-labelledby="titulo-dia-do-mes">
+          <h2 id="titulo-dia-do-mes" className="mb-2 text-sm font-semibold text-slate-900">
+            Dia do mês
+          </h2>
+          <SeletorDoDia
+            hojeDia={hojeDia}
+            selecionado={selecionado}
+            contagem={contagem}
+            aoEscolher={setEscolhido}
+          />
+        </section>
+
+        <section aria-labelledby="titulo-da-rota">
+          {ehHoje ? (
             <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Kpi rotulo="Visitas" valor={String(selecionada.visitas)} />
-              <Kpi rotulo="Concluídas" valor={String(selecionada.concluidas)} tom="sucesso" />
-              <Kpi
-                rotulo="Previsto"
-                valor={formatarCentavosCurto(selecionada.previstoCentavos)}
-              />
-              <Kpi
-                rotulo="Pendentes de sync"
-                valor={String(selecionada.pendentesSync)}
-                tom="marca"
-              />
+              <Kpi rotulo="Na rota" valor={String(itensHoje.length)} />
+              <Kpi rotulo="Visitados" valor={String(visitados)} tom="sucesso" />
+              <Kpi rotulo="Ausentes" valor={String(ausentes)} tom="alerta" />
+              <Kpi rotulo="Atrasados" valor={String(atrasados)} tom="perigo" />
             </div>
-
+          ) : (
             <div className="mb-4">
               <Nota tom="info">
-                Alterações na ordem ficam salvas neste dispositivo e sincronizam quando a
-                conexão voltar.
+                Aqui você muda a ordem do dia {selecionado}. As marcas de visita ficam na rota de
+                hoje.
               </Nota>
             </div>
+          )}
 
-            <h2 className="mb-3 text-sm font-semibold text-slate-900">
-              Ordem de visita · {selecionada.nome}
-            </h2>
+          <h2 id="titulo-da-rota" className="mb-3 text-sm font-semibold text-slate-900">
+            {ehHoje ? `Rota de hoje · ${dataBonita(hoje)}` : `Rota do dia ${selecionado}`}
+          </h2>
 
-            {selecionada.paradas.length === 0 ? (
-              <EmptyState>Esta rota ainda não tem paradas.</EmptyState>
-            ) : (
-              <ul className="flex max-w-3xl flex-col gap-2.5">
-                {selecionada.paradas.map((parada, indice) => {
-                  const situacao = rotulosParada[parada.situacao]
-                  return (
-                    <li
-                      key={parada.id}
-                      className="flex items-center gap-3.5 rounded-xl border border-slate-200 bg-white p-3.5"
-                    >
-                      <span
-                        aria-hidden
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white"
-                      >
-                        {indice + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-slate-900">
-                          {parada.clienteNome}
-                        </div>
-                        <div className="mt-0.5 truncate text-xs text-slate-500">
-                          {parada.endereco}
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <div className="text-sm font-bold text-slate-900">
-                          {formatarCentavosCurto(parada.valorCentavos)}
-                        </div>
-                        <StatusPill tom={situacao.tom} className="mt-1">
-                          {situacao.texto}
-                        </StatusPill>
-                      </div>
-                      <GripVertical
-                        size={20}
-                        aria-hidden
-                        className="shrink-0 text-slate-300"
-                      />
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-
-            <p className="mt-3 max-w-3xl text-xs text-slate-400">
-              Reordenar por arrastar ainda não está ligado — a alça é visual até a
-              integração com o Firestore.
-            </p>
-          </div>
-        ) : null}
+          {carregando ? (
+            <EmptyState>Carregando os clientes deste aparelho…</EmptyState>
+          ) : ids.length === 0 ? (
+            <EmptyState>
+              Nenhum cliente neste dia. Escolha os dias de visita no cadastro do cliente.
+            </EmptyState>
+          ) : (
+            <DndContext
+              sensors={sensores}
+              collisionDetection={closestCenter}
+              modifiers={[travarNoEixoVertical]}
+              accessibility={{ announcements: anuncios, screenReaderInstructions: INSTRUCOES }}
+              onDragEnd={aoSoltar}
+            >
+              <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+                <ul className="flex max-w-3xl flex-col gap-2.5">
+                  {ehHoje
+                    ? itensHoje.map((item, indice) => (
+                        <Fragment key={item.cliente.id}>
+                          {indice === inicioDosAtrasados ? (
+                            <li className="px-1 pt-2 text-xs font-semibold text-danger">
+                              Atrasados · do mais antigo para o mais novo
+                            </li>
+                          ) : null}
+                          <ParadaDaRota
+                            cliente={item.cliente}
+                            estado={item.estado}
+                            aoMarcar={marcarNaRota}
+                          />
+                        </Fragment>
+                      ))
+                    : itensDia.map((item) => (
+                        <ParadaDaRota key={item.cliente.id} cliente={item.cliente} />
+                      ))}
+                </ul>
+              </SortableContext>
+            </DndContext>
+          )}
+        </section>
       </div>
-    </>
+    </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
+  FieldPath,
   collection,
   deleteField,
   doc,
@@ -10,17 +11,21 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore'
 import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'
 import { useAuth } from '@/auth/useAuth'
 import { entradaDoCliente, montarCamposCliente, montarEdicaoCliente } from '@/lib/cliente'
 import type { EntradaCliente } from '@/lib/cliente'
+import { dataLocalISO } from '@/lib/data'
 import { identificarDispositivo } from '@/lib/dispositivo'
 import { db } from '@/lib/firebase'
+import { desmarcar, marcarAusente, marcarVisitado } from '@/lib/rotas'
+import type { Reordenacao } from '@/lib/rotas'
 import { confiancaDaLista, estadoDeSync } from '@/lib/sync'
 import type { Cliente } from '@/types/cliente'
 import { ClientesContext } from './clientes-context'
-import type { ClientesContextValue, FalhaDeEscrita } from './clientes-context'
+import type { AcaoNaRota, ClientesContextValue, FalhaDeEscrita } from './clientes-context'
 
 const PREFIXO_SINCRONIZOU = 'crediario:sincronizou:'
 
@@ -70,6 +75,18 @@ function paraCliente(documento: QueryDocumentSnapshot<DocumentData>): Cliente {
     atualizadoPor: dados.atualizadoPor,
     pendente: documento.metadata.hasPendingWrites,
   }
+}
+
+const alteracaoDaMarca = { visitado: marcarVisitado, ausente: marcarAusente, desmarcar }
+
+// A ordem de um dia mora num mapa (`ordemPorDia`) compartilhado por todos os dias do
+// cliente: gravar o mapa inteiro faria dois aparelhos sobrescreverem um ao outro. Já
+// `ordemDoDia` é gravado inteiro, porque a regra exige `data` e `valor` juntos.
+function campoEValor(reordenacao: Reordenacao): [string | FieldPath, unknown] {
+  if (reordenacao.tipo === 'dia') {
+    return [new FieldPath('ordemPorDia', String(reordenacao.dia)), reordenacao.valor]
+  }
+  return ['ordemDoDia', { data: reordenacao.data, valor: reordenacao.valor }]
 }
 
 function codigoDoErro(falha: unknown): string {
@@ -213,6 +230,72 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
     [businessId, registrarFalha],
   )
 
+  const marcarNaRota = useCallback(
+    (cliente: Cliente, acao: AcaoNaRota) => {
+      if (!businessId) return
+
+      const { definir, remover } = alteracaoDaMarca[acao](cliente, dataLocalISO(new Date()))
+      if (Object.keys(definir).length === 0 && remover.length === 0) return
+      const referencia = doc(db, 'businesses', businessId, 'clients', cliente.id)
+
+      updateDoc(referencia, {
+        ...definir,
+        ...Object.fromEntries(remover.map((campo) => [campo, deleteField()])),
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: identificarDispositivo(),
+      }).catch((causa: unknown) => {
+        registrarFalha(`Não foi possível marcar a visita de ${cliente.nome}.`, causa)
+      })
+    },
+    [businessId, registrarFalha],
+  )
+
+  const reordenarRota = useCallback(
+    (reordenacoes: Reordenacao[]) => {
+      if (!businessId || reordenacoes.length === 0) return
+
+      const dispositivo = identificarDispositivo()
+      const referenciaDe = (clienteId: string) =>
+        doc(db, 'businesses', businessId, 'clients', clienteId)
+      const falhou = (causa: unknown) => {
+        registrarFalha('Não foi possível salvar a nova ordem da rota.', causa)
+      }
+
+      if (reordenacoes.length === 1) {
+        const [reordenacao] = reordenacoes
+        const [campo, valor] = campoEValor(reordenacao)
+
+        updateDoc(
+          referenciaDe(reordenacao.clienteId),
+          campo,
+          valor,
+          'atualizadoEm',
+          serverTimestamp(),
+          'atualizadoPor',
+          dispositivo,
+        ).catch(falhou)
+        return
+      }
+
+      const lote = writeBatch(db)
+      for (const reordenacao of reordenacoes) {
+        const [campo, valor] = campoEValor(reordenacao)
+
+        lote.update(
+          referenciaDe(reordenacao.clienteId),
+          campo,
+          valor,
+          'atualizadoEm',
+          serverTimestamp(),
+          'atualizadoPor',
+          dispositivo,
+        )
+      }
+      lote.commit().catch(falhou)
+    },
+    [businessId, registrarFalha],
+  )
+
   const valor = useMemo<ClientesContextValue>(() => {
     const ativos = clientes.filter((cliente) => cliente.arquivado !== true)
     const arquivados = clientes.filter((cliente) => cliente.arquivado === true)
@@ -237,6 +320,8 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
       criarCliente,
       editarCliente,
       alternarArquivo,
+      marcarNaRota,
+      reordenarRota,
     }
   }, [
     clientes,
@@ -249,6 +334,8 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
     criarCliente,
     editarCliente,
     alternarArquivo,
+    marcarNaRota,
+    reordenarRota,
   ])
 
   return <ClientesContext.Provider value={valor}>{children}</ClientesContext.Provider>
