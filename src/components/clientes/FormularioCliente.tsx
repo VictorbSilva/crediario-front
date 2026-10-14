@@ -14,6 +14,7 @@ import {
 import type { EntradaCliente } from '@/lib/cliente'
 import { avisoDeConferencia } from '@/lib/sync'
 import type { Cliente } from '@/types/cliente'
+import { SeletorDeDias } from './SeletorDeDias'
 
 export function FormularioCliente({
   cliente,
@@ -145,6 +146,12 @@ export function FormularioCliente({
         erro={mostrar('endereco')}
         aoMudar={mudar('endereco')}
         aoSair={sair('endereco')}
+      />
+
+      <SeletorDeDias
+        id={base + '-dias-de-visita'}
+        dias={entrada.diasDeVisita}
+        aoMudar={(diasDeVisita) => setEntrada((atual) => ({ ...atual, diasDeVisita }))}
       />
 
       <Campo

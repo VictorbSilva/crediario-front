@@ -11,6 +11,14 @@ export type Cliente = {
   cpfDigits?: string
   endereco?: string
   rotaId?: string | null
+  diasDeVisita?: number[]
+  rotaDesde?: string
+  ordemPorDia?: Record<string, number>
+  ordemDoDia?: { data: string; valor: number }
+  ultimaMarca?: 'visitado' | 'ausente'
+  ultimaMarcaEm?: string
+  ultimoVisitado?: string
+  visitadoAnterior?: string
   observacao?: string
   arquivado?: boolean
   cadastradoEm: string

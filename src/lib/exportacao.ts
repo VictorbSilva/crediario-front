@@ -13,6 +13,14 @@ export type ClienteExportavel = {
   cpfDigits?: string
   endereco?: string
   rotaId?: string | null
+  diasDeVisita?: number[]
+  rotaDesde?: string
+  ordemPorDia?: Record<string, number>
+  ordemDoDia?: { data: string; valor: number }
+  ultimaMarca?: 'visitado' | 'ausente'
+  ultimaMarcaEm?: string
+  ultimoVisitado?: string
+  visitadoAnterior?: string
   observacao?: string
   arquivado?: boolean
   cadastradoEm: string
@@ -126,6 +134,14 @@ export function paraJSON(
       cpfDigits: cliente.cpfDigits,
       endereco: cliente.endereco,
       rotaId: cliente.rotaId,
+      diasDeVisita: cliente.diasDeVisita,
+      rotaDesde: cliente.rotaDesde,
+      ordemPorDia: cliente.ordemPorDia,
+      ordemDoDia: cliente.ordemDoDia,
+      ultimaMarca: cliente.ultimaMarca,
+      ultimaMarcaEm: cliente.ultimaMarcaEm,
+      ultimoVisitado: cliente.ultimoVisitado,
+      visitadoAnterior: cliente.visitadoAnterior,
       observacao: cliente.observacao,
       arquivado: cliente.arquivado,
       cadastradoEm: cliente.cadastradoEm,

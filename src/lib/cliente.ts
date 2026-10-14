@@ -1,5 +1,6 @@
 import { situacaoCpf } from './cpf'
 import { dataLocalISO } from './data'
+import { montarDiasDeVisita } from './rotas'
 import type { ConfiancaDaLista } from './sync'
 import { normalizar, somenteDigitos } from './texto'
 
@@ -26,6 +27,7 @@ export type EntradaCliente = {
   cpf: string
   endereco: string
   observacao: string
+  diasDeVisita: number[]
 }
 
 export const ENTRADA_CLIENTE_VAZIA: EntradaCliente = {
@@ -35,6 +37,7 @@ export const ENTRADA_CLIENTE_VAZIA: EntradaCliente = {
   cpf: '',
   endereco: '',
   observacao: '',
+  diasDeVisita: [],
 }
 
 export function entradaDoCliente(cliente: {
@@ -44,6 +47,7 @@ export function entradaDoCliente(cliente: {
   cpf?: string
   endereco?: string
   observacao?: string
+  diasDeVisita?: number[]
 }): EntradaCliente {
   return {
     numero: String(cliente.numero),
@@ -52,6 +56,7 @@ export function entradaDoCliente(cliente: {
     cpf: cliente.cpf ?? '',
     endereco: cliente.endereco ?? '',
     observacao: cliente.observacao ?? '',
+    diasDeVisita: [...(cliente.diasDeVisita ?? [])],
   }
 }
 
@@ -72,6 +77,8 @@ export type CamposCliente = {
   cpfDigits?: string
   endereco?: string
   observacao?: string
+  diasDeVisita?: number[]
+  rotaDesde?: string
   arquivado: boolean
   cadastradoEm: string
   atualizadoPor: string
@@ -84,6 +91,8 @@ export type CampoRemovivel =
   | 'cpfDigits'
   | 'endereco'
   | 'observacao'
+  | 'diasDeVisita'
+  | 'rotaDesde'
 
 export type EdicaoCliente = {
   definir: {
@@ -95,6 +104,8 @@ export type EdicaoCliente = {
     cpfDigits?: string
     endereco?: string
     observacao?: string
+    diasDeVisita?: number[]
+    rotaDesde?: string
     atualizadoPor: string
   }
   remover: CampoRemovivel[]
@@ -260,6 +271,12 @@ export function montarCamposCliente(
   const observacao = entrada.observacao.trim()
   if (observacao) campos.observacao = observacao
 
+  const dias = montarDiasDeVisita(entrada.diasDeVisita)
+  if (dias.length > 0) {
+    campos.diasDeVisita = dias
+    campos.rotaDesde = dataLocalISO(agora)
+  }
+
   return campos
 }
 
@@ -302,9 +319,17 @@ export function montarEdicaoCliente(
   if (observacao) definir.observacao = observacao
   else remover.push('observacao')
 
+  const dias = montarDiasDeVisita(entrada.diasDeVisita)
+  if (dias.length > 0) {
+    definir.diasDeVisita = dias
+    definir.rotaDesde = dataLocalISO(contexto.agora)
+  } else remover.push('diasDeVisita', 'rotaDesde')
+
   if (original) {
     const anterior = montarEdicaoCliente(original, contexto).definir
-    type CampoEditavel = Exclude<keyof EdicaoCliente['definir'], 'atualizadoPor'>
+    type CampoEditavel = Exclude<
+      keyof EdicaoCliente['definir'], 'atualizadoPor' | 'diasDeVisita' | 'rotaDesde'
+    >
     const grupos: readonly (readonly CampoEditavel[])[] = [
       ['nome', 'nomeBusca'],
       ['telefone', 'telefoneDigits'],
@@ -312,7 +337,7 @@ export function montarEdicaoCliente(
       ['endereco'],
       ['observacao'],
     ]
-    const inalterados = new Set<CampoEditavel>()
+    const inalterados = new Set<keyof EdicaoCliente['definir']>()
     for (const grupo of grupos) {
       if (definir[grupo[0]] !== anterior[grupo[0]]) continue
       for (const campo of grupo) {
@@ -321,6 +346,13 @@ export function montarEdicaoCliente(
       }
     }
     remover = remover.filter((campo) => !inalterados.has(campo))
+
+    const diasAnteriores = montarDiasDeVisita(original.diasDeVisita)
+    if (diasAnteriores.length === dias.length && dias.every((dia, i) => dia === diasAnteriores[i])) {
+      delete definir.diasDeVisita
+      delete definir.rotaDesde
+      remover = remover.filter((campo) => campo !== 'diasDeVisita' && campo !== 'rotaDesde')
+    }
   }
 
   return { definir, remover }
