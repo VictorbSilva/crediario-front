@@ -83,7 +83,7 @@ export function ClientePage() {
         </div>
       </div>
       {editando ? (
-        <FormularioCliente cliente={cliente} aoFechar={() => setEditando(false)} />
+        <FormularioCliente key={cliente.id} cliente={cliente} aoFechar={() => setEditando(false)} />
       ) : null}
     </div>
   )

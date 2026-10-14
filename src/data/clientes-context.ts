@@ -22,7 +22,7 @@ export type ClientesContextValue = {
   falhas: FalhaDeEscrita[]
   descartarFalha: (id: string) => void
   criarCliente: (entrada: EntradaCliente) => void
-  editarCliente: (cliente: Cliente, entrada: EntradaCliente) => void
+  editarCliente: (cliente: Cliente, entrada: EntradaCliente) => boolean
   alternarArquivo: (cliente: Cliente) => void
 }
 

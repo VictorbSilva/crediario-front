@@ -87,8 +87,8 @@ export type CampoRemovivel =
 
 export type EdicaoCliente = {
   definir: {
-    nome: string
-    nomeBusca: string
+    nome?: string
+    nomeBusca?: string
     telefone?: string
     telefoneDigits?: string
     cpf?: string
@@ -265,8 +265,10 @@ export function montarCamposCliente(
 
 export function montarEdicaoCliente(
   entrada: EntradaCliente,
-  { dispositivo }: ContextoEscrita,
+  contexto: ContextoEscrita,
+  original?: EntradaCliente,
 ): EdicaoCliente {
+  const { dispositivo } = contexto
   const nome = entrada.nome.trim().replace(/\s+/g, ' ')
   const nomeBusca = normalizar(nome)
   if (nomeBusca.length === 0) {
@@ -274,7 +276,7 @@ export function montarEdicaoCliente(
   }
 
   const definir: EdicaoCliente['definir'] = { nome, nomeBusca, atualizadoPor: dispositivo }
-  const remover: CampoRemovivel[] = []
+  let remover: CampoRemovivel[] = []
 
   const telefone = entrada.telefone.trim()
   if (telefone) definir.telefone = telefone
@@ -299,6 +301,27 @@ export function montarEdicaoCliente(
   const observacao = entrada.observacao.trim()
   if (observacao) definir.observacao = observacao
   else remover.push('observacao')
+
+  if (original) {
+    const anterior = montarEdicaoCliente(original, contexto).definir
+    type CampoEditavel = Exclude<keyof EdicaoCliente['definir'], 'atualizadoPor'>
+    const grupos: readonly (readonly CampoEditavel[])[] = [
+      ['nome', 'nomeBusca'],
+      ['telefone', 'telefoneDigits'],
+      ['cpf', 'cpfDigits'],
+      ['endereco'],
+      ['observacao'],
+    ]
+    const inalterados = new Set<CampoEditavel>()
+    for (const grupo of grupos) {
+      if (definir[grupo[0]] !== anterior[grupo[0]]) continue
+      for (const campo of grupo) {
+        delete definir[campo]
+        inalterados.add(campo)
+      }
+    }
+    remover = remover.filter((campo) => !inalterados.has(campo))
+  }
 
   return { definir, remover }
 }

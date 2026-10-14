@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing'
-import { deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
+import { deleteDoc, deleteField, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import {
   UID_DONO,
@@ -230,6 +230,39 @@ describe('clients — carimbos de tempo', () => {
 })
 
 describe('clients — edição', () => {
+  it('aceita a edição com remoção dos opcionais e preserva rotaId e os campos fixos', async () => {
+    const antes = {
+      ...clienteComoOAppEscreve(),
+      rotaId: 'rota-centro',
+      criadoEm: new Date('2026-09-03'),
+      atualizadoEm: new Date('2026-09-03'),
+    }
+    await semear('c1', antes)
+    const referencia = doc(bancoDono(), caminhoCliente('c1'))
+    expect(await veredito(updateDoc(referencia, {
+      nome: 'Maria Cláudia Santos',
+      nomeBusca: 'maria claudia santos',
+      telefone: deleteField(),
+      telefoneDigits: deleteField(),
+      cpf: deleteField(),
+      cpfDigits: deleteField(),
+      endereco: deleteField(),
+      observacao: deleteField(),
+      atualizadoPor: 'celular-do-dono',
+      atualizadoEm: serverTimestamp(),
+    }))).toBe('permitido')
+    const depois = (await getDoc(referencia)).data()!
+    expect(depois).toMatchObject({
+      nome: 'Maria Cláudia Santos', nomeBusca: 'maria claudia santos',
+      numero: antes.numero, cadastradoEm: antes.cadastradoEm, arquivado: antes.arquivado,
+      rotaId: 'rota-centro', atualizadoPor: 'celular-do-dono',
+    })
+    expect(depois.criadoEm.toDate()).toEqual(antes.criadoEm)
+    for (const campo of ['telefone', 'telefoneDigits', 'cpf', 'cpfDigits', 'endereco', 'observacao']) {
+      expect(depois).not.toHaveProperty(campo)
+    }
+  })
+
   async function semearValido(clientId: string) {
     await semear(clientId, {
       numero: 7,
