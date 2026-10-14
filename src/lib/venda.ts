@@ -292,10 +292,17 @@ export type CamposCancelamentoVenda = {
   atualizadoPor: string
 }
 
-export function montarCancelamentoVenda(
-  quando: string,
-  { dispositivo }: ContextoEscrita,
-): CamposCancelamentoVenda {
+/**
+ * `canceladaEm` sai de `agora`, o momento da escrita — nunca de uma data que
+ * a tela calculou antes. Com a página aberta atravessando a meia-noite, o
+ * "hoje" da tela ainda é ontem, e a regra não deixa corrigir `canceladaEm`
+ * depois de gravado.
+ */
+export function montarCancelamentoVenda({
+  agora,
+  dispositivo,
+}: ContextoEscrita): CamposCancelamentoVenda {
+  const quando = dataLocalISO(agora)
   if (!ehDataCivil(quando)) {
     throw new TypeError('montarCancelamentoVenda recebeu uma data que não passou na validação')
   }
