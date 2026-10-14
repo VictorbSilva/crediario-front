@@ -624,6 +624,97 @@ anterior.
 
 — referente a src/data/useCarneDaEmpresa.ts
 
+## src/lib/rotas.ts
+
+Rota é por **dia do mês** e seus fatos pertencem ao cliente: `diasDeVisita`,
+`rotaDesde`, `ordemPorDia`, `ordemDoDia` e as marcas de visita. Este módulo usa o tipo
+estrutural `ClienteNaRota`, sem Firestore ou tela, e devolve alterações para quem grava.
+`montarDiasDeVisita` aceita apenas inteiros de 1 a 31 sem repetição e ordena uma cópia.
+
+- **Ordem inválida:** `ordemPorDia` não numérica ou não finita usa `BASE_SEM_ORDEM + numero`; `ordemDoDia.valor` inválido volta a ser solto e o máximo só considera chaves finitas, para um documento ruim não quebrar Rotas.
+- **Índice inválido:** `de` e `para` precisam ser inteiros de 0 a `itens.length - 1`; fora disso, ambos os arrastes devolvem `[]`, evitando escrita indevida por erro do handler.
+- **Visita futura:** `visitadoAte` ignora `ultimoVisitado > hoje` em `estadoNaRota`, `marcarVisitado` e `desmarcar`, para o relógio adiantado não esconder o cliente nem levar a data futura para `visitadoAnterior`.
+- **Limitação aceita:** Ausente → Visitado → Desmarcar perde a marca de Ausente; ela é informativa e sua perda não altera pendência nem rota, então o modelo de desfazer de um nível permanece.
+
+**Pendente é derivado, nunca gravado.** `agendaRecente` escolhe a maior data até hoje
+entre os dias de visita no mês atual e no anterior. Sem Visitado cobrindo essa agenda,
+o cliente segue pendente no dia seguinte, inclusive na virada do mês. Ausente registra
+só a tentativa e não encerra a pendência; `ausenteHoje` vale apenas na data da marca.
+Visitado hoje continua na lista, na mesma posição. Desfazer volta `ultimoVisitado` para
+`visitadoAnterior` (um nível); marcar duas vezes no mesmo dia preserva esse retorno.
+
+**Ausente depois de Visitado no mesmo dia não faz nada (C1).** `marcarAusente` devolve
+uma alteração vazia quando `ultimoVisitado === hoje`. Isso impede a combinação
+"visitado e ausente hoje" e preserva a visita, que `desmarcar` desfaz em um nível.
+
+**`rotaDesde` corta agendas anteriores a ela.** Colocar um cliente no dia 5 em 10 de
+outubro não cria uma pendência de 5 de outubro. A data igual a `rotaDesde` conta.
+Datas são strings civis `'YYYY-MM-DD'`, comparadas como strings; não há hora na rota.
+`dataDaVisita` recebe mês de 1 a 12 e converte para o mês de 0 a 11 de `diasNoMes`.
+Dia 31 em mês curto cai no último dia do mês, como no vencimento. Se 30 e 31 caem
+juntos em 30 de novembro, a agenda usa o dia 30. **Quando vários dias caem na mesma
+data (C2), ganha o dia da data se estiver configurado; senão, ganha o menor dia
+configurado entre os candidatos.** O dia da data é também o menor dos candidatos
+quando está configurado, porque os demais foram limitados para baixo. Assim, em
+28/02/2027, `[29, 31]` e `[31, 29]` usam 29; `[28, 31]` usa 28. Um dia 31 sozinho
+continua usando 31. O desempate nunca inventa um dia fora de `diasDeVisita` e não
+depende da ordem dos dias ou dos meses percorridos, preservando a chave de `ordemPorDia`.
+
+**A ordem não é recalculada por endereço ou nome.** No dia agendado, a chave vem de
+`ordemPorDia[String(dia)]`; sem ela, vem de `BASE_SEM_ORDEM + numero`, usando o número
+fixo da planilha. Atrasados sem ordem temporária entram depois da maior chave calculada,
+por data agendada e depois número, separados por `PASSO`. Arrastar um atrasado produz
+`ordemDoDia = { data: hoje, valor }`, que só vale naquela data; arrastar alguém do dia
+altera a ordem daquele dia do mês.
+
+**O bloco de atrasados soltos é intransponível (B1).** Solto é o atrasado sem
+`ordemDoDia` com `data === hoje`; o bloco fica no fim, do mais antigo para o mais novo.
+Ao arrastar um cliente do dia ou um atrasado com posição para dentro ou depois desse
+bloco, o item é encaixado antes dele: a nova chave fica um `PASSO` depois da última
+chave fixa restante, ou é `PASSO` se não houver nenhuma. A chave de um solto também
+não serve como vizinho na borda do trecho fixo. Mover um solto dentro do bloco não
+grava nada; mover para cima do bloco grava uma posição de hoje entre os vizinhos fixos.
+As chaves dos soltos são calculadas de novo em cada montagem: persistir esses números
+em `ordemPorDia` levaria uma posição temporária para os meses seguintes.
+Se o encaixe antes do bloco devolve o item à posição original, o arraste retorna `[]`
+antes de calcular a chave. Regravar sem mover alteraria sua posição nos meses seguintes
+em relação aos clientes do mesmo dia que não aparecem hoje.
+
+**Ordem fracionária evita regravar os vizinhos.** Um arraste devolve uma alteração:
+a média das chaves dos novos vizinhos, ou um `PASSO` antes/depois na borda. Se a média
+não fica estritamente entre os vizinhos, acabou a precisão numérica: só então a lista
+é rebalanceada na ordem nova com `PASSO * (i + 1)`. Na rota de hoje, cada item
+rebalanceado mantém seu destino: ordem por dia para os do dia, temporária para os
+atrasados, incluindo os soltos. Posição sem mudança não produz escrita. As funções
+não modificam as listas nem os clientes recebidos.
+
+**O rebalanceamento de hoje leva o dia inteiro (C3).** `arrasteNaRotaDeHoje` recebe
+`todos`, além dos itens de hoje. Sem precisão, primeiro rebalanceia a lista de hoje
+na ordem já ajustada pelo B1. Para cada `diaAgendado` dos clientes do dia nessa lista,
+acrescenta os clientes de `rotaDoDia(todos, dia)` que ainda não receberam uma
+reordenação para **esse dia**, na ordem atual deles, com `PASSO * (n + j + 1)`: `n` é
+o tamanho da lista de hoje e `j` recomeça em zero em cada dia. Isso inclui clientes com
+`rotaDesde` futura e clientes presentes hoje sob outro dia agendado — um cliente com
+dias 30 e 31 pode precisar das duas reordenações quando ambos caem em 30 de novembro.
+O filtro é por cliente **e dia**, para não deixar a ordem do outro dia na escala
+antiga, embaralhando os meses seguintes. Arraste simples continua devolvendo uma
+alteração; `arrasteNaRotaDoDia` mantém seu contrato.
+
+**Quem grava deve aplicar o retorno inteiro.** `AlteracaoDeVisita` vira um único
+`updateDoc` no cliente: os campos de `definir` e os de `remover` convertidos em
+`deleteField()` vão juntos. Separar os updates pode deixar `ultimaMarca` sem
+`ultimaMarcaEm` ou `visitadoAnterior` sem `ultimoVisitado`, estados recusados pela regra;
+offline, essa recusa só chega horas depois.
+
+O `Reordenacao[]` de um rebalanceamento deve ir em um único `writeBatch`, incluindo
+todas as entradas de um cliente quando houver dias diferentes. Aplicar só parte do
+retorno deixa a rota com chaves de escalas diferentes e embaralha a ordem.
+`ordemDoDia` deve ser gravado como o objeto inteiro `{ data, valor }`, nunca montado
+campo a campo por updates separados ou apenas por `FieldPath` em `valor`: a regra
+exige exatamente as duas chaves juntas, e a data precisa acompanhar a posição.
+
+— referente a src/lib/rotas.ts e src/lib/rotas.test.ts
+
 ## src/lib/parcelas.ts
 
 Onde a resposta do dono sobre pagamento parcial vira código. Todo o carnê é derivado daqui;
