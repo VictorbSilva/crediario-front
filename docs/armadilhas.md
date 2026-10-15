@@ -897,6 +897,63 @@ mostrar só o principal por padrão. Ver as regras financeiras no `CLAUDE.md`.
 
 — referente a src/lib/parcelas.ts
 
+## src/lib/financeiro.ts
+
+Os números da empresa (a receber, vencido, recebido no mês) e a lista de atrasados, a partir
+**só de vendas e pagamentos**. Nenhum documento de `installments` é lido aqui: as parcelas são
+recalculadas em memória por `parcelasRegeneradas`, que chama o mesmo `gerarParcelas` que gerou
+o carnê no dia da venda.
+
+**Por que recalcular em vez de ler: custo no plano Spark.** O Financeiro é só leitura (decisão
+de 13/10/2026) e ouve apenas `sales` e `payments` pelo `useCarneDaEmpresa`. `installments` é,
+de longe, a maior das três coleções. Com o exemplo da seção daquele hook — 300 vendas de 10
+parcelas e 1.500 pagamentos —, ouvir o carnê inteiro custa 300 + 3.000 + 1.500 = **4.800
+leituras** por abertura; sem as parcelas, 300 + 1.500 = **1.800**. Numa tela aberta várias
+vezes por dia, a diferença é a cota.
+
+Recalcular só é seguro porque a venda guarda **todas** as entradas do cálculo (`dataVenda`,
+`valorTotalCentavos`, `numeroParcelas`, `diaVencimento`) e o `versaoCalculo` — é a regra de
+reversibilidade do `CLAUDE.md` sendo usada para o que ela existe. `montarCamposVenda` grava a
+venda e as parcelas do mesmo `gerarParcelas`, num lote só, e a regra torna imutáveis tanto as
+entradas da venda quanto o `vencimento` e o `valorCentavos` de cada parcela. Por isso a parcela
+recalculada é a gravada. A regra **não** confere que as parcelas batem com a venda (invariante
+5, "Coerência entre documentos"): o único escritor é o app.
+
+O `id` da parcela recalculada é `venda.id + '#' + numero`. Ele existe só para a chave do mapa
+de `alocarPagamentos` e **não é** o id do documento em `installments` — nunca use para gravar
+nem para apontar uma parcela.
+
+> **AVISO — versão de cálculo desconhecida**
+> Venda com `versaoCalculo` diferente de `VERSAO_CALCULO` **não é recalculada**:
+> `parcelasRegeneradas` devolve `null`, a venda fica fora do a receber, do vencido e dos
+> atrasados, e entra em `vendasNaoCalculadas`, para a tela avisar que os números estão abaixo
+> do real. **Nunca adivinhar.** Gerar com a regra da versão 1 uma venda feita pela versão 2
+> daria vencimentos e valores errados sem ninguém perceber. Isso acontece, por exemplo, quando
+> um aparelho com o app antigo recebe uma venda gravada por um app mais novo. Quando a versão 2
+> existir, ela é um ramo em `parcelasRegeneradas`, não uma migração.
+>
+> Venda cancelada de versão desconhecida **não** entra na contagem: cancelada, ela ficaria fora
+> das somas de qualquer jeito, então não falta nada na conta e não há o que avisar.
+
+**Os números não têm encargos.** A receber e vencido são o valor combinado, do mesmo jeito que
+o saldo da página do cliente aparece por padrão. A simulação de multa e juros é coisa daquela
+página, atrás da chave que nasce desligada (regras financeiras do `CLAUDE.md`). A alocação é a
+de `alocarPagamentos`, então o pagamento abate só o principal (`valorCentavos -
+encargoCentavos`).
+
+O recebido no mês é outra conta, a do **dinheiro que entrou**: soma o `valorCentavos` inteiro,
+com encargo, de todo pagamento não cancelado com `data` no mês de `hoje`. Por isso entram também
+os pagamentos de venda cancelada depois, de venda de versão desconhecida e de venda que não
+chegou à lista; eles ficam fora apenas do saldo.
+
+Venda cancelada fica fora do a receber, do vencido e dos atrasados, como em `saldoDoCliente`.
+`porCliente` tem uma entrada para cada cliente com pelo menos uma venda contada, mesmo quitada.
+`listaDeAtrasados` deixa só quem tem vencido e ordena por dias de atraso, vencido e número.
+Cliente que não está na lista de clientes vem com `cliente: null`, no fim, em vez de sumir: a
+dívida existe mesmo que o cadastro ainda não tenha chegado ao aparelho.
+
+— referente a src/lib/financeiro.ts e src/lib/financeiro.test.ts
+
 ## src/lib/cliente.ts
 
 `LIMITES_CLIENTE` existe para que o `maxLength` do formulário e o limite da regra saiam do
