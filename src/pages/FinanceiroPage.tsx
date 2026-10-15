@@ -1,175 +1,179 @@
 import { useMemo, useState } from 'react'
-import { DemoBanner } from '@/components/ui/DemoBanner'
+import { Link } from 'react-router-dom'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Kpi } from '@/components/ui/Kpi'
 import { Nota } from '@/components/ui/Nota'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { StatusPill } from '@/components/ui/StatusPill'
-import type { TomStatus } from '@/components/ui/StatusPill'
-import { parcelasDemo } from '@/demo/dadosDemo'
-import type { SituacaoParcela } from '@/demo/dadosDemo'
-import { formatarCentavos, formatarCentavosCurto } from '@/lib/dinheiro'
+import { useCarneDaEmpresa } from '@/data/useCarneDaEmpresa'
+import { useClientes } from '@/data/useClientes'
+import { dataBonita, dataLocalISO } from '@/lib/data'
+import { formatarCentavos } from '@/lib/dinheiro'
+import type { DocumentoExportavel } from '@/lib/exportacao'
+import { listaDeAtrasados, situacaoFinanceira } from '@/lib/financeiro'
+import type { PagamentoParaFinanceiro, VendaParaFinanceiro } from '@/lib/financeiro'
 import { normalizar } from '@/lib/texto'
 
-const rotulosParcela: Record<SituacaoParcela, { texto: string; tom: TomStatus }> = {
-  atrasada: { texto: 'Atrasada', tom: 'perigo' },
-  'vence-hoje': { texto: 'Vence hoje', tom: 'alerta' },
-  'a-vencer': { texto: 'A vencer', tom: 'alerta' },
-  paga: { texto: 'Paga', tom: 'sucesso' },
+const COLECOES_DO_FINANCEIRO = ['sales', 'payments'] as const
+
+function converterDocumentos(
+  vendas: readonly DocumentoExportavel[],
+  pagamentos: readonly DocumentoExportavel[],
+) {
+  return {
+    vendas: vendas.map(({ id, dados }): VendaParaFinanceiro => ({
+      id,
+      clientId: dados.clientId as string,
+      dataVenda: dados.dataVenda as string,
+      valorTotalCentavos: dados.valorTotalCentavos as number,
+      numeroParcelas: dados.numeroParcelas as number,
+      diaVencimento: dados.diaVencimento as number,
+      versaoCalculo: dados.versaoCalculo as number,
+      cancelada: dados.cancelada === true,
+    })),
+    pagamentos: pagamentos.map(({ id, dados }): PagamentoParaFinanceiro => ({
+      id,
+      clientId: dados.clientId as string,
+      saleId: dados.saleId as string,
+      data: dados.data as string,
+      valorCentavos: dados.valorCentavos as number,
+      encargoCentavos: dados.encargoCentavos as number | undefined,
+      cancelado: dados.cancelado === true,
+    })),
+  }
 }
 
 export function FinanceiroPage() {
+  const { vendas, pagamentos, confianca, erro } = useCarneDaEmpresa(COLECOES_DO_FINANCEIRO)
+  const { clientes } = useClientes()
   const [busca, setBusca] = useState('')
-  const [selecionadaId, setSelecionadaId] = useState<string | null>(null)
+  const hoje = dataLocalISO(new Date())
 
-  const encontradas = useMemo(() => {
+  const { situacao, atrasados } = useMemo(() => {
+    const documentos = converterDocumentos(vendas, pagamentos)
+    const situacao = situacaoFinanceira(documentos.vendas, documentos.pagamentos, hoje)
+    return { situacao, atrasados: listaDeAtrasados(situacao, clientes) }
+  }, [vendas, pagamentos, clientes, hoje])
+
+  const encontrados = useMemo(() => {
     const termo = normalizar(busca)
-    if (!termo) return parcelasDemo
-    return parcelasDemo.filter((parcela) =>
-      normalizar(parcela.clienteNome).includes(termo),
+    if (!termo) return atrasados
+    return atrasados.filter(({ cliente }) =>
+      cliente !== null && (
+        normalizar(cliente.nome).includes(termo) || String(cliente.numero).includes(termo)
+      ),
     )
-  }, [busca])
-
-  const selecionada =
-    encontradas.find((parcela) => parcela.id === selecionadaId) ?? encontradas[0]
-
-  const somar = (situacoes: SituacaoParcela[]) =>
-    parcelasDemo
-      .filter((parcela) => situacoes.includes(parcela.situacao))
-      .reduce((total, parcela) => total + parcela.valorCentavos, 0)
+  }, [atrasados, busca])
 
   return (
     <>
-      <DemoBanner />
-
       <div className="mb-5">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Financeiro</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Acompanhe parcelas, vencimentos e pagamentos dos carnês.
-        </p>
+        <p className="mt-1 text-sm text-slate-500">Valores combinados, sem multa e juros.</p>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi
-          rotulo="A receber"
-          valor={formatarCentavosCurto(somar(['atrasada', 'vence-hoje', 'a-vencer']))}
-        />
-        <Kpi rotulo="Atrasado" valor={formatarCentavosCurto(somar(['atrasada']))} tom="perigo" />
-        <Kpi rotulo="Vence hoje" valor={formatarCentavosCurto(somar(['vence-hoje']))} tom="alerta" />
-        <Kpi rotulo="Pago" valor={formatarCentavosCurto(somar(['paga']))} tom="sucesso" />
-      </div>
+      {erro ? <div className="mb-4"><Nota tom="alerta">{erro}</Nota></div> : null}
 
-      <div className="mb-4">
-        <Nota tom="alerta" titulo="Regras financeiras a configurar">
-          Juros, multa e arredondamento ainda precisam ser definidos. Os totais acima são
-          somas simples dos valores de demonstração, sem nenhum encargo aplicado.
-        </Nota>
-      </div>
-
-      <div className="grid items-start gap-5 lg:grid-cols-[1fr_320px]">
-        <div>
-          <div className="mb-3">
-            <SearchInput
-              id="busca-financeiro"
-              label="Buscar parcelas por cliente"
-              placeholder="Buscar cliente"
-              value={busca}
-              onChange={setBusca}
+      {confianca === 'desconhecida' ? (
+        <p className="text-sm text-slate-500">Carregando…</p>
+      ) : (
+        <>
+          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+            <Kpi rotulo="A receber" valor={formatarCentavos(situacao.aReceberCentavos)} />
+            <Kpi
+              rotulo="Vencido"
+              valor={formatarCentavos(situacao.vencidoCentavos)}
+              tom={situacao.vencidoCentavos > 0 ? 'perigo' : 'neutro'}
+            />
+            <Kpi
+              rotulo="Recebido no mês"
+              valor={formatarCentavos(situacao.recebidoNoMesCentavos)}
+              tom="sucesso"
             />
           </div>
 
-          {encontradas.length === 0 ? (
-            <EmptyState>Nenhuma parcela encontrada para este cliente.</EmptyState>
-          ) : (
-            <ul className="flex flex-col gap-2.5">
-              {encontradas.map((parcela) => {
-                const ativa = selecionada?.id === parcela.id
-                const situacao = rotulosParcela[parcela.situacao]
-                return (
-                  <li key={parcela.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelecionadaId(parcela.id)}
-                      className={`flex w-full items-center gap-3.5 rounded-xl border bg-white p-3.5 text-left transition-colors ${
-                        ativa
-                          ? 'border-brand-600 ring-1 ring-brand-600'
-                          : 'border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
+          {confianca === 'parcial' ? (
+            <div className="mb-4">
+              <Nota tom="alerta">
+                Este aparelho ainda não baixou todas as vendas e pagamentos. Os números podem
+                estar menores do que os reais.
+              </Nota>
+            </div>
+          ) : null}
+
+          {situacao.vendasNaoCalculadas > 0 ? (
+            <div className="mb-4">
+              <Nota tom="alerta">
+                {situacao.vendasNaoCalculadas} venda(s) foram lançadas por uma versão mais nova
+                do app e não entram nestes números. Atualize o app.
+              </Nota>
+            </div>
+          ) : null}
+
+          <section aria-labelledby="clientes-em-atraso">
+            <h2 id="clientes-em-atraso" className="mb-3 text-lg font-semibold text-slate-900">
+              Clientes em atraso
+            </h2>
+            <div className="mb-3">
+              <SearchInput
+                id="busca-financeiro"
+                label="Buscar clientes em atraso por nome ou número"
+                placeholder="Buscar por nome ou número"
+                value={busca}
+                onChange={setBusca}
+              />
+            </div>
+
+            {encontrados.length === 0 ? (
+              <EmptyState>Nenhum cliente em atraso.</EmptyState>
+            ) : (
+              <ul className="flex flex-col gap-2.5">
+                {encontrados.map((atraso) => {
+                  const { cliente } = atraso
+                  const conteudo = (
+                    <>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-slate-900">
-                          {parcela.clienteNome}
+                        <span className="flex items-center gap-2">
+                          {cliente ? (
+                            <span className="shrink-0 text-xs font-semibold text-slate-500">
+                              #{cliente.numero}
+                            </span>
+                          ) : null}
+                          <span className="truncate text-sm font-semibold text-slate-900">
+                            {cliente?.nome ?? 'Cliente não encontrado neste aparelho'}
+                          </span>
                         </span>
-                        <span className="mt-0.5 block truncate text-xs text-slate-500">
-                          {parcela.descricao}
-                        </span>
+                        {atraso.atrasoDesde !== null ? (
+                          <span className="mt-0.5 block text-xs text-slate-500">
+                            Vencido desde {dataBonita(atraso.atrasoDesde)} · {atraso.diasDeAtraso} dia(s)
+                          </span>
+                        ) : null}
+                        {cliente?.arquivado ? <StatusPill className="mt-1">Arquivado</StatusPill> : null}
                       </span>
-                      <span className="shrink-0 text-right">
-                        <span className="block text-sm font-bold text-slate-900">
-                          {formatarCentavosCurto(parcela.valorCentavos)}
-                        </span>
-                        <StatusPill tom={situacao.tom} className="mt-1">
-                          {situacao.texto}
-                        </StatusPill>
+                      <span className="shrink-0 text-right text-sm font-bold text-danger">
+                        {formatarCentavos(atraso.vencidoCentavos)}
                       </span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
-
-        {selecionada ? (
-          <aside className="overflow-hidden rounded-xl border border-slate-200 bg-white lg:sticky lg:top-6">
-            <div className="border-b border-slate-200 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Parcela selecionada
-              </div>
-              <div className="mt-1.5 text-base font-bold text-slate-900">
-                {selecionada.clienteNome}
-              </div>
-              <StatusPill tom={rotulosParcela[selecionada.situacao].tom} className="mt-2">
-                {rotulosParcela[selecionada.situacao].texto}
-              </StatusPill>
-            </div>
-
-            <dl className="flex flex-col gap-3 p-4 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Descrição</dt>
-                <dd className="text-right font-medium text-slate-900">
-                  {selecionada.descricao}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-slate-500">Valor</dt>
-                <dd className="font-bold text-slate-900">
-                  {formatarCentavos(selecionada.valorCentavos)}
-                </dd>
-              </div>
-              <div className="h-px bg-slate-200" />
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500">Juros / multa</dt>
-                <dd>
-                  <StatusPill>a configurar</StatusPill>
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500">Total com encargos</dt>
-                <dd>
-                  <StatusPill>a configurar</StatusPill>
-                </dd>
-              </div>
-            </dl>
-
-            <div className="border-t border-slate-200 p-4">
-              <EmptyState>
-                Registrar pagamento depende das regras de juros, multa e estorno.
-              </EmptyState>
-            </div>
-          </aside>
-        ) : null}
-      </div>
+                    </>
+                  )
+                  const classe = 'flex items-center gap-3.5 rounded-xl border border-slate-200 bg-white p-3.5'
+                  return (
+                    <li key={atraso.clientId}>
+                      {cliente ? (
+                        <Link
+                          to={`/clientes/${cliente.id}`}
+                          className={`${classe} transition-colors hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600`}
+                        >
+                          {conteudo}
+                        </Link>
+                      ) : <div className={classe}>{conteudo}</div>}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
     </>
   )
 }

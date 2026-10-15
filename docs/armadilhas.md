@@ -310,6 +310,31 @@ esconderia o cliente sem caminho de volta.
 
 — referente a src/pages/ClientesPage.tsx, arquivo inteiro
 
+## src/pages/FinanceiroPage.tsx
+
+Tela só de leitura, com os valores combinados, sem simulação de multa e juros. O
+`useCarneDaEmpresa` pede apenas `sales` e `payments`, pela constante de módulo
+`COLECOES_DO_FINANCEIRO`, e só fica montado enquanto a página está aberta. **Nunca
+acrescentar `installments`**: as parcelas são regeneradas em memória pelo cálculo do
+Financeiro. `useClientes()` reutiliza o provider já montado; não abre listener nem gera
+leitura adicional de clientes.
+
+**Custo no plano Spark:** as duas coleções da empresa são lidas inteiras ao montar online.
+No exemplo de 300 vendas, 10 parcelas por venda e 1.500 pagamentos, são **1.800 leituras**
+por abertura, em vez das 4.800 do carnê completo. Sair da página desmonta o hook e encerra
+os dois listeners. A lista de coleções precisa manter a mesma referência entre renders
+para não refazer as assinaturas em laço.
+
+A conversão dos documentos crus fica nesta página e copia os campos explicitamente,
+incluindo `cancelada`, `cancelado` e `encargoCentavos`. Campo novo relevante ao cálculo
+precisa entrar nesse mapeamento; existir no cache não basta. Os cálculos e a ordenação
+continuam em `src/lib/financeiro.ts`. Confiança desconhecida mostra carregamento, confiança
+parcial avisa que os números podem estar menores, e versão não calculável tem seu próprio
+aviso. Cliente ausente do cache continua na lista de atrasados, sem link; arquivado
+continua visível e identificado.
+
+— referente a src/pages/FinanceiroPage.tsx
+
 ## src/pages/RotasPage.tsx e src/components/rotas/
 
 Segunda tela lendo e gravando dado real. Toda a regra de rota está em `src/lib/rotas.ts` (ver
@@ -1467,29 +1492,12 @@ Handlers de clique que chamam função assíncrona (`sair()`, `updateServiceWork
 usam `.catch()` com log. Antes usavam `void`, que descarta a Promise e transforma
 qualquer falha em `unhandledrejection` silencioso.
 
-## src/demo/dadosDemo.ts
+## src/demo/dadosDemo.ts — histórico
 
-> **AVISO**
-> `src/demo/` contém dados FICTÍCIOS, escritos à mão só para validar o layout.
-> Nenhum número ali saiu de regra de negócio — nem os totais do Financeiro, que
-> são somas simples sem juros, multa ou arredondamento (essas regras seguem
-> indefinidas).
->
-> Toda página que consome esse módulo renderiza o `<DemoBanner />` dizendo isso na
-> tela. **Ao ligar uma tela ao Firestore, o que era só dela sai daqui e o banner sai dela
-> no mesmo commit** — se só a fonte de dados mudar e o banner ficar, o app mente para o
-> usuário dizendo que é demonstração; se só o banner sair, ele mente ao contrário,
-> apresentando dado inventado como real.
->
-> Hoje **só o Financeiro** ainda consome este módulo (`parcelasDemo`). Os clientes de
-> demonstração saíram em 21/09/2026 e as rotas, em 14/10/2026 (`rotasDemo`, `RotaDemo`,
-> `ParadaDemo` e `SituacaoParada`). Quando o Financeiro sair, `src/demo/` e o `DemoBanner`
-> saem juntos.
-
-O `<SyncBadge />` na Sidebar e na TopBar está fixo em `estado="nao-configurado"` de
-propósito. Ele já aceita todos os estados exigidos (`sincronizado`, `sincronizando`,
-`pendente`, `offline`, `erro`), mas ligá-lo a um estado otimista antes de existir
-Firestore mostraria "Sincronizado" para dados que nunca saíram do aparelho.
+Os dados fictícios e o `DemoBanner` foram removidos em 14/10/2026, quando o Financeiro
+passou a usar dados reais. Clientes e Rotas já tinham saído do demo. A troca de fonte e a
+remoção do banner aconteceram juntas: nenhuma tela deve apresentar dado inventado sem
+aviso, nem chamar dado real de demonstração. Não há mais `src/demo/` no projeto.
 
 ---
 
