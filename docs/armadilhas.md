@@ -389,7 +389,7 @@ parcela vencida (`src/lib/parcelas.ts`), que esta tela não lê de propósito (v
 novo" acima). O Victor confundiu os dois ao testar, e o dono vai confundir também, por isso a
 tela nunca diz "atrasado" sozinho: o KPI é "Visitas atrasadas", a pill é "Visita pendente desde
 {data}" e o separador é "Visitas de dias anteriores". Só os textos mudaram; no código os nomes
-continuam `atrasado` e `ehAtrasadoSolto`.
+continuam `atrasado` e `inicioDoBlocoDeAtrasados`.
 
 > **AVISO**
 > **A ordem de um dia é gravada com `FieldPath`, nunca com o mapa inteiro.** `ordemPorDia` é um
@@ -402,13 +402,17 @@ continuam `atrasado` e `ehAtrasadoSolto`.
 > deixaria a rota com chaves de escalas diferentes. Cada escrita leva `atualizadoEm` e
 > `atualizadoPor`, exigidos pela regra do cliente.
 
-**O separador "Visitas de dias anteriores" torna visível um limite que a lib impõe.** O atrasado sem posição
-gravada para hoje fica num bloco no fim, do mais antigo para o mais novo, e o arraste não
-atravessa esse bloco: soltar dentro ou depois dele encaixa o item logo antes, e mover um solto
-dentro do bloco não grava nada. Sem o separador, o dono arrastaria um atrasado, o item
-voltaria ao lugar e parecia defeito. O predicado que acha o início do bloco, `ehAtrasadoSolto`
-em `RotasPage.tsx`, é **cópia** do `solto` privado de `arrasteNaRotaDeHoje`: se um mudar, o
-outro tem de mudar junto (não foi exportado da lib porque esta tarefa não podia tocá-la).
+**O separador "Visitas de dias anteriores" marca o início do bloco de atrasados, e a posição
+vem da lib.** A tela desenha o separador antes do item em `inicioDoBlocoDeAtrasados(itensHoje)`,
+a mesma função que `arrasteNaRotaDeHoje` usa: o primeiro item com chave na faixa de
+`BASE_ATRASADO` (ver a seção do `rotas.ts`). Não há cópia do critério na tela — até 15/10
+havia, `ehAtrasadoSolto`, e ela foi removida. Desde 15/10 o dono reordena os atrasados como
+quiser, por isso o texto perdeu o "· da mais antiga para a mais nova". Cliente do dia solto
+dentro ou depois do bloco para logo acima do separador. Um atrasado solto entre o último
+cliente do dia e o primeiro do bloco recebe a média das duas chaves, que hoje fica abaixo de
+`BASE_ATRASADO`: a ordem dos itens é a escolhida, mas ele aparece **acima** do separador. A
+partir de 19/05/2027 essa média passa a cair na faixa, e o mesmo gesto o deixa abaixo. É só
+visual e só vale para o dia, porque `ordemDoDia` expira.
 
 **`hoje` é calculado a cada renderização, e a data escolhida nasce `null`.** `null` significa
 "hoje", então um app deixado aberto na virada da meia-noite passa a mostrar a rota do dia novo
@@ -777,7 +781,7 @@ com dia 30; um cliente só do dia 31 continua com dia 31. `contagemPorData` tamb
 cada cliente uma única vez em cada data. `arrasteNaRotaDaData` usa o dia do próprio
 item no arrasto simples; sem precisão, também completa os dias coincidentes, como descrito abaixo.
 
-- **Ordem inválida:** `ordemPorDia` não numérica ou não finita usa `BASE_SEM_ORDEM + numero`; `ordemDoDia.valor` inválido volta a ser solto e o máximo só considera chaves finitas, para um documento ruim não quebrar Rotas.
+- **Ordem inválida:** `ordemPorDia` não numérica ou não finita usa `BASE_SEM_ORDEM + numero`; `ordemDoDia.valor` inválido volta a ser solto, com a chave estável, para um documento ruim não quebrar Rotas.
 - **Índice inválido:** `de` e `para` precisam ser inteiros de 0 a `itens.length - 1`; fora disso, os arrastes devolvem `[]`, evitando escrita indevida por erro do handler.
 - **Visita futura:** `visitadoAte` ignora `ultimoVisitado > hoje` em `estadoNaRota`, `marcarVisitado` e `desmarcar`, para o relógio adiantado não esconder o cliente nem levar a data futura para `visitadoAnterior`.
 - **Limitação aceita:** Ausente → Visitado → Desmarcar perde a marca de Ausente; ela é informativa e sua perda não altera pendência nem rota, então o modelo de desfazer de um nível permanece.
@@ -810,23 +814,40 @@ depende da ordem dos dias ou dos meses percorridos, preservando a chave de `orde
 
 **A ordem não é recalculada por endereço ou nome.** No dia agendado, a chave vem de
 `ordemPorDia[String(dia)]`; sem ela, vem de `BASE_SEM_ORDEM + numero`, usando o número
-fixo da planilha. Atrasados sem ordem temporária entram depois da maior chave calculada,
-por data agendada e depois número, separados por `PASSO`. Arrastar um atrasado produz
-`ordemDoDia = { data: hoje, valor }`, que só vale naquela data; arrastar alguém do dia
-altera a ordem daquele dia do mês.
+fixo da planilha. Atrasados sem ordem temporária usam a chave estável descrita abaixo.
+Arrastar um atrasado produz `ordemDoDia = { data: hoje, valor }`, que só vale naquela
+data; arrastar alguém do dia altera a ordem daquele dia do mês.
 
-**O bloco de atrasados soltos é intransponível (B1).** Solto é o atrasado sem
-`ordemDoDia` com `data === hoje`; o bloco fica no fim, do mais antigo para o mais novo.
-Ao arrastar um cliente do dia ou um atrasado com posição para dentro ou depois desse
-bloco, o item é encaixado antes dele: a nova chave fica um `PASSO` depois da última
-chave fixa restante, ou é `PASSO` se não houver nenhuma. A chave de um solto também
-não serve como vizinho na borda do trecho fixo. Mover um solto dentro do bloco não
-grava nada; mover para cima do bloco grava uma posição de hoje entre os vizinhos fixos.
-As chaves dos soltos são calculadas de novo em cada montagem: persistir esses números
-em `ordemPorDia` levaria uma posição temporária para os meses seguintes.
-Se o encaixe antes do bloco devolve o item à posição original, o arraste retorna `[]`
-antes de calcular a chave. Regravar sem mover alteraria sua posição nos meses seguintes
-em relação aos clientes do mesmo dia que não aparecem hoje.
+**A chave do atrasado solto é estável (decisão de 15/10, revoga o "bloco intransponível"
+do B1 para atrasados).** Solto é o atrasado sem `ordemDoDia` válida com `data === hoje`.
+Sua chave é `BASE_ATRASADO + diferencaEmDias('2000-01-01', agendadoPara) * ESPACO_POR_DIA
++ numero` (`BASE_ATRASADO = 1_000_000_000`, `ESPACO_POR_DIA = 100_000`) e depende só dele:
+fica acima de qualquer chave de cliente do dia, ordena do mais antigo para o mais novo e
+depois por número, e não muda quando outro atrasado ganha posição. No B1 (13/10) a chave era
+`maior + PASSO * (i + 1)`, que dependia das outras chaves e da posição; fixar um solto mexia
+nos outros, por isso o arraste dentro do bloco devolvia `[]` — e no iPhone o item voltava ao
+lugar ao soltar (achado de 15/10). Agora **todo arraste de atrasado é uma escrita `tipo:
+'hoje'`** com `chaveEntre` das chaves vizinhas como a lista as mostra, soltos inclusive. Um
+`numero` acima de 99 999 invadiria a faixa do dia seguinte e só embaralharia a ordem padrão.
+
+**O bloco começa no primeiro item com `chave >= BASE_ATRASADO`** — `inicioDoBlocoDeAtrasados`,
+a mesma função que a tela usa para o separador. **Cliente do dia não desce para dentro do
+bloco:** se o destino fica no bloco ou depois, ele é encaixado logo antes desse item, com
+`chaveEntre(anterior, Math.min(chave desse item, BASE_ATRASADO))`. A chave dele vai para
+`ordemPorDia` e vale nos meses seguintes, então não pode herdar um valor da faixa dos
+atrasados. **O teto em `BASE_ATRASADO` não é enfeite:** a média pura com a chave do solto
+(≈ 1,98 bilhão em 2026) cai dentro da faixa no segundo encaixe seguido (989 150 005, depois
+1 483 225 006) e, a partir de 19/05/2027, já no primeiro. **O teto vale também no fim da
+lista, sem vizinho depois** (`chaveDoDiaEntre`): se `anterior + PASSO` alcançaria a faixa, a
+chave vira a média entre `anterior` e `BASE_ATRASADO`. Sem isso, depois de um último cliente
+do dia com 999 999 500 o seguinte gravaria 1 000 000 500, passaria a ser o início do bloco e
+o arraste seguinte para depois dele devolveria `[]`. **O arraste do calendário passa pelo
+mesmo teto** (`reordenar`, usada por `arrasteNaRotaDaData`): ele grava a mesma `ordemPorDia`,
+e um 1 000 000 046 gravado em 05/11 faria o cliente marcar o início do bloco na rota de hoje.
+Se o encaixe devolve o item à
+posição original, o arraste retorna `[]` antes de calcular a chave: regravar sem mover
+alteraria sua posição nos meses seguintes em relação aos clientes do mesmo dia que não
+aparecem hoje.
 
 **Ordem fracionária evita regravar os vizinhos.** Um arraste devolve uma alteração:
 a média das chaves dos novos vizinhos, ou um `PASSO` antes/depois na borda. Se a média
@@ -838,7 +859,7 @@ não modificam as listas nem os clientes recebidos.
 
 **O rebalanceamento de hoje leva o dia inteiro (C3).** `arrasteNaRotaDeHoje` recebe
 `todos`, além dos itens de hoje. Sem precisão, primeiro rebalanceia a lista de hoje
-na ordem já ajustada pelo B1. Para cada `diaAgendado` dos clientes do dia nessa lista,
+na ordem já ajustada pelo encaixe do cliente do dia. Para cada `diaAgendado` dos clientes do dia nessa lista,
 acrescenta os clientes de `rotaDoDia(todos, dia)` que ainda não receberam uma
 reordenação para **esse dia**, na ordem atual deles, com `PASSO * (n + j + 1)`: `n` é
 o tamanho da lista de hoje e `j` recomeça em zero em cada dia. Isso inclui clientes com
