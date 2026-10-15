@@ -841,7 +841,10 @@ atrasados. **O teto em `BASE_ATRASADO` não é enfeite:** a média pura com a ch
 lista, sem vizinho depois** (`chaveDoDiaEntre`): se `anterior + PASSO` alcançaria a faixa, a
 chave vira a média entre `anterior` e `BASE_ATRASADO`. Sem isso, depois de um último cliente
 do dia com 999 999 500 o seguinte gravaria 1 000 000 500, passaria a ser o início do bloco e
-o arraste seguinte para depois dele devolveria `[]`. Se o encaixe devolve o item à
+o arraste seguinte para depois dele devolveria `[]`. **O arraste do calendário passa pelo
+mesmo teto** (`reordenar`, usada por `arrasteNaRotaDaData`): ele grava a mesma `ordemPorDia`,
+e um 1 000 000 046 gravado em 05/11 faria o cliente marcar o início do bloco na rota de hoje.
+Se o encaixe devolve o item à
 posição original, o arraste retorna `[]` antes de calcular a chave: regravar sem mover
 alteraria sua posição nos meses seguintes em relação aos clientes do mesmo dia que não
 aparecem hoje.

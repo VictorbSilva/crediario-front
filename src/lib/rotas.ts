@@ -173,6 +173,14 @@ function indiceDeArrasteValido(indice: number, tamanho: number): boolean {
   return Number.isInteger(indice) && indice >= 0 && indice < tamanho
 }
 
+// O cliente do dia grava em `ordemPorDia`, que vale nos meses seguintes: a chave nova nunca
+// pode cair na faixa dos atrasados, nem pela média com o primeiro do bloco nem pelo PASSO
+// somado no fim da lista — na rota de hoje e no calendário.
+function chaveDoDiaEntre(anterior: number | null, proxima: number | null): number | null {
+  const chave = chaveEntre(anterior, proxima === null ? null : Math.min(proxima, BASE_ATRASADO))
+  return chave !== null && chave >= BASE_ATRASADO ? chaveEntre(anterior, BASE_ATRASADO) : chave
+}
+
 function reordenar<T extends { chave: number }>(
   itens: readonly T[], de: number, para: number,
   alteracao: (item: T, valor: number) => Reordenacao,
@@ -182,17 +190,9 @@ function reordenar<T extends { chave: number }>(
   const nova = [...itens]
   const [movido] = nova.splice(de, 1)
   nova.splice(para, 0, movido)
-  const chave = chaveEntre(nova[para - 1]?.chave ?? null, nova[para + 1]?.chave ?? null)
+  const chave = chaveDoDiaEntre(nova[para - 1]?.chave ?? null, nova[para + 1]?.chave ?? null)
   if (chave !== null) return [alteracao(movido, chave)]
   return nova.map((item, i) => alteracao(item, PASSO * (i + 1)))
-}
-
-// O cliente do dia grava em `ordemPorDia`, que vale nos meses seguintes: a chave nova nunca
-// pode cair na faixa dos atrasados, nem pela média com o primeiro do bloco nem pelo PASSO
-// somado no fim da lista.
-function chaveDoDiaEntre(anterior: number | null, proxima: number | null): number | null {
-  const chave = chaveEntre(anterior, proxima === null ? null : Math.min(proxima, BASE_ATRASADO))
-  return chave !== null && chave >= BASE_ATRASADO ? chaveEntre(anterior, BASE_ATRASADO) : chave
 }
 
 export function arrasteNaRotaDeHoje(

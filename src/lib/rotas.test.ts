@@ -805,6 +805,20 @@ describe('arrasteNaRotaDaData', () => {
     expect(rotas.arrasteNaRotaDaData(lista, de, para, data, lista.map((item) => item.cliente))).toEqual([])
   })
 
+  it('arrastar para o fim não passa do teto dos atrasados nem trava a rota de hoje', () => {
+    const todos = [
+      cliente({ id: 'A', numero: 1, ordemPorDia: { '5': 999_999_500 } }),
+      cliente({ id: 'B', numero: 2, ordemPorDia: { '5': 999_999_800 } }),
+    ]
+    const alteracoes = rotas.arrasteNaRotaDaData(rotas.rotaDaData(todos, '2026-11-05'), 0, 1, '2026-11-05', todos)
+    expect(alteracoes).toEqual([{ clienteId: 'A', tipo: 'dia', dia: 5, valor: 999_999_900 }])
+    const depois = aplicarReordenacoes(todos, alteracoes)
+    const deHoje = rotas.rotaDeHoje(depois, '2026-10-05')
+    expect(deHoje.map((item) => item.cliente.id)).toEqual(['B', 'A'])
+    expect(rotas.inicioDoBlocoDeAtrasados(deHoje)).toBe(-1)
+    expect(rotas.arrasteNaRotaDeHoje(deHoje, 0, 1, '2026-10-05', depois)).toHaveLength(1)
+  })
+
   it('não grava em lista vazia nem quando a posição não muda', () => {
     const lista = itens()
     expect(rotas.arrasteNaRotaDaData([], 0, 1, data, [])).toEqual([])
