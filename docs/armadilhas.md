@@ -977,6 +977,27 @@ Venda cancelada fica fora do a receber, do vencido e dos atrasados, como em `sal
 Cliente que não está na lista de clientes vem com `cliente: null`, no fim, em vez de sumir: a
 dívida existe mesmo que o cadastro ainda não tenha chegado ao aparelho.
 
+**A receber por mês.** `aReceberNoMes` devolve as parcelas que vencem no mês escolhido e ainda
+têm restante depois da alocação, com o total. Usa as mesmas peças das somas acima:
+`parcelasRegeneradas`, `alocarPagamentos` por venda e `situacaoDaParcela`. Por isso uma parcela
+paga some, e uma parcela paga pela metade aparece só com o que falta: `'parcial'` até o
+vencimento e `'vencida'` depois. Venda cancelada, versão desconhecida e pagamento cancelado
+seguem as regras de antes, e os valores ficam sem encargos. A lista vem ordenada por vencimento,
+número do cliente (cliente que não está na lista no fim, com `cliente: null`) e número da
+parcela.
+
+`mesesDeRecebimento` dá os meses do seletor: do mês de `hoje` até o mês do último vencimento entre
+as vendas não canceladas e recalculáveis, sempre com pelo menos o mês de `hoje`. O mês é tirado
+da string da data (`AAAA-MM`). Não se usa `Date` local: `new Date('2026-11-01')` é meia-noite
+UTC, e `getMonth()` no fuso de Brasília devolve outubro, o que levaria a parcela de 01/11 para o
+mês errado. O `mes` vai de 1 a 12, como em `src/lib/rotas.ts`.
+
+**Meses passados ficam fora do seletor de propósito.** Parcela de mês anterior que ainda está
+em aberto já está vencida e aparece em `listaDeAtrasados`. Se o seletor oferecesse meses
+passados, a mesma dívida apareceria em duas listas. Isso não muda o custo: as duas funções
+trabalham sobre as mesmas `vendas` e `pagamentos` que o `useCarneDaEmpresa` já ouve, sem
+coleção, listener ou leitura nova.
+
 — referente a src/lib/financeiro.ts e src/lib/financeiro.test.ts
 
 ## src/lib/cliente.ts
