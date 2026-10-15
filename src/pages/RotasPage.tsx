@@ -27,23 +27,15 @@ import {
   arrasteNaRotaDeHoje,
   contagemPorData,
   dataDaVisita,
+  inicioDoBlocoDeAtrasados,
   mesSeguinte,
   rotaDaData,
   rotaDeHoje,
 } from '@/lib/rotas'
-import type { ItemDaRota } from '@/lib/rotas'
-import type { Cliente } from '@/types/cliente'
 
 const INSTRUCOES: ScreenReaderInstructions = {
   draggable:
     'Para mover este cliente na ordem da rota, pressione espaço ou enter. Use as setas para cima ou para baixo para escolher a posição, espaço ou enter para soltar, ou escape para cancelar.',
-}
-
-// Mesmo critério de `src/lib/rotas.ts` para o atrasado "solto": sem posição gravada para hoje.
-// É o início desse bloco que o separador marca.
-function ehAtrasadoSolto(item: ItemDaRota<Cliente>, hoje: string): boolean {
-  const posicao = item.cliente.ordemDoDia
-  return item.estado.atrasado && (posicao?.data !== hoje || !Number.isFinite(posicao?.valor))
 }
 
 type Mes = { ano: number; mes: number }
@@ -150,7 +142,7 @@ export function RotasPage() {
     }
   }
 
-  const inicioDosAtrasados = itensHoje.findIndex((item) => ehAtrasadoSolto(item, hoje))
+  const inicioDosAtrasados = inicioDoBlocoDeAtrasados(itensHoje)
   const visitados = itensHoje.filter((item) => item.estado.situacao === 'visitado').length
   const ausentes = itensHoje.filter((item) => item.estado.ausenteHoje).length
   const atrasados = itensHoje.filter((item) => item.estado.atrasado).length
@@ -250,7 +242,7 @@ export function RotasPage() {
                         <Fragment key={item.cliente.id}>
                           {indice === inicioDosAtrasados ? (
                             <li className="px-1 pt-2 text-xs font-semibold text-danger">
-                              Visitas de dias anteriores · da mais antiga para a mais nova
+                              Visitas de dias anteriores
                             </li>
                           ) : null}
                           <ParadaDaRota

@@ -1,4 +1,4 @@
-import { diasNoMes, ehDataCivil } from './data'
+import { diasNoMes, diferencaEmDias, ehDataCivil } from './data'
 
 export type MarcaDeVisita = 'visitado' | 'ausente'
 
@@ -18,6 +18,8 @@ export type ClienteNaRota = {
 
 export const PASSO = 1000
 export const BASE_SEM_ORDEM = 1_000_000
+export const BASE_ATRASADO = 1_000_000_000
+export const ESPACO_POR_DIA = 100_000
 
 export function dataDaVisita(ano: number, mes: number, dia: number): string {
   const limitado = Math.min(dia, diasNoMes(ano, mes - 1))
@@ -90,27 +92,23 @@ function chaveDoDia(cliente: ClienteNaRota, dia: number): number {
   return typeof valor === 'number' && Number.isFinite(valor) ? valor : BASE_SEM_ORDEM + cliente.numero
 }
 
+function chaveDeHoje(cliente: ClienteNaRota, estado: EstadoNaRota, hoje: string): number {
+  if (!estado.atrasado) return chaveDoDia(cliente, estado.diaAgendado!)
+  if (cliente.ordemDoDia?.data === hoje && Number.isFinite(cliente.ordemDoDia.valor)) return cliente.ordemDoDia.valor
+  return BASE_ATRASADO + diferencaEmDias('2000-01-01', estado.agendadoPara!) * ESPACO_POR_DIA + cliente.numero
+}
+
 export function rotaDeHoje<C extends ClienteNaRota>(clientes: readonly C[], hoje: string): ItemDaRota<C>[] {
   const itens: ItemDaRota<C>[] = []
-  const atrasados: { cliente: C; estado: EstadoNaRota }[] = []
   for (const cliente of clientes) {
     const estado = estadoNaRota(cliente, hoje)
-    if (estado.situacao === 'fora') continue
-    if (!estado.atrasado) {
-      const chave = chaveDoDia(cliente, estado.diaAgendado!)
-      itens.push({ cliente, estado, chave })
-    } else if (cliente.ordemDoDia?.data === hoje && Number.isFinite(cliente.ordemDoDia.valor)) {
-      itens.push({ cliente, estado, chave: cliente.ordemDoDia.valor })
-    } else {
-      atrasados.push({ cliente, estado })
-    }
+    if (estado.situacao !== 'fora') itens.push({ cliente, estado, chave: chaveDeHoje(cliente, estado, hoje) })
   }
-  atrasados.sort((a, b) => (a.estado.agendadoPara ?? '').localeCompare(b.estado.agendadoPara ?? '')
-    || a.cliente.numero - b.cliente.numero)
-  const chaves = itens.map((item) => item.chave).filter(Number.isFinite)
-  const maior = chaves.length ? Math.max(...chaves) : 0
-  atrasados.forEach((item, i) => itens.push({ ...item, chave: maior + PASSO * (i + 1) }))
   return itens.sort(compararChaves)
+}
+
+export function inicioDoBlocoDeAtrasados(itens: readonly { chave: number }[]): number {
+  return itens.findIndex((item) => item.chave >= BASE_ATRASADO)
 }
 
 export type ItemDoDia<C extends ClienteNaRota> = { cliente: C; chave: number }
@@ -195,19 +193,18 @@ export function arrasteNaRotaDeHoje(
 ): Reordenacao[] {
   if (!indiceDeArrasteValido(de, itens.length) || !indiceDeArrasteValido(para, itens.length)) return []
   if (de === para) return []
-  const solto = (item: ItemDaRota<ClienteNaRota>) => item.estado.atrasado
-    && (item.cliente.ordemDoDia?.data !== hoje || !Number.isFinite(item.cliente.ordemDoDia?.valor))
   const nova = [...itens]
   const [movido] = nova.splice(de, 1)
-  const inicioDosSoltos = nova.findIndex(solto)
-  if (inicioDosSoltos !== -1 && para >= inicioDosSoltos) {
-    if (solto(movido)) return []
-    para = inicioDosSoltos
-  }
+  const doDia = !movido.estado.atrasado
+  const inicioDoBloco = doDia ? inicioDoBlocoDeAtrasados(nova) : -1
+  if (inicioDoBloco !== -1 && para >= inicioDoBloco) para = inicioDoBloco
   if (para === de) return []
   nova.splice(para, 0, movido)
-  const proximo = nova[para + 1]
-  const chave = chaveEntre(nova[para - 1]?.chave ?? null, proximo && !solto(proximo) ? proximo.chave : null)
+  // O cliente do dia grava em `ordemPorDia`, que vale nos meses seguintes: o teto em
+  // BASE_ATRASADO impede que a média com o primeiro do bloco caia na faixa dos atrasados.
+  const proxima = nova[para + 1]?.chave ?? null
+  const chave = chaveEntre(nova[para - 1]?.chave ?? null,
+    doDia && proxima !== null ? Math.min(proxima, BASE_ATRASADO) : proxima)
   const alteracao = (item: ItemDaRota<ClienteNaRota>, valor: number): Reordenacao => {
     if (item.estado.atrasado) return { clienteId: item.cliente.id, tipo: 'hoje', data: hoje, valor }
     return { clienteId: item.cliente.id, tipo: 'dia', dia: item.estado.diaAgendado!, valor }
