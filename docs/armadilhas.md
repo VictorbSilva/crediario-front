@@ -716,13 +716,20 @@ anterior.
 
 ## src/lib/rotas.ts
 
-Rota é por **dia do mês** e seus fatos pertencem ao cliente: `diasDeVisita`,
+Os dias e as ordens da rota são configurados por **dia do mês**, e seus fatos pertencem ao cliente: `diasDeVisita`,
 `rotaDesde`, `ordemPorDia`, `ordemDoDia` e as marcas de visita. Este módulo usa o tipo
 estrutural `ClienteNaRota`, sem Firestore ou tela, e devolve alterações para quem grava.
 `montarDiasDeVisita` aceita apenas inteiros de 1 a 31 sem repetição e ordena uma cópia.
 
+**O planejamento mensal é por data civil, inclusive no mês seguinte.** `diaNaData` escolhe
+o menor dia configurado cuja `dataDaVisita` coincide com a data pedida; `rotaDaData` usa
+esse dia e sua chave em `ordemPorDia`. Se 30 e 31 caem juntos, o cliente entra uma vez,
+com dia 30; um cliente só do dia 31 continua com dia 31. `contagemPorData` também conta
+cada cliente uma única vez em cada data. `arrasteNaRotaDaData` usa o dia do próprio
+item no arrasto simples; sem precisão, também completa os dias coincidentes, como descrito abaixo.
+
 - **Ordem inválida:** `ordemPorDia` não numérica ou não finita usa `BASE_SEM_ORDEM + numero`; `ordemDoDia.valor` inválido volta a ser solto e o máximo só considera chaves finitas, para um documento ruim não quebrar Rotas.
-- **Índice inválido:** `de` e `para` precisam ser inteiros de 0 a `itens.length - 1`; fora disso, ambos os arrastes devolvem `[]`, evitando escrita indevida por erro do handler.
+- **Índice inválido:** `de` e `para` precisam ser inteiros de 0 a `itens.length - 1`; fora disso, os arrastes devolvem `[]`, evitando escrita indevida por erro do handler.
 - **Visita futura:** `visitadoAte` ignora `ultimoVisitado > hoje` em `estadoNaRota`, `marcarVisitado` e `desmarcar`, para o relógio adiantado não esconder o cliente nem levar a data futura para `visitadoAnterior`.
 - **Limitação aceita:** Ausente → Visitado → Desmarcar perde a marca de Ausente; ela é informativa e sua perda não altera pendência nem rota, então o modelo de desfazer de um nível permanece.
 
@@ -737,7 +744,9 @@ Visitado hoje continua na lista, na mesma posição. Desfazer volta `ultimoVisit
 uma alteração vazia quando `ultimoVisitado === hoje`. Isso impede a combinação
 "visitado e ausente hoje" e preserva a visita, que `desmarcar` desfaz em um nível.
 
-**`rotaDesde` corta agendas anteriores a ela.** Colocar um cliente no dia 5 em 10 de
+**`rotaDesde` só corta agendas da pendência de hoje (`estadoNaRota`), não o planejamento.**
+`rotaDaData` e `contagemPorData` mostram a rota configurada mesmo antes de `rotaDesde`.
+Colocar um cliente no dia 5 em 10 de
 outubro não cria uma pendência de 5 de outubro. A data igual a `rotaDesde` conta.
 Datas são strings civis `'YYYY-MM-DD'`, comparadas como strings; não há hora na rota.
 `dataDaVisita` recebe mês de 1 a 12 e converte para o mês de 0 a 11 de `diasNoMes`.
@@ -789,6 +798,23 @@ dias 30 e 31 pode precisar das duas reordenações quando ambos caem em 30 de no
 O filtro é por cliente **e dia**, para não deixar a ordem do outro dia na escala
 antiga, embaralhando os meses seguintes. Arraste simples continua devolvendo uma
 alteração; `arrasteNaRotaDoDia` mantém seu contrato.
+
+**O rebalanceamento por data também completa as chaves escondidas.**
+`arrasteNaRotaDaData(itens, de, para, data, todos)` recusa data inválida com `ehDataCivil`
+e devolve `[]`. Com precisão, continua gerando só uma reordenação. Sem precisão, primeiro
+rebalanceia a lista da data na ordem nova, com o dia de cada item e `PASSO * (i + 1)`.
+Depois considera todos os dias de `diasDeVisita` dos clientes em `todos` cuja
+`dataDaVisita(ano, mes, dia)` coincide com `data`, inclusive os dias sem item próprio.
+Para cada dia, acrescenta os clientes de `rotaDoDia(todos, dia)` ainda não reordenados
+**naquele dia**, na ordem atual deles, com `PASSO * (n + j + 1)`: `n` é o tamanho da
+lista da data e `j` recomeça em zero em cada dia. Assim, uma chave 31 escondida pelo
+dia 30 em novembro também passa para a escala nova; em 30 de outubro ela não é tocada.
+
+**Limitação aceita no rebalanceamento por data:** no fim de um mês curto, se a precisão
+acabar, a posição de um cliente no outro dia que cai na mesma data vai para o fim daquele
+dia. É raro: exige precisão esgotada, fim de mês curto e cliente com dois desses dias.
+Não há perda de dado e um arraste corrige a posição. Preservá-la exigiria ancorar cada
+chave escondida ao vizinho visível; essa alternativa foi rejeitada por complexidade.
 
 **Quem grava deve aplicar o retorno inteiro.** `AlteracaoDeVisita` vira um único
 `updateDoc` no cliente: os campos de `definir` e os de `remover` convertidos em
