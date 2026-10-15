@@ -717,7 +717,8 @@ describe('arrasteNaRotaDaData', () => {
   ])('gera uma alteração com o dia do item movido de %i para %i', (de, para, clienteId, dia, valor) => {
     const lista = itens()
     const antes = structuredClone(lista)
-    expect(rotas.arrasteNaRotaDaData(lista, de, para)).toEqual([{ clienteId, tipo: 'dia', dia, valor }])
+    expect(rotas.arrasteNaRotaDaData(lista, de, para, data, lista.map((item) => item.cliente)))
+      .toEqual([{ clienteId, tipo: 'dia', dia, valor }])
     expect(lista).toEqual(antes)
   })
 
@@ -725,18 +726,20 @@ describe('arrasteNaRotaDaData', () => {
     [0, 9], [-1, 1], [0, 1.5], [9, 0], [1, -1], [1.5, 0],
     [NaN, 1], [1, NaN], [Infinity, 1], [1, Infinity],
   ])('não grava com índice inválido de %s para %s', (de, para) => {
-    expect(rotas.arrasteNaRotaDaData(itens(), de, para)).toEqual([])
+    const lista = itens()
+    expect(rotas.arrasteNaRotaDaData(lista, de, para, data, lista.map((item) => item.cliente))).toEqual([])
   })
 
   it('não grava em lista vazia nem quando a posição não muda', () => {
-    expect(rotas.arrasteNaRotaDaData([], 0, 1)).toEqual([])
-    expect(rotas.arrasteNaRotaDaData(itens(), 1, 1)).toEqual([])
+    const lista = itens()
+    expect(rotas.arrasteNaRotaDaData([], 0, 1, data, [])).toEqual([])
+    expect(rotas.arrasteNaRotaDaData(lista, 1, 1, data, lista.map((item) => item.cliente))).toEqual([])
   })
 
   it('rebalanceia a lista inteira com o dia de cada item quando acaba a precisão', () => {
     const lista = itens([1, 1 + Number.EPSILON, 1000])
     const antes = structuredClone(lista)
-    const alteracoes = rotas.arrasteNaRotaDaData(lista, 2, 1)
+    const alteracoes = rotas.arrasteNaRotaDaData(lista, 2, 1, data, lista.map((item) => item.cliente))
     expect(alteracoes).toEqual([
       { clienteId: '1', tipo: 'dia', dia: 30, valor: 1000 },
       { clienteId: '3', tipo: 'dia', dia: 30, valor: 2000 },
@@ -745,6 +748,94 @@ describe('arrasteNaRotaDaData', () => {
     const depois = aplicarReordenacoes(lista.map((item) => item.cliente), alteracoes)
     expect(rotas.rotaDaData(depois, data).map((item) => item.cliente.id)).toEqual(['1', '3', '2'])
     expect(lista).toEqual(antes)
+  })
+
+  it('rebalanceia também o dia 31 escondido em novembro e aceita movê-lo para o fim em dezembro', () => {
+    const todos = [
+      cliente({ id: 'A', numero: 1, diasDeVisita: [31], ordemPorDia: { '31': 1 } }),
+      cliente({ id: 'B', numero: 2, diasDeVisita: [31], ordemPorDia: { '31': 1 + Number.EPSILON } }),
+      cliente({ id: 'C', numero: 3, diasDeVisita: [31], ordemPorDia: { '31': 2 } }),
+      cliente({ id: 'ambos', numero: 4, diasDeVisita: [30, 31], ordemPorDia: { '30': 3, '31': 1.5 } }),
+    ]
+    const antes = structuredClone(todos)
+    const lista = rotas.rotaDaData(todos, data)
+    expect(rotas.rotaDaData(todos, '2026-12-31').map((item) => item.cliente.id)).toEqual(['A', 'B', 'ambos', 'C'])
+    const alteracoes = rotas.arrasteNaRotaDaData(lista, 3, 1, data, todos)
+    expect(alteracoes).toEqual([
+      { clienteId: 'A', tipo: 'dia', dia: 31, valor: 1000 },
+      { clienteId: 'ambos', tipo: 'dia', dia: 30, valor: 2000 },
+      { clienteId: 'B', tipo: 'dia', dia: 31, valor: 3000 },
+      { clienteId: 'C', tipo: 'dia', dia: 31, valor: 4000 },
+      { clienteId: 'ambos', tipo: 'dia', dia: 31, valor: 5000 },
+    ])
+    const depois = aplicarReordenacoes(todos, alteracoes)
+    expect(rotas.rotaDaData(depois, data).map((item) => item.cliente.id)).toEqual(['A', 'ambos', 'B', 'C'])
+    const dezembro = rotas.rotaDaData(depois, '2026-12-31')
+    expect(dezembro.map((item) => item.cliente.id)).toEqual(['A', 'B', 'C', 'ambos'])
+    expect(dezembro.map((item) => item.chave)).toEqual([1000, 3000, 4000, 5000])
+    expect(todos).toEqual(antes)
+    expect(lista).toEqual(rotas.rotaDaData(antes, data))
+  })
+
+  it.each([
+    { dias: [29, 31], principal: 29, escondidos: [31] },
+    { dias: [28, 29, 30, 31], principal: 28, escondidos: [29, 30, 31] },
+  ])('rebalanceia todos os dias coincidentes em fevereiro, mesmo sem item próprio (%j)', ({ dias, principal, escondidos }) => {
+    const data = '2027-02-28'
+    const todos = [
+      cliente({ id: 'ambos', numero: 1, diasDeVisita: dias, ordemPorDia: { [String(principal)]: 1, '31': 500 } }),
+      cliente({ id: 'B', numero: 2, diasDeVisita: [31], ordemPorDia: { '31': 1 + Number.EPSILON } }),
+      cliente({ id: 'C', numero: 3, diasDeVisita: [31], ordemPorDia: { '31': 1000 } }),
+    ]
+    const alteracoes = rotas.arrasteNaRotaDaData(rotas.rotaDaData(todos, data), 2, 1, data, todos)
+    expect(alteracoes).toEqual([
+      { clienteId: 'ambos', tipo: 'dia', dia: principal, valor: 1000 },
+      { clienteId: 'C', tipo: 'dia', dia: 31, valor: 2000 },
+      { clienteId: 'B', tipo: 'dia', dia: 31, valor: 3000 },
+      ...escondidos.map((dia) => ({ clienteId: 'ambos', tipo: 'dia', dia, valor: 4000 })),
+    ])
+    const depois = aplicarReordenacoes(todos, alteracoes)
+    expect(rotas.rotaDaData(depois, data).map((item) => item.cliente.id)).toEqual(['ambos', 'C', 'B'])
+    for (const dia of dias) {
+      expect(rotas.rotaDoDia(depois, dia).every((item) => item.chave >= 1000 && item.chave % rotas.PASSO === 0)).toBe(true)
+    }
+  })
+
+  it.each([
+    { data: '2026-10-30', toca31: false },
+    { data: '2026-11-30', toca31: true },
+  ])('só rebalanceia o dia 31 quando ele cai na data (%j)', ({ data, toca31 }) => {
+    const todos = [
+      cliente({ id: 'A', numero: 1, diasDeVisita: [30], ordemPorDia: { '30': 1 } }),
+      cliente({ id: 'B', numero: 2, diasDeVisita: [30], ordemPorDia: { '30': 1 + Number.EPSILON } }),
+      cliente({ id: 'ambos', numero: 3, diasDeVisita: [30, 31], ordemPorDia: { '30': 2, '31': 1.5 } }),
+    ]
+    const alteracoes = rotas.arrasteNaRotaDaData(rotas.rotaDaData(todos, data), 2, 1, data, todos)
+    expect(alteracoes).toEqual([
+      { clienteId: 'A', tipo: 'dia', dia: 30, valor: 1000 },
+      { clienteId: 'ambos', tipo: 'dia', dia: 30, valor: 2000 },
+      { clienteId: 'B', tipo: 'dia', dia: 30, valor: 3000 },
+      ...(toca31 ? [{ clienteId: 'ambos', tipo: 'dia', dia: 31, valor: 4000 }] : []),
+    ])
+    expect(aplicarReordenacoes(todos, alteracoes)[2].ordemPorDia?.['31']).toBe(toca31 ? 4000 : 1.5)
+  })
+
+  it('com precisão grava só o dia movido e preserva a chave escondida', () => {
+    const todos = [
+      cliente({ id: 'A', numero: 1, diasDeVisita: [31], ordemPorDia: { '31': 1000 } }),
+      cliente({ id: 'B', numero: 2, diasDeVisita: [31], ordemPorDia: { '31': 3000 } }),
+      cliente({ id: 'ambos', numero: 3, diasDeVisita: [30, 31], ordemPorDia: { '30': 4000, '31': 2500 } }),
+    ]
+    const antes = structuredClone(todos)
+    const alteracoes = rotas.arrasteNaRotaDaData(rotas.rotaDaData(todos, data), 2, 1, data, todos)
+    expect(alteracoes).toEqual([{ clienteId: 'ambos', tipo: 'dia', dia: 30, valor: 2000 }])
+    expect(aplicarReordenacoes(todos, alteracoes)[2].ordemPorDia?.['31']).toBe(2500)
+    expect(todos).toEqual(antes)
+  })
+
+  it.each(['', '2026-11-31', '2026-13-30', '30/11/2026', '2026-1-01'])('não grava com data inválida (%s)', (invalida) => {
+    const lista = itens()
+    expect(rotas.arrasteNaRotaDaData(lista, 0, 2, invalida, lista.map((item) => item.cliente))).toEqual([])
   })
 })
 

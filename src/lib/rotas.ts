@@ -1,4 +1,4 @@
-import { diasNoMes } from './data'
+import { diasNoMes, ehDataCivil } from './data'
 
 export type MarcaDeVisita = 'visitado' | 'ausente'
 
@@ -243,9 +243,23 @@ export function arrasteNaRotaDoDia(
 }
 
 export function arrasteNaRotaDaData(
-  itens: readonly ItemDaData<ClienteNaRota>[], de: number, para: number,
+  itens: readonly ItemDaData<ClienteNaRota>[], de: number, para: number, data: string,
+  todos: readonly ClienteNaRota[],
 ): Reordenacao[] {
-  return reordenar(itens, de, para, (item, valor) => ({ clienteId: item.cliente.id, tipo: 'dia', dia: item.dia, valor }))
+  if (!ehDataCivil(data)) return []
+  const alteracoes = reordenar(itens, de, para, (item, valor) => ({ clienteId: item.cliente.id, tipo: 'dia', dia: item.dia, valor }))
+  if (alteracoes.length <= 1) return alteracoes
+  const [ano, mes] = data.split('-').map(Number)
+  const dias = new Set(todos.flatMap((cliente) => (cliente.diasDeVisita ?? [])
+    .filter((dia) => dataDaVisita(ano, mes, dia) === data)))
+  for (const dia of dias) {
+    const reordenadosNesteDia = new Set(alteracoes.filter((a) => a.tipo === 'dia' && a.dia === dia).map((a) => a.clienteId))
+    const restantesDoDia = rotaDoDia(todos, dia).filter((item) => !reordenadosNesteDia.has(item.cliente.id))
+    restantesDoDia.forEach((item, j) => alteracoes.push({
+      clienteId: item.cliente.id, tipo: 'dia', dia, valor: PASSO * (itens.length + j + 1),
+    }))
+  }
+  return alteracoes
 }
 
 export type AlteracaoDeVisita = { definir: Record<string, string>; remover: string[] }

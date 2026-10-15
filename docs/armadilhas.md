@@ -725,8 +725,8 @@ estrutural `ClienteNaRota`, sem Firestore ou tela, e devolve alterações para q
 o menor dia configurado cuja `dataDaVisita` coincide com a data pedida; `rotaDaData` usa
 esse dia e sua chave em `ordemPorDia`. Se 30 e 31 caem juntos, o cliente entra uma vez,
 com dia 30; um cliente só do dia 31 continua com dia 31. `contagemPorData` também conta
-cada cliente uma única vez em cada data. `arrasteNaRotaDaData` grava o dia do próprio
-item, inclusive para cada item de um rebalanceamento.
+cada cliente uma única vez em cada data. `arrasteNaRotaDaData` usa o dia do próprio
+item no arrasto simples; sem precisão, também completa os dias coincidentes, como descrito abaixo.
 
 - **Ordem inválida:** `ordemPorDia` não numérica ou não finita usa `BASE_SEM_ORDEM + numero`; `ordemDoDia.valor` inválido volta a ser solto e o máximo só considera chaves finitas, para um documento ruim não quebrar Rotas.
 - **Índice inválido:** `de` e `para` precisam ser inteiros de 0 a `itens.length - 1`; fora disso, os arrastes devolvem `[]`, evitando escrita indevida por erro do handler.
@@ -798,6 +798,23 @@ dias 30 e 31 pode precisar das duas reordenações quando ambos caem em 30 de no
 O filtro é por cliente **e dia**, para não deixar a ordem do outro dia na escala
 antiga, embaralhando os meses seguintes. Arraste simples continua devolvendo uma
 alteração; `arrasteNaRotaDoDia` mantém seu contrato.
+
+**O rebalanceamento por data também completa as chaves escondidas.**
+`arrasteNaRotaDaData(itens, de, para, data, todos)` recusa data inválida com `ehDataCivil`
+e devolve `[]`. Com precisão, continua gerando só uma reordenação. Sem precisão, primeiro
+rebalanceia a lista da data na ordem nova, com o dia de cada item e `PASSO * (i + 1)`.
+Depois considera todos os dias de `diasDeVisita` dos clientes em `todos` cuja
+`dataDaVisita(ano, mes, dia)` coincide com `data`, inclusive os dias sem item próprio.
+Para cada dia, acrescenta os clientes de `rotaDoDia(todos, dia)` ainda não reordenados
+**naquele dia**, na ordem atual deles, com `PASSO * (n + j + 1)`: `n` é o tamanho da
+lista da data e `j` recomeça em zero em cada dia. Assim, uma chave 31 escondida pelo
+dia 30 em novembro também passa para a escala nova; em 30 de outubro ela não é tocada.
+
+**Limitação aceita no rebalanceamento por data:** no fim de um mês curto, se a precisão
+acabar, a posição de um cliente no outro dia que cai na mesma data vai para o fim daquele
+dia. É raro: exige precisão esgotada, fim de mês curto e cliente com dois desses dias.
+Não há perda de dado e um arraste corrige a posição. Preservá-la exigiria ancorar cada
+chave escondida ao vizinho visível; essa alternativa foi rejeitada por complexidade.
 
 **Quem grava deve aplicar o retorno inteiro.** `AlteracaoDeVisita` vira um único
 `updateDoc` no cliente: os campos de `definir` e os de `remover` convertidos em
