@@ -313,8 +313,8 @@ esconderia o cliente sem caminho de volta.
 ## src/pages/RotasPage.tsx e src/components/rotas/
 
 Segunda tela lendo e gravando dado real. Toda a regra de rota está em `src/lib/rotas.ts` (ver
-a seção própria); a tela só liga: `rotaDeHoje`/`rotaDoDia` montam a lista, `arrasteNaRotaDeHoje`/
-`arrasteNaRotaDoDia` dizem o que gravar, `marcarVisitado`/`marcarAusente`/`desmarcar` dizem o
+a seção própria); a tela só liga: `rotaDeHoje`/`rotaDaData` montam a lista, `arrasteNaRotaDeHoje`/
+`arrasteNaRotaDaData` dizem o que gravar, `marcarVisitado`/`marcarAusente`/`desmarcar` dizem o
 que mudar na marca. As gravações são `marcarNaRota` e `reordenarRota`, em
 `src/data/ClientesProvider.tsx`, sem `await` e com `.catch()` empilhando em `falhas` — e a
 página **renderiza** `falhas`, como `ClientesPage` e o carnê: cada tela que escreve mostra as
@@ -378,10 +378,27 @@ voltaria ao lugar e parecia defeito. O predicado que acha o início do bloco, `e
 em `RotasPage.tsx`, é **cópia** do `solto` privado de `arrasteNaRotaDeHoje`: se um mudar, o
 outro tem de mudar junto (não foi exportado da lib porque esta tarefa não podia tocá-la).
 
-**`hoje` é calculado a cada renderização, e o dia escolhido nasce `null`.** `null` significa
-"o dia de hoje", então um app deixado aberto na virada da meia-noite passa a mostrar a rota do
-dia novo em vez de ficar parado no dia que já acabou. Escolher um dia na grade grava o número
-daquele dia, e só o dia de hoje mostra marcas e KPIs.
+**`hoje` é calculado a cada renderização, e a data escolhida nasce `null`.** `null` significa
+"hoje", então um app deixado aberto na virada da meia-noite passa a mostrar a rota do dia novo
+em vez de ficar parado no dia que já acabou. Escolher hoje no calendário volta a `null`;
+escolher outra data grava a string `'YYYY-MM-DD'` dela. Só hoje mostra marcas e KPIs
+(`rotaDeHoje` + `arrasteNaRotaDeHoje`); qualquer outra data é planejamento (`rotaDaData` +
+`arrasteNaRotaDaData`). **Trocar os dois pares grava ordem no dia errado:** a rota de hoje
+leva atrasados com `ordemDoDia`, e a da data só grava `ordemPorDia` com o dia de cada item.
+
+**O calendário vai só do mês atual ao seguinte.** `mesVisivel` nasce no mês de hoje;
+"Próximo mês" só funciona no mês atual e abre o dia 1 do seguinte, "Mês anterior" só no
+seguinte e volta para `null` (hoje). A contagem de cada data vem de `contagemPorData` do
+mês visível, que conta um cliente uma vez por data mesmo quando 30 e 31 caem juntos.
+
+**A ordem é por dia do mês, não por data.** Arrastar em 5/11 grava `ordemPorDia['5']`, que
+é a mesma chave de 5/10. Por isso a nota do planejamento diz "A ordem vale para este dia em
+todos os meses": sem ela, o dono acharia que ajustou só uma data.
+
+**A grade de 7 colunas cabe em 375 px.** Cada célula tem `min-h-11` e nenhuma largura
+mínima; com o recuo da página e `gap-1.5`, sobram cerca de 44 px por coluna, o bastante para
+"30", a contagem e "HOJE" em 10 px. Pôr largura mínima ou texto maior na célula faz a página
+rolar para o lado no celular.
 
 **O botão Ausente some quando o cliente já está ausente hoje.** Reenviá-lo só regravaria os
 mesmos valores (e trocaria `atualizadoEm`); o que resta a fazer é Visitado ou Desmarcar. O item
@@ -797,7 +814,7 @@ o tamanho da lista de hoje e `j` recomeça em zero em cada dia. Isso inclui clie
 dias 30 e 31 pode precisar das duas reordenações quando ambos caem em 30 de novembro.
 O filtro é por cliente **e dia**, para não deixar a ordem do outro dia na escala
 antiga, embaralhando os meses seguintes. Arraste simples continua devolvendo uma
-alteração; `arrasteNaRotaDoDia` mantém seu contrato.
+alteração.
 
 **O rebalanceamento por data também completa as chaves escondidas.**
 `arrasteNaRotaDaData(itens, de, para, data, todos)` recusa data inválida com `ehDataCivil`
