@@ -13,8 +13,21 @@ import {
   situacaoExportacao,
 } from '@/lib/exportacao'
 
-function baixar(conteudo: string, nome: string, tipo: string): void {
-  const endereco = URL.createObjectURL(new Blob([conteudo], { type: tipo }))
+function entregarArquivo(conteudo: string, nome: string, tipo: string): Promise<void> {
+  const arquivo = new File([conteudo], nome, { type: tipo })
+
+  if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [arquivo] })) {
+    return navigator.share({ files: [arquivo], title: nome }).catch((erro) => {
+      if (erro?.name !== 'AbortError') baixarComLink(arquivo, nome)
+    })
+  }
+
+  baixarComLink(arquivo, nome)
+  return Promise.resolve()
+}
+
+function baixarComLink(arquivo: File, nome: string): void {
+  const endereco = URL.createObjectURL(arquivo)
   const link = document.createElement('a')
 
   link.href = endereco
@@ -23,7 +36,7 @@ function baixar(conteudo: string, nome: string, tipo: string): void {
   link.click()
   link.remove()
 
-  setTimeout(() => URL.revokeObjectURL(endereco), 1000)
+  setTimeout(() => URL.revokeObjectURL(endereco), 60_000)
 }
 
 export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }>) {
@@ -49,16 +62,15 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
     const agora = new Date()
 
     if (extensao === 'json') {
-      baixar(
+      entregarArquivo(
         paraJSON(clientes, { vendas, parcelas, pagamentos }, agora),
         nomeDoArquivo('json', agora),
         'application/json',
-      )
+      ).finally(aoFechar)
     } else {
-      baixar(paraCSV(clientes), nomeDoArquivo('csv', agora), 'text/csv;charset=utf-8')
+      entregarArquivo(paraCSV(clientes), nomeDoArquivo('csv', agora), 'text/csv;charset=utf-8')
+        .finally(aoFechar)
     }
-
-    aoFechar()
   }
 
   return (
