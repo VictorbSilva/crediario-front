@@ -56,6 +56,10 @@ function mesmoMes(a: Mes, b: Mes): boolean {
   return a.ano === b.ano && a.mes === b.mes
 }
 
+function antesDe(a: Mes, b: Mes): boolean {
+  return a.ano * 12 + a.mes < b.ano * 12 + b.mes
+}
+
 export function RotasPage() {
   const { clientes, carregando, erro, falhas, descartarFalha, marcarNaRota, reordenarRota } =
     useClientes()
@@ -66,15 +70,18 @@ export function RotasPage() {
   const [escolhida, setEscolhida] = useState<string | null>(null)
   const [mesVisivel, setMesVisivel] = useState<Mes>(() => mesDaData(hoje))
 
-  const dataEscolhida = escolhida ?? hoje
-  const ehHoje = dataEscolhida === hoje
+  // App aberto na virada do mês: mês e data guardados num mês que já passou valem como o mês
+  // atual e hoje, senão o calendário ficaria no mês velho com as duas setas desabilitadas.
   const mesAtual = mesDaData(hoje)
-  const podeVoltar = mesmoMes(mesVisivel, mesSeguinte(mesAtual.ano, mesAtual.mes))
-  const podeAvancar = mesmoMes(mesVisivel, mesAtual)
+  const mesMostrado = antesDe(mesVisivel, mesAtual) ? mesAtual : mesVisivel
+  const dataEscolhida = escolhida !== null && escolhida.slice(0, 7) >= hoje.slice(0, 7) ? escolhida : hoje
+  const ehHoje = dataEscolhida === hoje
+  const podeVoltar = mesmoMes(mesMostrado, mesSeguinte(mesAtual.ano, mesAtual.mes))
+  const podeAvancar = mesmoMes(mesMostrado, mesAtual)
 
   const contagem = useMemo(
-    () => contagemPorData(clientes, mesVisivel.ano, mesVisivel.mes),
-    [clientes, mesVisivel],
+    () => contagemPorData(clientes, mesMostrado.ano, mesMostrado.mes),
+    [clientes, mesMostrado.ano, mesMostrado.mes],
   )
   const itensHoje = useMemo(
     () => (ehHoje ? rotaDeHoje(clientes, hoje) : []),
@@ -188,8 +195,8 @@ export function RotasPage() {
             Dia do mês
           </h2>
           <SeletorDoDia
-            ano={mesVisivel.ano}
-            mes={mesVisivel.mes}
+            ano={mesMostrado.ano}
+            mes={mesMostrado.mes}
             hoje={hoje}
             escolhida={dataEscolhida}
             contagem={contagem}
