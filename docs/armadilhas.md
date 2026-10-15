@@ -333,6 +333,13 @@ parcial avisa que os números podem estar incompletos ou desatualizados, e vers�
 calculável tem seu próprio aviso. Cliente ausente do cache continua na lista de atrasados, sem link; arquivado
 continua visível e identificado.
 
+O seletor de mês de recebimento muda **só a lista e o KPI "A receber em {mês}"**.
+"A receber" e "Vencido" continuam com os totais gerais, e "Recebido no mês" é sempre
+o mês atual, independentemente da seleção. Os meses e as parcelas vêm de
+`mesesDeRecebimento` e `aReceberNoMes`, usando os mesmos documentos convertidos, sem
+novas leituras. Se o mês escolhido sair das opções, a tela usa o primeiro mês da lista.
+A busca por nome ou número filtra as duas listas, sem alterar os KPIs.
+
 — referente a src/pages/FinanceiroPage.tsx
 
 ## src/pages/RotasPage.tsx e src/components/rotas/
