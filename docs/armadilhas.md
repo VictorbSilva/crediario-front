@@ -329,8 +329,8 @@ A conversão dos documentos crus fica nesta página e copia os campos explicitam
 incluindo `cancelada`, `cancelado` e `encargoCentavos`. Campo novo relevante ao cálculo
 precisa entrar nesse mapeamento; existir no cache não basta. Os cálculos e a ordenação
 continuam em `src/lib/financeiro.ts`. Confiança desconhecida mostra carregamento, confiança
-parcial avisa que os números podem estar menores, e versão não calculável tem seu próprio
-aviso. Cliente ausente do cache continua na lista de atrasados, sem link; arquivado
+parcial avisa que os números podem estar incompletos ou desatualizados, e versão não
+calculável tem seu próprio aviso. Cliente ausente do cache continua na lista de atrasados, sem link; arquivado
 continua visível e identificado.
 
 — referente a src/pages/FinanceiroPage.tsx

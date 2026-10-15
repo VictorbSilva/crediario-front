@@ -96,7 +96,7 @@ export function FinanceiroPage() {
             <div className="mb-4">
               <Nota tom="alerta">
                 Este aparelho ainda não baixou todas as vendas e pagamentos. Os números podem
-                estar menores do que os reais.
+                estar incompletos ou desatualizados.
               </Nota>
             </div>
           ) : null}
@@ -125,7 +125,11 @@ export function FinanceiroPage() {
             </div>
 
             {encontrados.length === 0 ? (
-              <EmptyState>Nenhum cliente em atraso.</EmptyState>
+              <EmptyState>
+                {normalizar(busca)
+                  ? 'Nenhum cliente em atraso com esse nome ou número.'
+                  : 'Nenhum cliente em atraso.'}
+              </EmptyState>
             ) : (
               <ul className="flex flex-col gap-2.5">
                 {encontrados.map((atraso) => {
