@@ -628,6 +628,25 @@ describe('arrasteNaRotaDeHoje — atrasados arrastáveis entre si (B5.1)', () =>
     expect(ids(todos)).toEqual(['D2', 'D1', 'A', 'B', 'C'])
   })
 
+  it('cliente do dia levado ao fim da lista não passa do teto quando a última chave encosta na faixa', () => {
+    let todos: ClienteNaRota[] = [
+      { ...D1, ordemPorDia: { '5': 999_999_500 } }, D2,
+      { ...A, ordemDoDia: { data: hoje, valor: 500 } },
+    ]
+    expect(ids(todos)).toEqual(['A', 'D2', 'D1'])
+    const valores: number[] = []
+    for (let vez = 0; vez < 2; vez++) {
+      const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(todos, hoje), 1, 2, hoje, todos)
+      expect(alteracoes).toHaveLength(1)
+      expect(alteracoes[0].tipo).toBe('dia')
+      valores.push(alteracoes[0].valor)
+      todos = aplicarReordenacoes(todos, alteracoes)
+    }
+    expect(valores).toEqual([999_999_750, 999_999_875])
+    expect(ids(todos)).toEqual(['A', 'D2', 'D1'])
+    expect(rotas.inicioDoBlocoDeAtrasados(rotas.rotaDeHoje(todos, hoje))).toBe(-1)
+  })
+
   it('o encaixe fica abaixo da faixa mesmo quando o atrasado é de 2027', () => {
     const data = '2027-06-05'
     const todos = [D1, D2, A]

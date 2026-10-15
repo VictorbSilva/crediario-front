@@ -187,6 +187,14 @@ function reordenar<T extends { chave: number }>(
   return nova.map((item, i) => alteracao(item, PASSO * (i + 1)))
 }
 
+// O cliente do dia grava em `ordemPorDia`, que vale nos meses seguintes: a chave nova nunca
+// pode cair na faixa dos atrasados, nem pela média com o primeiro do bloco nem pelo PASSO
+// somado no fim da lista.
+function chaveDoDiaEntre(anterior: number | null, proxima: number | null): number | null {
+  const chave = chaveEntre(anterior, proxima === null ? null : Math.min(proxima, BASE_ATRASADO))
+  return chave !== null && chave >= BASE_ATRASADO ? chaveEntre(anterior, BASE_ATRASADO) : chave
+}
+
 export function arrasteNaRotaDeHoje(
   itens: readonly ItemDaRota<ClienteNaRota>[], de: number, para: number, hoje: string,
   todos: readonly ClienteNaRota[],
@@ -200,11 +208,9 @@ export function arrasteNaRotaDeHoje(
   if (inicioDoBloco !== -1 && para >= inicioDoBloco) para = inicioDoBloco
   if (para === de) return []
   nova.splice(para, 0, movido)
-  // O cliente do dia grava em `ordemPorDia`, que vale nos meses seguintes: o teto em
-  // BASE_ATRASADO impede que a média com o primeiro do bloco caia na faixa dos atrasados.
+  const anterior = nova[para - 1]?.chave ?? null
   const proxima = nova[para + 1]?.chave ?? null
-  const chave = chaveEntre(nova[para - 1]?.chave ?? null,
-    doDia && proxima !== null ? Math.min(proxima, BASE_ATRASADO) : proxima)
+  const chave = doDia ? chaveDoDiaEntre(anterior, proxima) : chaveEntre(anterior, proxima)
   const alteracao = (item: ItemDaRota<ClienteNaRota>, valor: number): Reordenacao => {
     if (item.estado.atrasado) return { clienteId: item.cliente.id, tipo: 'hoje', data: hoje, valor }
     return { clienteId: item.cliente.id, tipo: 'dia', dia: item.estado.diaAgendado!, valor }

@@ -837,7 +837,11 @@ bloco:** se o destino fica no bloco ou depois, ele é encaixado logo antes desse
 `ordemPorDia` e vale nos meses seguintes, então não pode herdar um valor da faixa dos
 atrasados. **O teto em `BASE_ATRASADO` não é enfeite:** a média pura com a chave do solto
 (≈ 1,98 bilhão em 2026) cai dentro da faixa no segundo encaixe seguido (989 150 005, depois
-1 483 225 006) e, a partir de 19/05/2027, já no primeiro. Se o encaixe devolve o item à
+1 483 225 006) e, a partir de 19/05/2027, já no primeiro. **O teto vale também no fim da
+lista, sem vizinho depois** (`chaveDoDiaEntre`): se `anterior + PASSO` alcançaria a faixa, a
+chave vira a média entre `anterior` e `BASE_ATRASADO`. Sem isso, depois de um último cliente
+do dia com 999 999 500 o seguinte gravaria 1 000 000 500, passaria a ser o início do bloco e
+o arraste seguinte para depois dele devolveria `[]`. Se o encaixe devolve o item à
 posição original, o arraste retorna `[]` antes de calcular a chave: regravar sem mover
 alteraria sua posição nos meses seguintes em relação aos clientes do mesmo dia que não
 aparecem hoje.
