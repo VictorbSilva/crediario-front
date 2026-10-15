@@ -716,13 +716,20 @@ anterior.
 
 ## src/lib/rotas.ts
 
-Rota é por **dia do mês** e seus fatos pertencem ao cliente: `diasDeVisita`,
+Os dias e as ordens da rota são configurados por **dia do mês**, e seus fatos pertencem ao cliente: `diasDeVisita`,
 `rotaDesde`, `ordemPorDia`, `ordemDoDia` e as marcas de visita. Este módulo usa o tipo
 estrutural `ClienteNaRota`, sem Firestore ou tela, e devolve alterações para quem grava.
 `montarDiasDeVisita` aceita apenas inteiros de 1 a 31 sem repetição e ordena uma cópia.
 
+**O planejamento mensal é por data civil, inclusive no mês seguinte.** `diaNaData` escolhe
+o menor dia configurado cuja `dataDaVisita` coincide com a data pedida; `rotaDaData` usa
+esse dia e sua chave em `ordemPorDia`. Se 30 e 31 caem juntos, o cliente entra uma vez,
+com dia 30; um cliente só do dia 31 continua com dia 31. `contagemPorData` também conta
+cada cliente uma única vez em cada data. `arrasteNaRotaDaData` grava o dia do próprio
+item, inclusive para cada item de um rebalanceamento.
+
 - **Ordem inválida:** `ordemPorDia` não numérica ou não finita usa `BASE_SEM_ORDEM + numero`; `ordemDoDia.valor` inválido volta a ser solto e o máximo só considera chaves finitas, para um documento ruim não quebrar Rotas.
-- **Índice inválido:** `de` e `para` precisam ser inteiros de 0 a `itens.length - 1`; fora disso, ambos os arrastes devolvem `[]`, evitando escrita indevida por erro do handler.
+- **Índice inválido:** `de` e `para` precisam ser inteiros de 0 a `itens.length - 1`; fora disso, os arrastes devolvem `[]`, evitando escrita indevida por erro do handler.
 - **Visita futura:** `visitadoAte` ignora `ultimoVisitado > hoje` em `estadoNaRota`, `marcarVisitado` e `desmarcar`, para o relógio adiantado não esconder o cliente nem levar a data futura para `visitadoAnterior`.
 - **Limitação aceita:** Ausente → Visitado → Desmarcar perde a marca de Ausente; ela é informativa e sua perda não altera pendência nem rota, então o modelo de desfazer de um nível permanece.
 
@@ -737,7 +744,9 @@ Visitado hoje continua na lista, na mesma posição. Desfazer volta `ultimoVisit
 uma alteração vazia quando `ultimoVisitado === hoje`. Isso impede a combinação
 "visitado e ausente hoje" e preserva a visita, que `desmarcar` desfaz em um nível.
 
-**`rotaDesde` corta agendas anteriores a ela.** Colocar um cliente no dia 5 em 10 de
+**`rotaDesde` só corta agendas da pendência de hoje (`estadoNaRota`), não o planejamento.**
+`rotaDaData` e `contagemPorData` mostram a rota configurada mesmo antes de `rotaDesde`.
+Colocar um cliente no dia 5 em 10 de
 outubro não cria uma pendência de 5 de outubro. A data igual a `rotaDesde` conta.
 Datas são strings civis `'YYYY-MM-DD'`, comparadas como strings; não há hora na rota.
 `dataDaVisita` recebe mês de 1 a 12 e converte para o mês de 0 a 11 de `diasNoMes`.

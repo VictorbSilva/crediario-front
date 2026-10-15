@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as rotas from './rotas'
-import type { AlteracaoDeVisita, ClienteNaRota, ItemDaRota, Reordenacao } from './rotas'
+import type { AlteracaoDeVisita, ClienteNaRota, ItemDaData, ItemDaRota, Reordenacao } from './rotas'
 
 function cliente(campos: Partial<ClienteNaRota> = {}): ClienteNaRota {
   return { id: 'cliente', numero: 1, diasDeVisita: [5], ...campos }
@@ -34,6 +34,25 @@ describe('dataDaVisita', () => {
     [2026, 10, 5, '2026-10-05'],
   ])('limita %i/%i dia %i ao calendário', (ano, mes, dia, esperado) => {
     expect(rotas.dataDaVisita(ano, mes, dia)).toBe(esperado)
+  })
+})
+
+describe('diaNaData', () => {
+  it.each([
+    { dias: [5, 20], data: '2026-11-20', dia: 20 },
+    { dias: [30, 31], data: '2026-11-30', dia: 30 },
+    { dias: [31, 30], data: '2026-11-30', dia: 30 },
+    { dias: [31], data: '2026-11-30', dia: 31 },
+    { dias: [29, 31], data: '2027-02-28', dia: 29 },
+    { dias: [31, 29], data: '2027-02-28', dia: 29 },
+    { dias: [5], data: '2026-11-06', dia: null },
+    { dias: [], data: '2026-11-05', dia: null },
+    { dias: undefined, data: '2026-11-05', dia: null },
+  ])('escolhe o menor dia configurado que cai na data (%j)', ({ dias, data, dia }) => {
+    const c = cliente({ diasDeVisita: dias })
+    const antes = structuredClone(c)
+    expect(rotas.diaNaData(c, data)).toBe(dia)
+    expect(c).toEqual(antes)
   })
 })
 
@@ -223,6 +242,53 @@ describe('rotaDoDia', () => {
   })
 })
 
+describe('rotaDaData', () => {
+  it('filtra data e arquivados e ordena pela chave do dia e pelo número', () => {
+    const clientes = [
+      cliente({ id: 'sem-9', numero: 9 }), cliente({ id: 'sem-2', numero: 2 }),
+      cliente({ id: 'ordenado-8', numero: 8, diasDeVisita: [5, 20], ordemPorDia: { '5': 1000, '20': 9000 } }),
+      cliente({ id: 'ordenado-3', numero: 3, ordemPorDia: { '5': 1000 } }),
+      cliente({ id: 'outro-dia', diasDeVisita: [20] }),
+      cliente({ id: 'sem-dias', diasDeVisita: undefined }), cliente({ id: 'vazio', diasDeVisita: [] }),
+      cliente({ id: 'arquivado', arquivado: true }),
+    ].map((c) => ({ ...c, nome: c.id }))
+    const antes = structuredClone(clientes)
+    const itens = rotas.rotaDaData(clientes, '2026-11-05')
+    expect(itens.map((item) => item.cliente.nome)).toEqual(['ordenado-3', 'ordenado-8', 'sem-2', 'sem-9'])
+    expect(itens.map((item) => item.chave)).toEqual([1000, 1000, 1_000_002, 1_000_009])
+    expect(itens.map((item) => item.dia)).toEqual([5, 5, 5, 5])
+    expect(itens[0].cliente).toBe(clientes[3])
+    expect(clientes).toEqual(antes)
+  })
+
+  it('mostra a rota configurada mesmo com rotaDesde futura ou visita já registrada', () => {
+    const c = cliente({ rotaDesde: '2026-12-01', ultimoVisitado: '2026-11-05' })
+    expect(rotas.rotaDaData([c], '2026-11-05')).toEqual([
+      { cliente: c, dia: 5, chave: rotas.BASE_SEM_ORDEM + c.numero },
+    ])
+  })
+
+  it('junta dias 30 e 31 em novembro, preservando o dia e a chave de cada cliente', () => {
+    const clientes = [
+      cliente({ id: 'dia-31', diasDeVisita: [31], ordemPorDia: { '31': 1000 } }),
+      cliente({ id: 'dia-30', diasDeVisita: [30], ordemPorDia: { '30': 3000 } }),
+      cliente({ id: 'ambos', diasDeVisita: [31, 30], ordemPorDia: { '30': 2000, '31': 500 } }),
+    ]
+    expect(rotas.rotaDaData(clientes, '2026-11-30')).toEqual([
+      { cliente: clientes[0], dia: 31, chave: 1000 },
+      { cliente: clientes[2], dia: 30, chave: 2000 },
+      { cliente: clientes[1], dia: 30, chave: 3000 },
+    ])
+  })
+
+  it.each([NaN, Infinity, -Infinity, 'abc'])('usa o padrão quando a ordem é inválida (%s)', (valor) => {
+    const c = cliente({ numero: 4, ordemPorDia: { '5': valor as unknown as number } })
+    expect(rotas.rotaDaData([c], '2026-11-05')).toEqual([
+      { cliente: c, dia: 5, chave: 1_000_004 },
+    ])
+  })
+})
+
 describe('valores de ordem inválidos — padrão sem erro (C1)', () => {
   const hoje = '2026-10-05'
 
@@ -304,6 +370,67 @@ describe('contagemPorDia', () => {
 
   it('devolve mapa vazio sem clientes', () => {
     expect(rotas.contagemPorDia([])).toEqual(new Map())
+  })
+})
+
+describe('contagemPorData', () => {
+  it('conta uma vez o cliente cujos dias 30 e 31 caem juntos em fevereiro', () => {
+    const clientes = [cliente({ diasDeVisita: [30, 31] })]
+    const antes = structuredClone(clientes)
+    expect(rotas.contagemPorData(clientes, 2027, 2)).toEqual(new Map([['2027-02-28', 1]]))
+    expect(clientes).toEqual(antes)
+  })
+
+  it('conta clientes diferentes na mesma data, ignorando arquivados e clientes sem dias', () => {
+    expect(rotas.contagemPorData([
+      cliente({ id: 'A', diasDeVisita: [30, 31] }), cliente({ id: 'B', diasDeVisita: [31] }),
+      cliente({ arquivado: true, diasDeVisita: [28] }),
+      cliente({ diasDeVisita: undefined }), cliente({ diasDeVisita: [] }),
+    ], 2027, 2)).toEqual(new Map([['2027-02-28', 2]]))
+  })
+
+  it('conta somente as datas do mês pedido, sem filtrar por rotaDesde ou visitas', () => {
+    expect(rotas.contagemPorData([
+      cliente({ diasDeVisita: [5], rotaDesde: '2026-12-01', ultimoVisitado: '2026-11-05' }),
+    ], 2026, 11)).toEqual(new Map([['2026-11-05', 1]]))
+  })
+
+  it('devolve mapa vazio sem clientes', () => {
+    expect(rotas.contagemPorData([], 2026, 11)).toEqual(new Map())
+  })
+})
+
+describe('gradeDoMes', () => {
+  it.each([
+    { ano: 2026, mes: 10, prefixo: '2026-10-', vazios: 4, dias: 31 },
+    { ano: 2027, mes: 2, prefixo: '2027-02-', vazios: 1, dias: 28 },
+    { ano: 2028, mes: 2, prefixo: '2028-02-', vazios: 2, dias: 29 },
+    { ano: 2026, mes: 11, prefixo: '2026-11-', vazios: 0, dias: 30 },
+  ])('começa no dia da semana e contém todas as datas em ordem (%j)', ({ ano, mes, prefixo, vazios, dias }) => {
+    const grade = rotas.gradeDoMes(ano, mes)
+    expect(grade).toHaveLength(vazios + dias)
+    expect(grade.slice(0, vazios)).toEqual(Array(vazios).fill(null))
+    expect(grade.slice(vazios)).toEqual(Array.from({ length: dias }, (_, i) => `${prefixo}${String(i + 1).padStart(2, '0')}`))
+  })
+})
+
+describe('nomeDoMes', () => {
+  it.each([
+    [1, 'Janeiro'], [2, 'Fevereiro'], [3, 'Março'], [4, 'Abril'],
+    [5, 'Maio'], [6, 'Junho'], [7, 'Julho'], [8, 'Agosto'],
+    [9, 'Setembro'], [10, 'Outubro'], [11, 'Novembro'], [12, 'Dezembro'],
+  ])('nomeia o mês %i em português', (mes, nome) => {
+    expect(rotas.nomeDoMes(2026, mes)).toBe(`${nome} de 2026`)
+  })
+})
+
+describe('mesSeguinte', () => {
+  it.each([
+    { ano: 2026, mes: 10, seguinte: { ano: 2026, mes: 11 } },
+    { ano: 2026, mes: 11, seguinte: { ano: 2026, mes: 12 } },
+    { ano: 2026, mes: 12, seguinte: { ano: 2027, mes: 1 } },
+  ])('avança um mês, incluindo a virada do ano (%j)', ({ ano, mes, seguinte }) => {
+    expect(rotas.mesSeguinte(ano, mes)).toEqual(seguinte)
   })
 })
 
@@ -572,6 +699,51 @@ describe('arrasteNaRotaDoDia', () => {
       { clienteId: '3', tipo: 'dia', dia: 20, valor: 2000 },
       { clienteId: '2', tipo: 'dia', dia: 20, valor: 3000 },
     ])
+    expect(lista).toEqual(antes)
+  })
+})
+
+describe('arrasteNaRotaDaData', () => {
+  const data = '2026-11-30'
+  function itens(chaves = [1000, 2000, 3000, 4000]): ItemDaData<ClienteNaRota>[] {
+    return rotas.rotaDaData(chaves.map((chave, i) => {
+      const dia = i % 2 === 0 ? 30 : 31
+      return cliente({ id: String(i + 1), numero: i + 1, diasDeVisita: [dia], ordemPorDia: { [String(dia)]: chave } })
+    }), data)
+  }
+
+  it.each([
+    [0, 2, '1', 30, 3500], [3, 0, '4', 31, 0], [0, 3, '1', 30, 5000], [2, 1, '3', 30, 1500],
+  ])('gera uma alteração com o dia do item movido de %i para %i', (de, para, clienteId, dia, valor) => {
+    const lista = itens()
+    const antes = structuredClone(lista)
+    expect(rotas.arrasteNaRotaDaData(lista, de, para)).toEqual([{ clienteId, tipo: 'dia', dia, valor }])
+    expect(lista).toEqual(antes)
+  })
+
+  it.each([
+    [0, 9], [-1, 1], [0, 1.5], [9, 0], [1, -1], [1.5, 0],
+    [NaN, 1], [1, NaN], [Infinity, 1], [1, Infinity],
+  ])('não grava com índice inválido de %s para %s', (de, para) => {
+    expect(rotas.arrasteNaRotaDaData(itens(), de, para)).toEqual([])
+  })
+
+  it('não grava em lista vazia nem quando a posição não muda', () => {
+    expect(rotas.arrasteNaRotaDaData([], 0, 1)).toEqual([])
+    expect(rotas.arrasteNaRotaDaData(itens(), 1, 1)).toEqual([])
+  })
+
+  it('rebalanceia a lista inteira com o dia de cada item quando acaba a precisão', () => {
+    const lista = itens([1, 1 + Number.EPSILON, 1000])
+    const antes = structuredClone(lista)
+    const alteracoes = rotas.arrasteNaRotaDaData(lista, 2, 1)
+    expect(alteracoes).toEqual([
+      { clienteId: '1', tipo: 'dia', dia: 30, valor: 1000 },
+      { clienteId: '3', tipo: 'dia', dia: 30, valor: 2000 },
+      { clienteId: '2', tipo: 'dia', dia: 31, valor: 3000 },
+    ])
+    const depois = aplicarReordenacoes(lista.map((item) => item.cliente), alteracoes)
+    expect(rotas.rotaDaData(depois, data).map((item) => item.cliente.id)).toEqual(['1', '3', '2'])
     expect(lista).toEqual(antes)
   })
 })

@@ -24,6 +24,15 @@ export function dataDaVisita(ano: number, mes: number, dia: number): string {
   return `${String(ano).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(limitado).padStart(2, '0')}`
 }
 
+export function diaNaData(cliente: ClienteNaRota, data: string): number | null {
+  const [ano, mes] = data.split('-').map(Number)
+  let menor: number | null = null
+  for (const dia of cliente.diasDeVisita ?? []) {
+    if (dataDaVisita(ano, mes, dia) === data && (menor === null || dia < menor)) menor = dia
+  }
+  return menor
+}
+
 export function agendaRecente(cliente: ClienteNaRota, hoje: string): { data: string; dia: number } | null {
   const [ano, mes] = hoje.split('-').map(Number)
   const anterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 }
@@ -112,6 +121,18 @@ export function rotaDoDia<C extends ClienteNaRota>(clientes: readonly C[], dia: 
     .sort(compararChaves)
 }
 
+export type ItemDaData<C extends ClienteNaRota> = { cliente: C; dia: number; chave: number }
+
+export function rotaDaData<C extends ClienteNaRota>(clientes: readonly C[], data: string): ItemDaData<C>[] {
+  const itens: ItemDaData<C>[] = []
+  for (const cliente of clientes) {
+    if (cliente.arquivado) continue
+    const dia = diaNaData(cliente, data)
+    if (dia !== null) itens.push({ cliente, dia, chave: chaveDoDia(cliente, dia) })
+  }
+  return itens.sort(compararChaves)
+}
+
 export function contagemPorDia(clientes: readonly ClienteNaRota[]): Map<number, number> {
   const contagem = new Map<number, number>()
   for (const cliente of clientes) {
@@ -121,6 +142,33 @@ export function contagemPorDia(clientes: readonly ClienteNaRota[]): Map<number, 
     }
   }
   return contagem
+}
+
+export function contagemPorData(clientes: readonly ClienteNaRota[], ano: number, mes: number): Map<string, number> {
+  const contagem = new Map<string, number>()
+  for (const cliente of clientes) {
+    if (cliente.arquivado) continue
+    const datas = new Set((cliente.diasDeVisita ?? []).map((dia) => dataDaVisita(ano, mes, dia)))
+    for (const data of datas) contagem.set(data, (contagem.get(data) ?? 0) + 1)
+  }
+  return contagem
+}
+
+export function gradeDoMes(ano: number, mes: number): (string | null)[] {
+  const inicio = new Date(Date.UTC(ano, mes - 1, 1)).getUTCDay()
+  const grade: (string | null)[] = Array(inicio).fill(null)
+  for (let dia = 1; dia <= diasNoMes(ano, mes - 1); dia++) grade.push(dataDaVisita(ano, mes, dia))
+  return grade
+}
+
+export function nomeDoMes(ano: number, mes: number): string {
+  const nomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+  return `${nomes[mes - 1]} de ${ano}`
+}
+
+export function mesSeguinte(ano: number, mes: number): { ano: number; mes: number } {
+  return mes === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: mes + 1 }
 }
 
 export function chaveEntre(anterior: number | null, proxima: number | null): number | null {
@@ -192,6 +240,12 @@ export function arrasteNaRotaDoDia(
   itens: readonly ItemDoDia<ClienteNaRota>[], de: number, para: number, dia: number,
 ): Reordenacao[] {
   return reordenar(itens, de, para, (item, valor) => ({ clienteId: item.cliente.id, tipo: 'dia', dia, valor }))
+}
+
+export function arrasteNaRotaDaData(
+  itens: readonly ItemDaData<ClienteNaRota>[], de: number, para: number,
+): Reordenacao[] {
+  return reordenar(itens, de, para, (item, valor) => ({ clienteId: item.cliente.id, tipo: 'dia', dia: item.dia, valor }))
 }
 
 export type AlteracaoDeVisita = { definir: Record<string, string>; remover: string[] }
