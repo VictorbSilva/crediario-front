@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { FileJson, FileSpreadsheet, X } from 'lucide-react'
 import { Nota } from '@/components/ui/Nota'
 import { CARNE_COMPLETO, useCarneDaEmpresa } from '@/data/useCarneDaEmpresa'
@@ -15,10 +15,14 @@ import {
 
 function entregarArquivo(conteudo: string, nome: string, tipo: string): Promise<void> {
   const arquivo = new File([conteudo], nome, { type: tipo })
+  const noIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
-  if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [arquivo] })) {
+  if (noIOS && typeof navigator.canShare === 'function' && navigator.canShare({ files: [arquivo] })) {
     return navigator.share({ files: [arquivo], title: nome }).catch((erro) => {
-      if (erro?.name !== 'AbortError') baixarComLink(arquivo, nome)
+      if (erro?.name !== 'AbortError' && erro?.name !== 'InvalidStateError') {
+        baixarComLink(arquivo, nome)
+      }
     })
   }
 
@@ -44,10 +48,17 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
   const { vendas, parcelas, pagamentos, ...carne } = useCarneDaEmpresa(CARNE_COMPLETO)
 
   const dialogo = useRef<HTMLDialogElement>(null)
+  const montado = useRef(true)
+  const entregaEmCurso = useRef(false)
+  const [entregando, setEntregando] = useState(false)
   const base = useId()
 
   useEffect(() => {
+    montado.current = true
     dialogo.current?.showModal()
+    return () => {
+      montado.current = false
+    }
   }, [])
 
   const situacao = situacaoExportacao(confianca, clientes.length, pendentes)
@@ -58,7 +69,19 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
     erro: carne.erro,
   })
 
+  function concluirEntrega() {
+    entregaEmCurso.current = false
+    if (!montado.current) return
+
+    setEntregando(false)
+    aoFechar()
+  }
+
   function exportar(extensao: 'json' | 'csv') {
+    if (entregaEmCurso.current) return
+    entregaEmCurso.current = true
+    setEntregando(true)
+
     const agora = new Date()
 
     if (extensao === 'json') {
@@ -66,10 +89,10 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
         paraJSON(clientes, { vendas, parcelas, pagamentos }, agora),
         nomeDoArquivo('json', agora),
         'application/json',
-      ).finally(aoFechar)
+      ).finally(concluirEntrega)
     } else {
       entregarArquivo(paraCSV(clientes), nomeDoArquivo('csv', agora), 'text/csv;charset=utf-8')
-        .finally(aoFechar)
+        .finally(concluirEntrega)
     }
   }
 
@@ -120,7 +143,7 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
 
           <button
             type="button"
-            disabled={!situacao.pode || !backup.pode}
+            disabled={entregando || !situacao.pode || !backup.pode}
             onClick={() => exportar('json')}
             className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-brand-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200"
           >
@@ -138,7 +161,7 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
 
           <button
             type="button"
-            disabled={!situacao.pode}
+            disabled={entregando || !situacao.pode}
             onClick={() => exportar('csv')}
             className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-brand-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200"
           >

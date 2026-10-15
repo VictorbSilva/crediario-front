@@ -711,14 +711,20 @@ silêncio todo campo novo até alguém lembrar deste arquivo.
 > No Safari do iOS, principalmente no app instalado na Tela de Início, o `<a download>`
 > com URL de blob pode navegar para o arquivo ou deixar o download pendurado. Sem barra
 > do navegador e botão de voltar, o dono fica preso numa página carregando sem fim.
-> Por isso, CSV e JSON usam a folha de compartilhamento quando
+> Por isso, CSV e JSON usam a folha de compartilhamento **somente no iOS**, quando
 > `navigator.canShare({ files: [arquivo] })` permite: ela oferece Salvar em Arquivos,
-> WhatsApp e e-mail, inclusive para guardar o backup fora do celular.
+> WhatsApp e e-mail, inclusive para guardar o backup fora do celular. A identificação
+> inclui iPad em modo desktop (`MacIntel` com mais de um ponto de toque). Desktop e
+> Android continuam com download, mesmo quando suportam compartilhar arquivos.
 >
 > O `File` é montado de forma síncrona e `navigator.share` é chamado na mesma volta do
 > clique, sem `await` antes: a API exige o gesto do usuário. O diálogo de exportação só
-> fecha quando a Promise resolve ou rejeita. `AbortError` é cancelamento normal e não
-> dispara download; outro erro cai no `<a download>`, assim como a falta de suporte.
+> fecha quando a Promise resolve ou rejeita. Durante a entrega, os dois botões ficam
+> desabilitados, e uma trava síncrona impede outro disparo mesmo antes de renderizar.
+> `AbortError` (cancelamento) e `InvalidStateError` (compartilhamento já em curso) não
+> disparam download; outro erro cai no `<a download>`, assim como a falta de suporte.
+> A conclusão só fecha a instância ainda montada: uma Promise antiga não pode fechar
+> um diálogo reaberto depois de o dono fechar o anterior.
 >
 > O `URL.revokeObjectURL` do download roda com atraso de **60 s** de propósito. Revogar
 > na mesma volta do `click()` cancela o download antes de começar em alguns navegadores,
