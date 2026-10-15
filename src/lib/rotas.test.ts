@@ -344,32 +344,14 @@ describe('índices de arraste inválidos — sem escrita (C2)', () => {
     [NaN, 1], [1, NaN], [Infinity, 1], [1, Infinity],
   ])('não grava de %s para %s em nenhuma das rotas', (de, para) => {
     const deHoje = rotas.rotaDeHoje(clientes, hoje)
-    const doDia = rotas.rotaDoDia(clientes, 5)
     const antes = structuredClone(clientes)
     expect(rotas.arrasteNaRotaDeHoje(deHoje, de, para, hoje, clientes)).toEqual([])
-    expect(rotas.arrasteNaRotaDoDia(doDia, de, para, 5)).toEqual([])
     expect(clientes).toEqual(antes)
     expect(deHoje).toEqual(rotas.rotaDeHoje(clientes, hoje))
-    expect(doDia).toEqual(rotas.rotaDoDia(clientes, 5))
   })
 
   it('não grava em listas vazias', () => {
     expect(rotas.arrasteNaRotaDeHoje([], 0, 1, hoje, [])).toEqual([])
-    expect(rotas.arrasteNaRotaDoDia([], 0, 1, 5)).toEqual([])
-  })
-})
-
-describe('contagemPorDia', () => {
-  it('conta cada dia dos clientes ativos, sem depender de visitas ou ordem', () => {
-    expect(rotas.contagemPorDia([
-      cliente({ diasDeVisita: [5, 20, 31], ultimoVisitado: '2026-10-05' }),
-      cliente({ diasDeVisita: [5] }), cliente({ diasDeVisita: [20], arquivado: true }),
-      cliente({ diasDeVisita: undefined }), cliente({ diasDeVisita: [] }),
-    ])).toEqual(new Map([[5, 2], [20, 1], [31, 1]]))
-  })
-
-  it('devolve mapa vazio sem clientes', () => {
-    expect(rotas.contagemPorDia([])).toEqual(new Map())
   })
 })
 
@@ -669,37 +651,6 @@ describe('arrasteNaRotaDeHoje — rebalanceamento do dia inteiro (C3)', () => {
     expect(rotas.rotaDeHoje(depois, seguinte).filter((item) => item.estado.diaAgendado === 31)
       .map((item) => item.cliente.id)).toEqual(['B', 'D', 'A'])
     expect(clientes).toEqual(antes)
-  })
-})
-
-describe('arrasteNaRotaDoDia', () => {
-  const itens = (chaves = [1000, 2000, 3000, 4000]) => chaves.map((chave, i) => ({
-    cliente: cliente({ id: String(i + 1), numero: i + 1 }), chave,
-  }))
-
-  it.each([
-    [0, 2, '1', 3500], [3, 0, '4', 0], [0, 3, '1', 5000], [2, 1, '3', 1500],
-  ])('gera uma única alteração ao mover de %i para %i', (de, para, clienteId, valor) => {
-    const lista = itens()
-    const antes = structuredClone(lista)
-    expect(rotas.arrasteNaRotaDoDia(lista, de, para, 20))
-      .toEqual([{ clienteId, tipo: 'dia', dia: 20, valor }])
-    expect(lista).toEqual(antes)
-  })
-
-  it('não escreve quando a posição não muda', () => {
-    expect(rotas.arrasteNaRotaDoDia(itens(), 0, 0, 5)).toEqual([])
-  })
-
-  it('rebalanceia todos no dia informado quando acaba a precisão', () => {
-    const lista = itens([1, 1 + Number.EPSILON, 1000])
-    const antes = structuredClone(lista)
-    expect(rotas.arrasteNaRotaDoDia(lista, 2, 1, 20)).toEqual([
-      { clienteId: '1', tipo: 'dia', dia: 20, valor: 1000 },
-      { clienteId: '3', tipo: 'dia', dia: 20, valor: 2000 },
-      { clienteId: '2', tipo: 'dia', dia: 20, valor: 3000 },
-    ])
-    expect(lista).toEqual(antes)
   })
 })
 

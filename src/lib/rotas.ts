@@ -133,17 +133,6 @@ export function rotaDaData<C extends ClienteNaRota>(clientes: readonly C[], data
   return itens.sort(compararChaves)
 }
 
-export function contagemPorDia(clientes: readonly ClienteNaRota[]): Map<number, number> {
-  const contagem = new Map<number, number>()
-  for (const cliente of clientes) {
-    if (cliente.arquivado) continue
-    for (const dia of cliente.diasDeVisita ?? []) {
-      contagem.set(dia, (contagem.get(dia) ?? 0) + 1)
-    }
-  }
-  return contagem
-}
-
 export function contagemPorData(clientes: readonly ClienteNaRota[], ano: number, mes: number): Map<string, number> {
   const contagem = new Map<string, number>()
   for (const cliente of clientes) {
@@ -234,12 +223,6 @@ export function arrasteNaRotaDeHoje(
     }))
   }
   return alteracoes
-}
-
-export function arrasteNaRotaDoDia(
-  itens: readonly ItemDoDia<ClienteNaRota>[], de: number, para: number, dia: number,
-): Reordenacao[] {
-  return reordenar(itens, de, para, (item, valor) => ({ clienteId: item.cliente.id, tipo: 'dia', dia, valor }))
 }
 
 export function arrasteNaRotaDaData(

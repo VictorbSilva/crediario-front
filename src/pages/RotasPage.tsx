@@ -23,11 +23,13 @@ import { Nota } from '@/components/ui/Nota'
 import { useClientes } from '@/data/useClientes'
 import { dataBonita, dataLocalISO } from '@/lib/data'
 import {
+  arrasteNaRotaDaData,
   arrasteNaRotaDeHoje,
-  arrasteNaRotaDoDia,
-  contagemPorDia,
+  contagemPorData,
+  dataDaVisita,
+  mesSeguinte,
+  rotaDaData,
   rotaDeHoje,
-  rotaDoDia,
 } from '@/lib/rotas'
 import type { ItemDaRota } from '@/lib/rotas'
 import type { Cliente } from '@/types/cliente'
@@ -44,30 +46,47 @@ function ehAtrasadoSolto(item: ItemDaRota<Cliente>, hoje: string): boolean {
   return item.estado.atrasado && (posicao?.data !== hoje || !Number.isFinite(posicao?.valor))
 }
 
+type Mes = { ano: number; mes: number }
+
+function mesDaData(data: string): Mes {
+  return { ano: Number(data.slice(0, 4)), mes: Number(data.slice(5, 7)) }
+}
+
+function mesmoMes(a: Mes, b: Mes): boolean {
+  return a.ano === b.ano && a.mes === b.mes
+}
+
 export function RotasPage() {
   const { clientes, carregando, erro, falhas, descartarFalha, marcarNaRota, reordenarRota } =
     useClientes()
 
-  // `null` segue o dia de hoje, mesmo que o app fique aberto durante a virada da meia-noite.
-  const [escolhido, setEscolhido] = useState<number | null>(null)
-
   const hoje = dataLocalISO(new Date())
-  const hojeDia = Number(hoje.slice(8, 10))
-  const selecionado = escolhido ?? hojeDia
-  const ehHoje = selecionado === hojeDia
 
-  const contagem = useMemo(() => contagemPorDia(clientes), [clientes])
+  // `null` segue o dia de hoje, mesmo que o app fique aberto durante a virada da meia-noite.
+  const [escolhida, setEscolhida] = useState<string | null>(null)
+  const [mesVisivel, setMesVisivel] = useState<Mes>(() => mesDaData(hoje))
+
+  const dataEscolhida = escolhida ?? hoje
+  const ehHoje = dataEscolhida === hoje
+  const mesAtual = mesDaData(hoje)
+  const podeVoltar = mesmoMes(mesVisivel, mesSeguinte(mesAtual.ano, mesAtual.mes))
+  const podeAvancar = mesmoMes(mesVisivel, mesAtual)
+
+  const contagem = useMemo(
+    () => contagemPorData(clientes, mesVisivel.ano, mesVisivel.mes),
+    [clientes, mesVisivel],
+  )
   const itensHoje = useMemo(
     () => (ehHoje ? rotaDeHoje(clientes, hoje) : []),
     [clientes, hoje, ehHoje],
   )
-  const itensDia = useMemo(
-    () => (ehHoje ? [] : rotaDoDia(clientes, selecionado)),
-    [clientes, selecionado, ehHoje],
+  const itensData = useMemo(
+    () => (ehHoje ? [] : rotaDaData(clientes, dataEscolhida)),
+    [clientes, dataEscolhida, ehHoje],
   )
   const ids = useMemo(
-    () => (ehHoje ? itensHoje : itensDia).map((item) => item.cliente.id),
-    [ehHoje, itensHoje, itensDia],
+    () => (ehHoje ? itensHoje : itensData).map((item) => item.cliente.id),
+    [ehHoje, itensHoje, itensData],
   )
   const nomes = useMemo(
     () => new Map(clientes.map((cliente) => [cliente.id, cliente.nome])),
@@ -104,8 +123,24 @@ export function RotasPage() {
     reordenarRota(
       ehHoje
         ? arrasteNaRotaDeHoje(itensHoje, de, para, hoje, clientes)
-        : arrasteNaRotaDoDia(itensDia, de, para, selecionado),
+        : arrasteNaRotaDaData(itensData, de, para, dataEscolhida, clientes),
     )
+  }
+
+  function escolher(data: string) {
+    setEscolhida(data === hoje ? null : data)
+  }
+
+  // Só dois meses: o atual e o seguinte. Avançar abre o dia 1; voltar retorna à rota de hoje.
+  function trocarMes(direcao: -1 | 1) {
+    if (direcao === 1 && podeAvancar) {
+      const proximo = mesSeguinte(mesAtual.ano, mesAtual.mes)
+      setMesVisivel(proximo)
+      setEscolhida(dataDaVisita(proximo.ano, proximo.mes, 1))
+    } else if (direcao === -1 && podeVoltar) {
+      setMesVisivel(mesAtual)
+      setEscolhida(null)
+    }
   }
 
   const inicioDosAtrasados = itensHoje.findIndex((item) => ehAtrasadoSolto(item, hoje))
@@ -153,10 +188,15 @@ export function RotasPage() {
             Dia do mês
           </h2>
           <SeletorDoDia
-            hojeDia={hojeDia}
-            selecionado={selecionado}
+            ano={mesVisivel.ano}
+            mes={mesVisivel.mes}
+            hoje={hoje}
+            escolhida={dataEscolhida}
             contagem={contagem}
-            aoEscolher={setEscolhido}
+            podeVoltar={podeVoltar}
+            podeAvancar={podeAvancar}
+            aoEscolher={escolher}
+            aoTrocarMes={trocarMes}
           />
         </section>
 
@@ -171,14 +211,14 @@ export function RotasPage() {
           ) : (
             <div className="mb-4">
               <Nota tom="info">
-                Aqui você muda a ordem do dia {selecionado}. As marcas de visita ficam na rota de
-                hoje.
+                Aqui você ajusta a ordem de visita. A ordem vale para este dia em todos os meses.
+                As marcas de visita ficam na rota de hoje.
               </Nota>
             </div>
           )}
 
           <h2 id="titulo-da-rota" className="mb-3 text-sm font-semibold text-slate-900">
-            {ehHoje ? `Rota de hoje · ${dataBonita(hoje)}` : `Rota do dia ${selecionado}`}
+            {ehHoje ? `Rota de hoje · ${dataBonita(hoje)}` : `Rota de ${dataBonita(dataEscolhida)}`}
           </h2>
 
           {carregando ? (
@@ -213,7 +253,7 @@ export function RotasPage() {
                           />
                         </Fragment>
                       ))
-                    : itensDia.map((item) => (
+                    : itensData.map((item) => (
                         <ParadaDaRota key={item.cliente.id} cliente={item.cliente} />
                       ))}
                 </ul>
