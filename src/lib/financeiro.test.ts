@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { listaDeAtrasados, parcelasRegeneradas, situacaoFinanceira } from './financeiro'
+import {
+  aReceberNoMes,
+  listaDeAtrasados,
+  mesesDeRecebimento,
+  parcelasRegeneradas,
+  situacaoFinanceira,
+} from './financeiro'
 import type {
   AtrasoDoCliente,
   PagamentoParaFinanceiro,
@@ -288,6 +294,208 @@ describe('listaDeAtrasados', () => {
       ['c1', conhecido],
       ['sumido-2', null],
       ['sumido-1', null],
+    ])
+  })
+})
+
+describe('aReceberNoMes', () => {
+  function cliente(id: string, numero: number) {
+    return { id, numero, nome: `Cliente ${numero}` }
+  }
+
+  const clientes = [cliente('c1', 2), cliente('c2', 1), cliente('c3', 3)]
+
+  it('parcela paga some do mês', () => {
+    const pagamentos = [pagamento({ valorCentavos: 20_000 })]
+
+    expect(aReceberNoMes([venda()], pagamentos, clientes, 2026, 10, HOJE)).toEqual({
+      totalCentavos: 0,
+      parcelas: [],
+    })
+    expect(aReceberNoMes([venda()], pagamentos, clientes, 2026, 11, HOJE)).toEqual({
+      totalCentavos: 10_000,
+      parcelas: [
+        {
+          cliente: clientes[0],
+          clientId: 'c1',
+          saleId: 'v1',
+          numero: 3,
+          total: 3,
+          vencimento: '2026-11-10',
+          restanteCentavos: 10_000,
+          situacao: 'a-vencer',
+        },
+      ],
+    })
+  })
+
+  it('parcela paga pela metade aparece com o restante: parcial antes do vencimento, vencida depois', () => {
+    const pagamentos = [pagamento({ valorCentavos: 25_000 })]
+
+    const antes = aReceberNoMes([venda()], pagamentos, clientes, 2026, 11, HOJE)
+    const depois = aReceberNoMes([venda()], pagamentos, clientes, 2026, 11, '2026-11-11')
+
+    expect(antes.totalCentavos).toBe(5_000)
+    expect(antes.parcelas.map((p) => [p.numero, p.restanteCentavos, p.situacao])).toEqual([
+      [3, 5_000, 'parcial'],
+    ])
+    expect(depois.totalCentavos).toBe(5_000)
+    expect(depois.parcelas.map((p) => [p.numero, p.restanteCentavos, p.situacao])).toEqual([
+      [3, 5_000, 'vencida'],
+    ])
+  })
+
+  it('pagamento cancelado não abate', () => {
+    const resultado = aReceberNoMes(
+      [venda()],
+      [
+        pagamento({ id: 'g1', valorCentavos: 20_000, cancelado: true }),
+        pagamento({ id: 'g2', valorCentavos: 15_000 }),
+      ],
+      clientes,
+      2026,
+      10,
+      HOJE,
+    )
+
+    expect(resultado.totalCentavos).toBe(5_000)
+    expect(resultado.parcelas.map((p) => [p.numero, p.restanteCentavos, p.situacao])).toEqual([
+      [2, 5_000, 'vencida'],
+    ])
+  })
+
+  it('encargo pago não abate o principal', () => {
+    const resultado = aReceberNoMes(
+      [venda()],
+      [pagamento({ valorCentavos: 12_000, encargoCentavos: 2_000 })],
+      clientes,
+      2026,
+      10,
+      HOJE,
+    )
+
+    expect(resultado.totalCentavos).toBe(10_000)
+    expect(resultado.parcelas.map((p) => [p.numero, p.restanteCentavos])).toEqual([[2, 10_000]])
+  })
+
+  it('venda cancelada e venda de versão desconhecida não entram', () => {
+    const resultado = aReceberNoMes(
+      [venda({ cancelada: true }), venda({ id: 'v2', versaoCalculo: 2 })],
+      [],
+      clientes,
+      2026,
+      10,
+      HOJE,
+    )
+
+    expect(resultado).toEqual({ totalCentavos: 0, parcelas: [] })
+  })
+
+  it('mês sem parcela devolve total zero e lista vazia', () => {
+    expect(aReceberNoMes([venda()], [], clientes, 2026, 12, HOJE)).toEqual({
+      totalCentavos: 0,
+      parcelas: [],
+    })
+  })
+
+  it('ordena por vencimento, número do cliente (sem cliente no fim) e número da parcela; total soma os restantes', () => {
+    const vendas = [
+      // c1 (nº 2): parcela 3 em 10/11.
+      venda(),
+      // cliente fora da lista: parcela 1 em 05/11.
+      venda({
+        id: 'v4',
+        clientId: 'sumido',
+        dataVenda: '2026-10-01',
+        valorTotalCentavos: 6_000,
+        diaVencimento: 5,
+      }),
+      // c2 (nº 1): 2 × R$ 15,00 em 10/10 e 10/11 — a parcela 2 cai em 10/11.
+      venda({
+        id: 'v5',
+        clientId: 'c2',
+        dataVenda: '2026-09-10',
+        valorTotalCentavos: 3_000,
+        numeroParcelas: 2,
+      }),
+      // c2 (nº 1): parcela 1 em 10/11.
+      venda({ id: 'v2', clientId: 'c2', dataVenda: '2026-10-01' }),
+      // c3 (nº 3): parcela 1 em 05/11.
+      venda({
+        id: 'v3',
+        clientId: 'c3',
+        dataVenda: '2026-10-01',
+        valorTotalCentavos: 9_000,
+        diaVencimento: 5,
+      }),
+    ]
+
+    const resultado = aReceberNoMes(vendas, [], clientes, 2026, 11, HOJE)
+
+    expect(
+      resultado.parcelas.map((p) => [p.vencimento, p.saleId, p.numero, p.cliente?.numero ?? null]),
+    ).toEqual([
+      ['2026-11-05', 'v3', 1, 3],
+      ['2026-11-05', 'v4', 1, null],
+      ['2026-11-10', 'v2', 1, 1],
+      ['2026-11-10', 'v5', 2, 1],
+      ['2026-11-10', 'v1', 3, 2],
+    ])
+    expect(resultado.parcelas[1]).toMatchObject({ clientId: 'sumido', cliente: null })
+    expect(resultado.totalCentavos).toBe(3_000 + 2_000 + 10_000 + 1_500 + 10_000)
+  })
+})
+
+describe('mesesDeRecebimento', () => {
+  it('vai do mês de hoje até o mês do último vencimento, inclusive', () => {
+    // 12 parcelas com vencimento de 14/11/2026 a 14/10/2027.
+    const meses = mesesDeRecebimento(
+      [venda({ dataVenda: '2026-10-14', valorTotalCentavos: 120_000, numeroParcelas: 12, diaVencimento: 14 })],
+      '2026-10-14',
+    )
+
+    expect(meses).toHaveLength(13)
+    expect(meses[0]).toEqual({ ano: 2026, mes: 10 })
+    expect(meses[2]).toEqual({ ano: 2026, mes: 12 })
+    expect(meses[3]).toEqual({ ano: 2027, mes: 1 })
+    expect(meses[12]).toEqual({ ano: 2027, mes: 10 })
+  })
+
+  it('venda cancelada e venda de versão desconhecida não estendem o fim', () => {
+    const meses = mesesDeRecebimento(
+      [
+        venda({ id: 'v1' }),
+        venda({ id: 'v2', numeroParcelas: 24, cancelada: true }),
+        venda({ id: 'v3', numeroParcelas: 24, versaoCalculo: 2 }),
+      ],
+      HOJE,
+    )
+
+    expect(meses).toEqual([
+      { ano: 2026, mes: 10 },
+      { ano: 2026, mes: 11 },
+    ])
+  })
+
+  it('atravessa a virada do ano', () => {
+    // 3 parcelas com vencimento em 10/12/2026, 10/01/2027 e 10/02/2027.
+    const meses = mesesDeRecebimento([venda({ dataVenda: '2026-11-10' })], '2026-12-05')
+
+    expect(meses).toEqual([
+      { ano: 2026, mes: 12 },
+      { ano: 2027, mes: 1 },
+      { ano: 2027, mes: 2 },
+    ])
+  })
+
+  it('sem venda devolve só o mês de hoje', () => {
+    expect(mesesDeRecebimento([], HOJE)).toEqual([{ ano: 2026, mes: 10 }])
+  })
+
+  it('último vencimento antes do mês de hoje devolve só o mês de hoje', () => {
+    // 3 parcelas com vencimento em fev, mar e abr/2026.
+    expect(mesesDeRecebimento([venda({ dataVenda: '2026-01-10' })], HOJE)).toEqual([
+      { ano: 2026, mes: 10 },
     ])
   })
 })

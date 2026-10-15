@@ -140,3 +140,116 @@ export function listaDeAtrasados<
       return (a.cliente?.numero ?? 0) - (b.cliente?.numero ?? 0)
     })
 }
+
+export type ParcelaAReceber<C> = {
+  cliente: C | null
+  clientId: string
+  saleId: string
+  numero: number
+  total: number
+  vencimento: string
+  restanteCentavos: number
+  situacao: 'vencida' | 'parcial' | 'a-vencer'
+}
+
+function chaveDoMes(ano: number, mes: number): string {
+  return `${ano}-${String(mes).padStart(2, '0')}`
+}
+
+export function aReceberNoMes<
+  C extends { id: string; numero: number; nome: string; arquivado?: boolean },
+>(
+  vendas: readonly VendaParaFinanceiro[],
+  pagamentos: readonly PagamentoParaFinanceiro[],
+  clientes: readonly C[],
+  ano: number,
+  mes: number,
+  hoje: string,
+): { totalCentavos: number; parcelas: ParcelaAReceber<C>[] } {
+  const chave = chaveDoMes(ano, mes)
+  const porId = new Map(clientes.map((cliente) => [cliente.id, cliente]))
+  const pagamentosPorVenda = new Map<string, PagamentoParaFinanceiro[]>()
+
+  for (const pagamento of pagamentos) {
+    const daVenda = pagamentosPorVenda.get(pagamento.saleId)
+    if (daVenda) daVenda.push(pagamento)
+    else pagamentosPorVenda.set(pagamento.saleId, [pagamento])
+  }
+
+  let totalCentavos = 0
+  const parcelas: ParcelaAReceber<C>[] = []
+
+  for (const venda of vendas) {
+    if (venda.cancelada === true) continue
+
+    const regeneradas = parcelasRegeneradas(venda)
+    if (regeneradas === null) continue
+
+    const { cobertura } = alocarPagamentos(regeneradas, pagamentosPorVenda.get(venda.id) ?? [])
+
+    for (const parcela of regeneradas) {
+      if (parcela.vencimento.slice(0, 7) !== chave) continue
+
+      const estado = situacaoDaParcela(parcela, cobertura.get(parcela.id) ?? 0, hoje)
+      if (estado.situacao === 'paga') continue
+
+      totalCentavos += estado.restanteCentavos
+      parcelas.push({
+        cliente: porId.get(venda.clientId) ?? null,
+        clientId: venda.clientId,
+        saleId: venda.id,
+        numero: parcela.numero,
+        total: parcela.total,
+        vencimento: parcela.vencimento,
+        restanteCentavos: estado.restanteCentavos,
+        situacao: estado.situacao,
+      })
+    }
+  }
+
+  parcelas.sort((a, b) => {
+    if (a.vencimento !== b.vencimento) return a.vencimento.localeCompare(b.vencimento)
+    if ((a.cliente === null) !== (b.cliente === null)) return a.cliente === null ? 1 : -1
+    if (a.cliente !== null && b.cliente !== null && a.cliente.numero !== b.cliente.numero) {
+      return a.cliente.numero - b.cliente.numero
+    }
+    return a.numero - b.numero
+  })
+
+  return { totalCentavos, parcelas }
+}
+
+export function mesesDeRecebimento(
+  vendas: readonly VendaParaFinanceiro[],
+  hoje: string,
+): { ano: number; mes: number }[] {
+  const [anoDeHoje, mesDeHoje] = hoje.split('-').map(Number)
+
+  let ultimoVencimento: string | null = null
+  for (const venda of vendas) {
+    if (venda.cancelada === true) continue
+
+    const regeneradas = parcelasRegeneradas(venda)
+    if (regeneradas === null) continue
+
+    for (const parcela of regeneradas) {
+      if (ultimoVencimento === null || parcela.vencimento > ultimoVencimento) {
+        ultimoVencimento = parcela.vencimento
+      }
+    }
+  }
+
+  const meses = [{ ano: anoDeHoje, mes: mesDeHoje }]
+  if (ultimoVencimento === null) return meses
+
+  const fim = ultimoVencimento.slice(0, 7)
+  let { ano, mes } = meses[0]
+  for (;;) {
+    mes = mes === 12 ? 1 : mes + 1
+    if (mes === 1) ano += 1
+    if (chaveDoMes(ano, mes) > fim) break
+    meses.push({ ano, mes })
+  }
+
+  return meses
+}
