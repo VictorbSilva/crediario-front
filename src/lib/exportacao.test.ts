@@ -428,3 +428,13 @@ describe('detalhes do arquivo que o dono vai abrir', () => {
     expect(situacaoExportacao('confiavel', 0, 0)).toEqual({ pode: false, motivo: 'Não há nenhum cliente para exportar ainda.' })
   })
 })
+
+describe('cada coluna de data do CSV leva o seu próprio carimbo', () => {
+  it('criadoEm e atualizadoEm diferentes saem cada um na sua coluna', () => {
+    const linha = paraCSV([
+      cliente({ criadoEm: carimbo('2026-09-21T18:30:00.000Z'), atualizadoEm: carimbo('2026-10-02T09:00:00.000Z') }),
+    ]).split('\r\n')[1]
+
+    expect(linha.endsWith(';2026-09-21T18:30:00.000Z;2026-10-02T09:00:00.000Z;a1b2c3d4')).toBe(true)
+  })
+})

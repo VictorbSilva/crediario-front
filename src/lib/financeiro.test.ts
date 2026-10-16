@@ -553,3 +553,35 @@ describe('ordenações que não podem depender da ordem de chegada', () => {
     }
   })
 })
+
+describe('desempates que só aparecem quando os critérios discordam', () => {
+  const cliente = (id: string, numero: number) => ({ id, numero, nome: `Cliente ${numero}` })
+
+  it('na mesma data, vale o número do cliente, não o número da parcela', () => {
+    // c1 (nº 2) tem a parcela 1 em 10/11; c2 (nº 1) tem a parcela 3 na mesma data.
+    const vendas = [
+      venda({ id: 'de-c1', clientId: 'c1', dataVenda: '2026-10-01', numeroParcelas: 1, valorTotalCentavos: 1_000 }),
+      venda({ id: 'de-c2', clientId: 'c2', dataVenda: '2026-08-01', numeroParcelas: 3 }),
+    ]
+    const clientes = [cliente('c1', 2), cliente('c2', 1)]
+
+    for (const ordem of [vendas, [...vendas].reverse()]) {
+      expect(aReceberNoMes(ordem, [], clientes, 2026, 11, HOJE).parcelas.map((p) => [p.saleId, p.numero])).toEqual([
+        ['de-c2', 3], ['de-c1', 1],
+      ])
+    }
+  })
+
+  it('na mesma data, cliente fora do cache vai para o fim mesmo com parcela de número menor', () => {
+    const vendas = [
+      venda({ id: 'sumida', clientId: 'sumido', dataVenda: '2026-10-01', numeroParcelas: 1, valorTotalCentavos: 1_000 }),
+      venda({ id: 'conhecida', clientId: 'c1', dataVenda: '2026-08-01', numeroParcelas: 3 }),
+    ]
+
+    for (const ordem of [vendas, [...vendas].reverse()]) {
+      expect(aReceberNoMes(ordem, [], [cliente('c1', 1)], 2026, 11, HOJE).parcelas.map((p) => p.saleId)).toEqual([
+        'conhecida', 'sumida',
+      ])
+    }
+  })
+})

@@ -489,3 +489,17 @@ describe('bordas que nenhum caso comum alcança', () => {
     }
   })
 })
+
+describe('parcelas com o mesmo vencimento', () => {
+  it('o pagamento cobre a de número menor primeiro, chegue em que ordem chegar', () => {
+    const mesmoDia = [
+      parcela({ id: 'p2', numero: 2, vencimento: '2026-09-19' }),
+      parcela({ id: 'p1', numero: 1, vencimento: '2026-09-19' }),
+    ]
+
+    for (const ordem of [mesmoDia, [...mesmoDia].reverse()]) {
+      const { cobertura } = alocarPagamentos(ordem, [pagamento({ valorCentavos: 10000 })])
+      expect([cobertura.get('p1'), cobertura.get('p2')]).toEqual([10000, 0])
+    }
+  })
+})
