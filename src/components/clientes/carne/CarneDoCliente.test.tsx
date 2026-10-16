@@ -7,6 +7,7 @@ import { montarCarne, saldoDoCliente } from '@/lib/parcelas'
 import { instalarDialogo } from '@/test/dialogo'
 import type { Pagamento, Parcela, Venda } from '@/types/venda'
 import { CarneDoCliente } from './CarneDoCliente'
+import { ListaDeParcelas } from './ListaDeParcelas'
 
 const HOJE = '2026-10-15'
 
@@ -175,30 +176,36 @@ describe('CarneDoCliente — indicadores', () => {
   }
 
   it('vendas em aberto não contam quitada nem cancelada; vencidas ficam em vermelho', () => {
+    // Duas abertas, uma quitada, uma cancelada: contar só a cancelada, ou só a quitada,
+    // daria 1; só o critério certo dá 2.
+    const outraAberta = venda('v4', { dataVenda: '2026-09-01', valorTotalCentavos: 30000 })
     const quitada = venda('v2', { dataVenda: '2026-07-01', numeroParcelas: 1, valorTotalCentavos: 5000, valorParcelaCentavos: 5000 })
     const cancelada = venda('v3', { dataVenda: '2026-06-01', cancelada: true, canceladaEm: '2026-06-02' })
     render(<CarneDoCliente dados={dados(
-      [V1, quitada, cancelada],
-      [...parcelasDe(V1), ...parcelasDe(quitada), ...parcelasDe(cancelada)],
+      [V1, outraAberta, quitada, cancelada],
+      [...parcelasDe(V1), ...parcelasDe(outraAberta), ...parcelasDe(quitada), ...parcelasDe(cancelada)],
       [pagamento('pg1', 'v1'), pagamento('pg2', 'v2', { valorCentavos: 5000 })],
     )} />)
 
-    expect(kpi('Vendas em aberto').textContent).toBe('1')
-    expect(kpi('Parcelas vencidas').textContent).toBe('1')
+    expect(kpi('Vendas em aberto').textContent).toBe('2')
+    // `parcelasDe` gera a partir de setembro. V1: a 2ª (10/10) com R$ 50 em aberto.
+    // v4, sem pagamento: 10/09 e 10/10.
+    expect(kpi('Parcelas vencidas').textContent).toBe('3')
     expect(kpi('Parcelas vencidas').className).toContain('text-danger')
   })
 
   it('sem vencida, o KPI de vencidas fica neutro', () => {
     const emDia = venda('v1', { dataVenda: '2026-10-01' })
-    render(<CarneDoCliente dados={dados([emDia], parcelasDe(emDia).map((p, i) => ({ ...p, vencimento: `2026-1${i + 1}-10` })), [])} />)
+    const vencimentos = ['2026-11-10', '2026-12-10', '2027-01-10']
+    render(<CarneDoCliente dados={dados([emDia], parcelasDe(emDia).map((p, i) => ({ ...p, vencimento: vencimentos[i] })), [])} />)
 
     expect(kpi('Parcelas vencidas').textContent).toBe('0')
-    expect(kpi('Parcelas vencidas').className).not.toContain('text-danger')
+    expect(kpi('Parcelas vencidas').className).toContain('text-slate-900')
   })
 
   it('o saldo simulado muda de cor, para não passar por valor a cobrar', () => {
     render(<CarneDoCliente dados={PADRAO()} />)
-    expect(kpi('Saldo devedor').className).not.toContain('text-warning')
+    expect(kpi('Saldo devedor').className).toContain('text-slate-900')
 
     fireEvent.click(screen.getByRole('checkbox'))
     expect(kpi('Saldo devedor').className).toContain('text-warning')
@@ -406,6 +413,7 @@ describe('CarneDoCliente — registrar pagamento', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Registrar pagamento' })[0])
     const dialogo = dialogoAberto()
 
+    expect(dialogo.textContent).toContain('o lançamento é contra a venda: o sistema cobre da parcela mais antiga')
     expect((within(dialogo).getByLabelText('Dinheiro') as HTMLInputElement).checked).toBe(true)
     expect((within(dialogo).getByLabelText('Pix') as HTMLInputElement).checked).toBe(false)
     expect((within(dialogo).getByLabelText('Data do recebimento') as HTMLInputElement).value).toBe(HOJE)
@@ -567,8 +575,8 @@ describe('CarneDoCliente — nova venda', () => {
 
     const dialogo = dialogoAberto()
     expect(within(dialogo).getByText('Como fica o carnê')).toBeTruthy()
-    expect(dialogo.textContent).toContain(`3× ${formatarCentavos(3333)}`)
-    expect(dialogo.textContent).toContain(`(a última fica ${formatarCentavos(3334)}, com a sobra da divisão)`)
+    // Com o espaço entre o valor e o parêntese: sem ele, a frase sai grudada.
+    expect(dialogo.textContent).toContain(`3× ${formatarCentavos(3333)} (a última fica ${formatarCentavos(3334)}, com a sobra da divisão)`)
     expect(within(dialogo).getByText('Primeira em 10/11/2026 · última em 10/01/2027')).toBeTruthy()
   })
 
@@ -726,5 +734,29 @@ describe('CarneDoCliente — nova venda', () => {
 
     expect(within(dialogoAberto()).getByText('Nova venda')).toBeTruthy()
     expect(within(dialogoAberto()).queryByText(/Pode haver vendas/)).toBeNull()
+  })
+})
+
+describe('ListaDeParcelas sozinha', () => {
+  const longa = venda('v3', { numeroParcelas: 6, valorTotalCentavos: 60000 })
+  const [carne] = montarCarne([longa], parcelasDe(longa), [], HOJE)
+
+  it('a lista completa sai em ordem de número mesmo com as parcelas chegando fora de ordem', () => {
+    render(<ListaDeParcelas parcelas={[...carne.parcelas].reverse()} total={6} hoje={HOJE} simulando={false} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver todas as 6 parcelas' }))
+
+    expect(screen.getAllByRole('listitem').map((li) => /(\d)\/6/.exec(li.textContent ?? '')?.[1])).toEqual([
+      '1', '2', '3', '4', '5', '6',
+    ])
+  })
+
+  it('a parcela vencida fica em vermelho; a que ainda vai vencer, não', () => {
+    render(<ListaDeParcelas parcelas={carne.parcelas} total={6} hoje={HOJE} simulando={false} />)
+    // Sem pagamento, a janela mostra 1/6 e 2/6 (vencidas em setembro e outubro) e 3/6, a vencer.
+    const [vencida, , aVencer] = screen.getAllByRole('listitem')
+
+    expect(vencida.className).toContain('bg-danger-soft')
+    expect(aVencer.className).not.toContain('bg-danger-soft')
   })
 })

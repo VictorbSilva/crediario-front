@@ -177,7 +177,7 @@ describe('FinanceiroPage — números', () => {
     render(<Pagina />)
 
     expect(kpi('Vencido').textContent).toBe(formatarCentavos(0))
-    expect(kpi('Vencido').className).not.toContain('text-danger')
+    expect(kpi('Vencido').className).toContain('text-slate-900')
   })
 })
 
