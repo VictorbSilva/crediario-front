@@ -54,6 +54,8 @@ jobs:
       # build = tsc -b && vite build, então cobre o type-check junto.
       - run: npm run build
 
-      - run: npm test
+      # A mesma suíte do `npm test`, com cobertura: falha se statements, branches,
+      # funções ou linhas caírem abaixo de 70% (limite no vitest.config.ts).
+      - run: npm run test:coverage
 
       - run: npm run test:rules

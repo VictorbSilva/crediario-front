@@ -1941,3 +1941,83 @@ fecharam: teste gravando na empresa que o dono precisa receber vazia.
 **A proteção de deploy (Vercel Authentication) fica desligada**, para o iPhone abrir o
 treino sem conta da Vercel. Os previews ficam públicos, mas só mostram o login; quem
 protege os dados são as regras do Firestore, não o sigilo da URL.
+
+## src/test/ e os testes com jsdom
+
+Acrescentados em 15/10/2026, quando a cobertura passou de 56% para 99% e ganhou o mínimo
+de 70% no CI (`npm run test:coverage`). O ambiente padrão continua `node`; quem precisa de
+DOM pede `// @vitest-environment jsdom` na primeira linha. Os dois estilos convivem:
+`ClientesProvider.test.ts` simula o `useState` para inspecionar escritas sem montar nada,
+e `ClientesProvider.montado.test.ts` monta o provider para exercitar o listener, que vive
+num efeito.
+
+> **AVISO — rejeição criada cedo demais**
+> `mock.mockReturnValue(Promise.reject(erro))` cria a Promise rejeitada **na hora**, antes
+> de o código testado chegar a ela. O teste passa, mas o Vitest conta "Unhandled Rejection"
+> e o resumo sai com `Errors`. Use `mockRejectedValue(erro)`, que só rejeita quando o mock é
+> chamado.
+
+> **AVISO — dinheiro no `getByText`**
+> `formatarCentavos` devolve `R$` seguido de espaço não separável (U+00A0), como o `Intl`
+> manda. O `getByText` normaliza o espaço do texto da página, mas **não** o da string
+> procurada, e `getByText(formatarCentavos(15000))` não encontra nada. Troque `\s` por
+> espaço comum na string procurada, ou compare `textContent` com o valor cru.
+
+- **O jsdom não tem `showModal()` nem `close()`.** Quatro telas abrem `<dialog>` pelo `ref`
+  num efeito e lançariam na montagem. `instalarDialogo()` (em `src/test/dialogo.ts`) põe o
+  mínimo: abrir, fechar e disparar `close`, que é por onde o React chama o `onClose`.
+- **`virtual:pwa-register/react` só existe com o plugin do PWA**, que a config de teste não
+  carrega. O `vitest.config.ts` aponta o nome para `src/test/pwa-register.ts`, e o teste
+  substitui com `vi.mock`.
+- **Módulo com estado próprio precisa de cópia nova por teste.** `useTelaLarga` guarda a
+  `MediaQueryList` e `firebase.ts` inicializa no import: `vi.resetModules()` e `import()`
+  dinâmico em cada teste, senão o primeiro teste decide pelos outros.
+- **Fábrica de `vi.mock` que lança chega embrulhada** numa mensagem do próprio Vitest, e o
+  resultado dela fica guardado entre testes. `main.test.tsx` usa `vi.doMock` dentro do teste
+  e lança na leitura do `default`, que é onde o `main` recebe o erro de um import que falha.
+- **`.env` existe nesta máquina e não existe no CI.** Teste que lê `import.meta.env`
+  (`AuthProvider`, `firebase.ts`, `FaixaDeTreino`) fixa as variáveis com `vi.stubEnv`; sem
+  isso ele passa aqui e quebra no CI, ou o contrário.
+
+### Teste que passa sem testar
+
+Cobertura alta não diz que o resultado foi conferido, só que a linha rodou. Em 15/10/2026 um
+teste de mutação (Stryker: muda `>` para `>=`, inverte condição, apaga chamada e vê se algum
+teste reprova) achou 582 mudanças que **nenhum** teste reprovava, com a suíte inteira verde e
+cobertura de 88%. Os padrões que se repetiram, para não voltar a escrever:
+
+- **`toThrow(TypeError)` sem a mensagem.** Sem o guarda de `montarCamposVenda`, outro
+  `TypeError` estoura mais adiante e o teste continua verde. Confira a mensagem.
+- **Só a borda de um lado.** Testar 121 parcelas recusadas não prova que 120 passam; o mesmo
+  vale para dia 1 e 31, taxa de 100%, telefone de 40 caracteres. Teste o valor exato do teto.
+- **Coincidência que esconde o defeito.** `arredondarCentavos(131.75)` dá 132 mesmo sem a
+  regra "acima de meio sobe", porque o piso é ímpar e o empate também sobe; `130.75` não
+  perdoa. Um comparador que devolve sempre `-1` acerta a ordem de **uma** entrada: repita
+  com a entrada invertida. Regex `/1 pagamento/` aceita "1 pagamentos": ancore o fim.
+- **O cenário que ativa o código nunca aparece.** O guarda do ano 9999 só importa perto do
+  ano 9999; o filtro por cliente só importa quando o estado guarda outro cliente; o
+  `useCallback` só importa quando o cliente ou a empresa trocam **e depois** alguém escreve.
+  Se o teste não monta esse cenário, o código pode sumir sem ninguém notar.
+- **Só o positivo.** "Com a simulação ligada aparece o encargo" não prova que, desligada,
+  ele some — e esse é o lado que a regra do dono protege.
+
+Nem todo mutante sobrevivente é lacuna: muitos são **equivalentes** (a checagem final de
+`parseReaisParaCentavos` recusa a mesma entrada que o passo mutado deixaria passar; `key` de
+lista; `catch { return }` virando `catch {}`). E o relatório tem falso positivo: o
+`useState(false)` de `mostrarArquivados` aparecia vivo e morria na mão. Confira à mão o que
+parecer estranho antes de escrever teste para ele.
+
+O Stryker **não está no repositório**: roda por instalação avulsa, que não grava nada no
+`package.json`. A versão 10 exige Node 22.18; com o 22.17 deste projeto, use a 9.6.1, e o
+npm 10.9 só instala com `--legacy-peer-deps`:
+
+```
+npm install --no-save --legacy-peer-deps @stryker-mutator/core@9.6.1 @stryker-mutator/vitest-runner@9.6.1
+npx stryker run <config.json>   # testRunner "vitest", coverageAnalysis "perTest"
+npm ci                          # devolve o node_modules ao que o lock descreve
+```
+
+A rodada inteira leva cerca de 30 minutos; ela trabalha numa cópia em `.stryker-tmp/`, que o
+`.gitignore` já ignora.
+
+— referente a src/test/, vitest.config.ts e aos arquivos `*.test.tsx`
