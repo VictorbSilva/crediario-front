@@ -499,3 +499,89 @@ describe('mesesDeRecebimento', () => {
     ])
   })
 })
+
+describe('ordenações que não podem depender da ordem de chegada', () => {
+  const cliente = (id: string, numero: number) => ({ id, numero, nome: `Cliente ${numero}` })
+
+  it('empate em dias e vencido desempata pelo número, chegue a lista em que ordem chegar', () => {
+    const atrasos = (ids: string[]): SituacaoFinanceira => ({
+      aReceberCentavos: 0, vencidoCentavos: 0, recebidoNoMesCentavos: 0, vendasNaoCalculadas: 0,
+      porCliente: new Map(ids.map((clientId) => [clientId, {
+        clientId, abertoCentavos: 5_000, vencidoCentavos: 5_000, parcelasVencidas: 1, atrasoDesde: '2026-10-04', diasDeAtraso: 10,
+      }])),
+    })
+    const clientes = [cliente('a', 7), cliente('b', 3), cliente('c', 5)]
+
+    for (const ordem of [['a', 'b', 'c'], ['c', 'b', 'a'], ['b', 'a', 'c']]) {
+      expect(listaDeAtrasados(atrasos(ordem), clientes).map((item) => item.cliente?.numero)).toEqual([3, 5, 7])
+    }
+  })
+
+  it('dois clientes fora do cache empatados não derrubam a lista', () => {
+    const empate: SituacaoFinanceira = {
+      aReceberCentavos: 0, vencidoCentavos: 0, recebidoNoMesCentavos: 0, vendasNaoCalculadas: 0,
+      porCliente: new Map(['sumido-1', 'sumido-2'].map((clientId) => [clientId, {
+        clientId, abertoCentavos: 1_000, vencidoCentavos: 1_000, parcelasVencidas: 1, atrasoDesde: '2026-10-01', diasDeAtraso: 13,
+      }])),
+    }
+
+    expect(listaDeAtrasados(empate, []).map((item) => item.cliente)).toEqual([null, null])
+  })
+
+  it('a receber no mês sai na mesma ordem com as vendas em qualquer ordem', () => {
+    const clientes = [cliente('c1', 2), cliente('c2', 1), cliente('c3', 3)]
+    const vendas = [
+      venda(),
+      venda({ id: 'v4', clientId: 'sumido', dataVenda: '2026-10-01', valorTotalCentavos: 6_000, diaVencimento: 5 }),
+      venda({ id: 'v5', clientId: 'c2', dataVenda: '2026-09-10', valorTotalCentavos: 3_000, numeroParcelas: 2 }),
+      venda({ id: 'v2', clientId: 'c2', dataVenda: '2026-10-01' }),
+      venda({ id: 'v3', clientId: 'c3', dataVenda: '2026-10-01', valorTotalCentavos: 9_000, diaVencimento: 5 }),
+    ]
+    const esperado = [['v3', 1], ['v4', 1], ['v2', 1], ['v5', 2], ['v1', 3]]
+
+    for (const ordem of [vendas, [...vendas].reverse(), [vendas[1], vendas[4], vendas[0], vendas[3], vendas[2]]]) {
+      expect(aReceberNoMes(ordem, [], clientes, 2026, 11, HOJE).parcelas.map((p) => [p.saleId, p.numero])).toEqual(esperado)
+    }
+  })
+
+  it('o último mês do seletor é o do maior vencimento, mesmo com a venda longa chegando primeiro', () => {
+    const longa = venda({ id: 'longa', dataVenda: '2026-10-01', numeroParcelas: 6 })
+    const curta = venda({ id: 'curta', dataVenda: '2026-10-01', numeroParcelas: 1 })
+
+    for (const vendas of [[longa, curta], [curta, longa]]) {
+      expect(mesesDeRecebimento(vendas, HOJE).at(-1)).toEqual({ ano: 2027, mes: 4 })
+    }
+  })
+})
+
+describe('desempates que só aparecem quando os critérios discordam', () => {
+  const cliente = (id: string, numero: number) => ({ id, numero, nome: `Cliente ${numero}` })
+
+  it('na mesma data, vale o número do cliente, não o número da parcela', () => {
+    // c1 (nº 2) tem a parcela 1 em 10/11; c2 (nº 1) tem a parcela 3 na mesma data.
+    const vendas = [
+      venda({ id: 'de-c1', clientId: 'c1', dataVenda: '2026-10-01', numeroParcelas: 1, valorTotalCentavos: 1_000 }),
+      venda({ id: 'de-c2', clientId: 'c2', dataVenda: '2026-08-01', numeroParcelas: 3 }),
+    ]
+    const clientes = [cliente('c1', 2), cliente('c2', 1)]
+
+    for (const ordem of [vendas, [...vendas].reverse()]) {
+      expect(aReceberNoMes(ordem, [], clientes, 2026, 11, HOJE).parcelas.map((p) => [p.saleId, p.numero])).toEqual([
+        ['de-c2', 3], ['de-c1', 1],
+      ])
+    }
+  })
+
+  it('na mesma data, cliente fora do cache vai para o fim mesmo com parcela de número menor', () => {
+    const vendas = [
+      venda({ id: 'sumida', clientId: 'sumido', dataVenda: '2026-10-01', numeroParcelas: 1, valorTotalCentavos: 1_000 }),
+      venda({ id: 'conhecida', clientId: 'c1', dataVenda: '2026-08-01', numeroParcelas: 3 }),
+    ]
+
+    for (const ordem of [vendas, [...vendas].reverse()]) {
+      expect(aReceberNoMes(ordem, [], [cliente('c1', 1)], 2026, 11, HOJE).parcelas.map((p) => p.saleId)).toEqual([
+        'conhecida', 'sumida',
+      ])
+    }
+  })
+})

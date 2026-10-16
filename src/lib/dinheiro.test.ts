@@ -74,6 +74,7 @@ describe('valores não finitos', () => {
       expect(formatarCentavos(-Infinity)).toBe('—')
       expect(formatarCentavosCurto(NaN)).toBe('—')
       expect(erro).toHaveBeenCalledTimes(4)
+      expect(erro).toHaveBeenCalledWith('dinheiro: valor não finito chegou à formatação:', NaN)
     } finally {
       erro.mockRestore()
     }
@@ -125,8 +126,10 @@ describe('parseReaisParaCentavos', () => {
     expect(parseReaisParaCentavos('R$\u00a01.234,56')).toBe(123456)
   })
 
-  it('aceita valor começando pela vírgula', () => {
+  it('aceita valor começando pela vírgula, ou pelo ponto decimal', () => {
     expect(parseReaisParaCentavos(',50')).toBe(50)
+    expect(parseReaisParaCentavos('.50')).toBe(50)
+    expect(parseReaisParaCentavos('.5')).toBe(50)
   })
 
   it('devolve null para entrada vazia ou só espaço', () => {
@@ -165,6 +168,11 @@ describe('parseReaisParaCentavos', () => {
   it('recusa separador de milhar mal formado', () => {
     expect(parseReaisParaCentavos('1.23.456')).toBeNull()
     expect(parseReaisParaCentavos('1234.56,78')).toBeNull()
+    // Primeiro grupo com mais de três dígitos, ou grupo seguinte com mais de três.
+    expect(parseReaisParaCentavos('1234.567')).toBeNull()
+    expect(parseReaisParaCentavos('1234.567,89')).toBeNull()
+    expect(parseReaisParaCentavos('1.2345')).toBeNull()
+    expect(parseReaisParaCentavos('1.2345,00')).toBeNull()
   })
 
   it('recusa valor negativo', () => {
@@ -188,6 +196,9 @@ describe('arredondarCentavos', () => {
   it('arredonda para cima e para baixo fora do empate', () => {
     expect(arredondarCentavos(131.25)).toBe(131)
     expect(arredondarCentavos(131.75)).toBe(132)
+    // Com piso par, só "acima de meio sobe" dá 131: a regra do empate daria 130.
+    expect(arredondarCentavos(130.75)).toBe(131)
+    expect(arredondarCentavos(130.25)).toBe(130)
   })
 
   it('manda o empate para o centavo par, nos dois sentidos', () => {

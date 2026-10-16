@@ -10,6 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Relatório do `npm run test:coverage`
+coverage
+# Cópia de trabalho do Stryker (teste de mutação, ver docs/armadilhas.md)
+.stryker-tmp
 # Service worker de desenvolvimento do vite-plugin-pwa (criado se devOptions
 # for ligado no vite.config.ts)
 dev-dist

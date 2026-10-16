@@ -37,7 +37,7 @@ The three that are **not** guessable:
 `test:rules` and `emu` go through `scripts/firebase-com-jdk.mjs`, a wrapper that exists because an Oracle
 Java 8 sits ahead of the JDK 21 in this machine's PATH and `firebase-tools` refuses it.
 
-Vitest has its own `vitest.config.ts`, separate from `vite.config.ts`, so the test run does not load the PWA and React plugins. `globals` is deliberately off — importing `describe`/`it`/`expect` explicitly is what keeps `tsc -b` passing without extra type config.
+Vitest has its own `vitest.config.ts`, separate from `vite.config.ts`, so the test run does not load the PWA and React plugins. `globals` is deliberately off — importing `describe`/`it`/`expect` explicitly is what keeps `tsc -b` passing without extra type config. The default environment is `node`; a test that needs a real DOM (clicks, typing, effects that mount) opens with `// @vitest-environment jsdom` and calls `cleanup()` in `afterEach`, since RTL's auto-cleanup needs `globals`. `src/test/` holds test-only support — the `<dialog>` polyfill jsdom lacks and the stub behind the `virtual:pwa-register/react` alias — and is excluded from coverage. `npm run test:coverage` (what CI runs) fails below **70%** in any of statements, branches, functions or lines; see `docs/armadilhas.md` (`src/test/`) for the traps of writing these tests.
 
 ## Architecture
 
