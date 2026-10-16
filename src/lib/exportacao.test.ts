@@ -382,3 +382,49 @@ describe('resumoDaLista', () => {
     expect(resumoDaLista(9, 2)).toBe('9 clientes, sendo 2 arquivados')
   })
 })
+
+describe('detalhes do arquivo que o dono vai abrir', () => {
+  it('o CSV leva as datas de sincronização em ISO e termina a última linha com CRLF', () => {
+    const csv = paraCSV([cliente()])
+
+    expect(csv.split('\r\n')[1].endsWith(';2026-09-21T18:30:00.000Z;2026-09-21T18:30:00.000Z;a1b2c3d4')).toBe(true)
+    expect(csv.endsWith('a1b2c3d4\r\n')).toBe(true)
+  })
+
+  it('campo chamado toDate que não é função não é tratado como carimbo', () => {
+    expect(serializar({ toDate: 'texto', n: 1 })).toEqual({ toDate: 'texto', n: 1 })
+    expect(serializar({ toDate: 5 })).toEqual({ toDate: 5 })
+  })
+
+  it('numeroParcelas que não é número finito não entra na soma da conferência', () => {
+    const vendas = [vendaCom('v1', 2), vendaCom('v2', Number.NaN), vendaCom('v3', Number.POSITIVE_INFINITY)]
+
+    expect(conferenciaDoCarne(vendas, parcelas(2))).toBeNull()
+  })
+
+  it('parcela sobrando diz quantas, no singular e no plural', () => {
+    expect(conferenciaDoCarne([vendaCom('v1', 2)], parcelas(3))).toBe(
+      'Há 1 parcela a mais do que as vendas somam: alguma venda ainda não chegou a este aparelho e sairia fora do arquivo.',
+    )
+    expect(conferenciaDoCarne([vendaCom('v1', 1)], parcelas(3))).toMatch(/^Há 2 parcelas a mais/)
+  })
+
+  it('avisos juntos ficam separados por espaço, um depois do outro', () => {
+    const lista = situacaoExportacao('parcial', 3, 1)
+    expect(lista.pode && lista.alerta).toBe(
+      'Este aparelho ainda não sincronizou a lista com o servidor, então o arquivo pode sair com apenas parte dos clientes. Um backup incompleto é pior do que nenhum, porque ninguém desconfia dele. 1 cadastro ainda não subiu: no arquivo ele sai sem a data de sincronização.',
+    )
+
+    const backup = situacaoDoBackup({ confianca: 'parcial', pendentes: 1, conferencia: 'Confira.' })
+    expect(backup.pode && backup.alerta).toBe(
+      'Este aparelho ainda não sincronizou as vendas e os pagamentos com o servidor, então o backup pode sair com apenas parte do carnê. 1 lançamento do carnê ainda não subiu: no arquivo ele sai sem a data de sincronização. Confira.',
+    )
+  })
+
+  it('motivos de bloqueio da lista são os que a tela mostra', () => {
+    expect(situacaoExportacao('desconhecida', 3, 0)).toEqual({
+      pode: false, motivo: 'A lista de clientes ainda está carregando. Espere terminar para exportar.',
+    })
+    expect(situacaoExportacao('confiavel', 0, 0)).toEqual({ pode: false, motivo: 'Não há nenhum cliente para exportar ainda.' })
+  })
+})

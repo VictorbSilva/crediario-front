@@ -1102,3 +1102,58 @@ describe('textoDosDias', () => {
     expect(rotas.textoDosDias(dias)).toBe(texto)
   })
 })
+
+describe('bordas do arraste e do calendário', () => {
+  it('chaveEntre não devolve chave igual à vizinha quando a média arredonda para ela', () => {
+    // Números vizinhos de ponto flutuante: a média exata arredonda para o de cima.
+    expect(rotas.chaveEntre(1000.0000000000001, 1000.0000000000002)).toBeNull()
+  })
+
+  it('cliente do dia solto no fim, rente ao teto, nunca recebe chave igual a BASE_ATRASADO', () => {
+    const data = '2026-10-05'
+    const todos = [
+      cliente({ id: 'A', numero: 1, ordemPorDia: { '5': 1000 } }),
+      cliente({ id: 'B', numero: 2, ordemPorDia: { '5': rotas.BASE_ATRASADO - rotas.PASSO } }),
+    ]
+
+    expect(rotas.arrasteNaRotaDaData(rotas.rotaDaData(todos, data), 0, 1, data, todos)).toEqual([
+      { clienteId: 'A', tipo: 'dia', dia: 5, valor: rotas.BASE_ATRASADO - 500 },
+    ])
+  })
+
+  it('índice igual ao tamanho da lista é inválido nos dois arrastes', () => {
+    const data = '2026-10-05'
+    const todos = [cliente({ id: 'A', numero: 1 }), cliente({ id: 'B', numero: 2 })]
+
+    expect(rotas.arrasteNaRotaDaData(rotas.rotaDaData(todos, data), 0, 2, data, todos)).toEqual([])
+    expect(rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(todos, data), 0, 2, data, todos)).toEqual([])
+  })
+
+  it('rebalancear em 30/11 dá chaves crescentes a todos os escondidos no dia 31, na ordem deles', () => {
+    const data = '2026-11-30'
+    const todos = [
+      cliente({ id: 'A', numero: 1, diasDeVisita: [30], ordemPorDia: { '30': 1 } }),
+      cliente({ id: 'B', numero: 2, diasDeVisita: [30], ordemPorDia: { '30': 1 + Number.EPSILON } }),
+      cliente({ id: 'X', numero: 3, diasDeVisita: [30, 31], ordemPorDia: { '30': 1000, '31': 10 } }),
+      cliente({ id: 'Y', numero: 4, diasDeVisita: [30, 31], ordemPorDia: { '30': 2000, '31': 20 } }),
+    ]
+
+    // Y vai para entre A e B, que não têm espaço entre si: a lista inteira é reescrita.
+    expect(rotas.arrasteNaRotaDaData(rotas.rotaDaData(todos, data), 3, 1, data, todos)).toEqual([
+      { clienteId: 'A', tipo: 'dia', dia: 30, valor: 1000 },
+      { clienteId: 'Y', tipo: 'dia', dia: 30, valor: 2000 },
+      { clienteId: 'B', tipo: 'dia', dia: 30, valor: 3000 },
+      { clienteId: 'X', tipo: 'dia', dia: 30, valor: 4000 },
+      { clienteId: 'X', tipo: 'dia', dia: 31, valor: 5000 },
+      { clienteId: 'Y', tipo: 'dia', dia: 31, valor: 6000 },
+    ])
+  })
+
+  it('o ano da data da visita sai com quatro dígitos', () => {
+    expect(rotas.dataDaVisita(999, 1, 5)).toBe('0999-01-05')
+  })
+
+  it('dias de visita inválidos explicam o que está errado', () => {
+    expect(() => rotas.montarDiasDeVisita([5, 5])).toThrow('Dias de visita devem ser inteiros de 1 a 31, sem repetição')
+  })
+})

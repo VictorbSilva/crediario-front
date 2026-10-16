@@ -164,7 +164,9 @@ describe('montarEdicaoCliente', () => {
   })
 
   it('recusa nome feito só de acentos combinantes', () => {
-    expect(() => montarEdicaoCliente(entrada({ nome: '\u0301\u0302' }), contexto)).toThrow(TypeError)
+    expect(() => montarEdicaoCliente(entrada({ nome: '\u0301\u0302' }), contexto)).toThrow(
+      'montarEdicaoCliente recebeu um nome que n\u00e3o passou na valida\u00e7\u00e3o',
+    )
   })
 
   it('não monta alterações quando o conteúdo limpo continua igual ao da abertura', () => {
@@ -282,6 +284,12 @@ describe('parseNumeroCadastro', () => {
   it('recusa inteiro fora da faixa segura', () => {
     expect(parseNumeroCadastro('99999999999999999999')).toBeNull()
   })
+
+  it('recusa o que Number aceitaria, e # que não está no começo', () => {
+    expect(parseNumeroCadastro('1e3')).toBeNull()
+    expect(parseNumeroCadastro('0x1A')).toBeNull()
+    expect(parseNumeroCadastro('1#2')).toBeNull()
+  })
 })
 
 describe('clienteComNumero', () => {
@@ -380,8 +388,43 @@ describe('validarCliente', () => {
       'confiavel',
     )
 
-    expect(erros.endereco).toBeTypeOf('string')
-    expect(erros.observacao).toBeTypeOf('string')
+    expect(erros.endereco).toBe('Endereço muito longo: máximo 200 caracteres.')
+    expect(erros.observacao).toBe('Observação muito longa: máximo 500 caracteres.')
+  })
+
+  it('campo só de espaços conta como vazio, com a mensagem de vazio', () => {
+    const erros = validarCliente(entrada({ numero: '   ', nome: '   ' }), lista, 'confiavel')
+
+    expect(erros.numero).toBe('Digite o número do cliente.')
+    expect(erros.nome).toBe('Digite o nome do cliente.')
+    expect(validarCliente(entrada({ nome: '' }), lista, 'confiavel').nome).toBe('Digite o nome do cliente.')
+  })
+
+  it('os limites da regra valem exatos, e espaço em volta não conta', () => {
+    const valido = (partes: Partial<EntradaCliente>) => validarCliente(entrada(partes), lista, 'confiavel')
+
+    expect(valido({ telefone: 'a'.repeat(40) }).telefone).toBeUndefined()
+    expect(valido({ telefone: `  ${'a'.repeat(40)}  ` }).telefone).toBeUndefined()
+    expect(valido({ telefone: 'a'.repeat(41) }).telefone).toBe('Telefone muito longo: máximo 40 caracteres.')
+    expect(valido({ telefone: '1'.repeat(20) }).telefone).toBeUndefined()
+    expect(valido({ telefone: '1'.repeat(21) }).telefone).toBe('Telefone com dígitos demais: máximo 20.')
+
+    // 20 caracteres com os 11 dígitos de um CPF válido.
+    expect(valido({ cpf: '529 . 982 . 247 - 25' }).cpf).toBeUndefined()
+    expect(valido({ cpf: '   529.982.247-25     ' }).cpf).toBeUndefined()
+    expect(valido({ cpf: '529 . 982 . 247 -  25' }).cpf).toBe('CPF muito longo: máximo 20 caracteres.')
+
+    expect(valido({ endereco: 'a'.repeat(200) }).endereco).toBeUndefined()
+    expect(valido({ endereco: `${'a'.repeat(200)}   ` }).endereco).toBeUndefined()
+    expect(valido({ observacao: 'a'.repeat(500) }).observacao).toBeUndefined()
+  })
+
+  it('CPF ou telefone escrito sem nenhum dígito passa, como texto livre', () => {
+    // Comportamento registrado no armadilhas.md (FormularioCliente): o texto fica,
+    // sem o derivado de dígitos. O CPF não é conferido porque não há dígito para conferir.
+    const erros = validarCliente(entrada({ cpf: 'não informou', telefone: 'sem telefone' }), lista, 'confiavel')
+
+    expect(erros).toEqual({})
   })
 })
 
@@ -458,6 +501,37 @@ describe('montarCamposCliente', () => {
   })
 
   it('explode em vez de montar documento com número que não passou na validação', () => {
-    expect(() => montarCamposCliente(entrada({ numero: 'abc' }), CONTEXTO)).toThrow(TypeError)
+    expect(() => montarCamposCliente(entrada({ numero: 'abc' }), CONTEXTO)).toThrow(
+      'montarCamposCliente recebeu um número que não passou na validação',
+    )
+  })
+
+  it('explode em vez de gravar nomeBusca vazio, que a regra recusaria', () => {
+    expect(() => montarCamposCliente(entrada({ nome: '́̂' }), CONTEXTO)).toThrow(
+      'montarCamposCliente recebeu um nome que não passou na validação',
+    )
+  })
+
+  it('apara os opcionais antes de gravar', () => {
+    const campos = montarCamposCliente(
+      entrada({
+        telefone: '  (11) 3333-4444  ', cpf: ' 529.982.247-25 ', endereco: '  Rua A, 10 ', observacao: ' manhã ',
+      }),
+      CONTEXTO,
+    )
+
+    expect(campos).toMatchObject({
+      telefone: '(11) 3333-4444', telefoneDigits: '1133334444', cpf: '529.982.247-25',
+      cpfDigits: '52998224725', endereco: 'Rua A, 10', observacao: 'manhã',
+    })
+  })
+
+  it('telefone ou CPF sem dígito grava o texto, sem o derivado vazio', () => {
+    const campos = montarCamposCliente(entrada({ telefone: 'sem telefone', cpf: 'não informou' }), CONTEXTO)
+
+    expect(campos.telefone).toBe('sem telefone')
+    expect(campos.cpf).toBe('não informou')
+    expect(campos).not.toHaveProperty('telefoneDigits')
+    expect(campos).not.toHaveProperty('cpfDigits')
   })
 })

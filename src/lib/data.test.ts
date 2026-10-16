@@ -28,7 +28,11 @@ describe('dataLocalISO', () => {
   })
 
   it('recusa uma data inválida em vez de devolver NaN-NaN-NaN', () => {
-    expect(() => dataLocalISO(new Date('não é data'))).toThrow(TypeError)
+    expect(() => dataLocalISO(new Date('não é data'))).toThrow('dataLocalISO recebeu uma data inválida')
+  })
+
+  it('ano com menos de quatro dígitos sai completado, como a regra exige', () => {
+    expect(dataLocalISO(new Date(999, 0, 1))).toBe('0999-01-01')
   })
 })
 
@@ -44,6 +48,8 @@ describe('ehDataCivil', () => {
     expect(ehDataCivil('2026-9-22')).toBe(false)
     expect(ehDataCivil('2026-09-22T00:00:00Z')).toBe(false)
     expect(ehDataCivil('')).toBe(false)
+    // Sobra depois da data que o calendário sozinho não pegaria: o split só olha três pedaços.
+    expect(ehDataCivil('2026-09-01-5')).toBe(false)
   })
 
   it('recusa mês e dia fora da faixa', () => {
@@ -69,6 +75,9 @@ describe('dataBonita', () => {
   it('devolve a entrada intacta quando não é uma data ISO', () => {
     expect(dataBonita('')).toBe('')
     expect(dataBonita('21/09/2026')).toBe('21/09/2026')
+    // Data ISO com sobra antes ou depois também não é data civil.
+    expect(dataBonita('2026-09-21T10:00')).toBe('2026-09-21T10:00')
+    expect(dataBonita('x2026-09-21')).toBe('x2026-09-21')
   })
 })
 
@@ -105,5 +114,9 @@ describe('vencimentoDaParcela', () => {
 
   it('respeita fevereiro de ano bissexto', () => {
     expect(vencimentoDaParcela('2028-01-31', 1, 31)).toBe('2028-02-29')
+  })
+
+  it('mantém o ano com quatro dígitos', () => {
+    expect(vencimentoDaParcela('0999-01-15', 1, 15)).toBe('0999-02-15')
   })
 })

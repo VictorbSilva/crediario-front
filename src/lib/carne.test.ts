@@ -225,3 +225,13 @@ describe('textos do carnê', () => {
     expect(semNbsp(textoDoJuros({}))).toBe('Juros 0% ao dia')
   })
 })
+
+describe('singular nos textos de uma unidade', () => {
+  it('"vence em 1 dia" e "1 parcela"', () => {
+    // A parcela do helper vence em 10/10: na véspera, falta um dia.
+    const amanha = parcela(1, 10_000)
+
+    expect(textoDaSituacao(amanha, '2026-10-09')).toBe('Vence em 1 dia')
+    expect(textoDoPlanoCurto(1, [amanha])).toBe('1 parcela · 0 pagas')
+  })
+})

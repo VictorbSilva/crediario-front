@@ -446,3 +446,46 @@ describe('saldoDoCliente', () => {
     expect(saldoDoCliente([]).abertoCentavos).toBe(0)
   })
 })
+
+describe('bordas que nenhum caso comum alcança', () => {
+  it('gerarParcelas recusa com a mensagem certa, e aceita o menor carnê possível', () => {
+    const plano = { dataVenda: '2026-04-19', diaVencimento: 19 }
+
+    expect(() => gerarParcelas({ ...plano, numeroParcelas: 0, valorTotalCentavos: 100 })).toThrow(
+      'gerarParcelas exige pelo menos uma parcela',
+    )
+    expect(() => gerarParcelas({ ...plano, numeroParcelas: 1, valorTotalCentavos: 0 })).toThrow(
+      'gerarParcelas exige um valor total em centavos inteiros',
+    )
+    expect(gerarParcelas({ ...plano, numeroParcelas: 1, valorTotalCentavos: 1 }).map((p) => p.valorCentavos)).toEqual([1])
+  })
+
+  it('o pagamento cobre a parcela de vencimento mais antigo, não a de número menor', () => {
+    const fora = [
+      parcela({ id: 'p1', numero: 1, vencimento: '2026-10-19' }),
+      parcela({ id: 'p2', numero: 2, vencimento: '2026-09-19' }),
+    ]
+
+    const { cobertura } = alocarPagamentos(fora, [pagamento({ valorCentavos: 10000 })])
+
+    expect(cobertura.get('p2')).toBe(10000)
+    expect(cobertura.get('p1')).toBe(0)
+  })
+
+  it.each([
+    ['multaTipo', { multaTipo: 'fixo' as const }],
+    ['multaPercentual', { multaPercentual: 2 }],
+    ['multaFixaCentavos', { multaFixaCentavos: 500 }],
+    ['jurosPercentualDia', { jurosPercentualDia: 0.1 }],
+  ])('basta %s para a parcela ter taxa própria', (_campo, taxa) => {
+    expect(temTaxaPropria(taxa)).toBe(true)
+  })
+
+  it('vendas do mesmo dia saem por id, chegue em que ordem chegar', () => {
+    const vendaDoDia = (id: string) => ({ id, dataVenda: '2026-09-01', numeroParcelas: 1 })
+
+    for (const ordem of [['v2', 'v1', 'v3'], ['v3', 'v1', 'v2']]) {
+      expect(montarCarne(ordem.map(vendaDoDia), [], [], HOJE).map((carne) => carne.venda.id)).toEqual(['v1', 'v2', 'v3'])
+    }
+  })
+})

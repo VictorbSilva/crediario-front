@@ -45,6 +45,10 @@ describe('parseInteiro', () => {
     expect(parseInteiro('-3')).toBeNull()
     expect(parseInteiro('')).toBeNull()
   })
+
+  it('recusa inteiro grande demais para ser exato', () => {
+    expect(parseInteiro('99999999999999999999')).toBeNull()
+  })
 })
 
 describe('parseTaxa', () => {
@@ -64,6 +68,30 @@ describe('parseTaxa', () => {
   it('recusa o que não é número', () => {
     expect(parseTaxa('dois')).toBeNull()
     expect(parseTaxa('1,2,3')).toBeNull()
+  })
+
+  it('recusa número que estoura para infinito', () => {
+    expect(parseTaxa('9'.repeat(400))).toBeNull()
+  })
+
+  it('aceita casas decimais e espaço antes do %', () => {
+    expect(parseTaxa('0,15')).toBe(0.15)
+    expect(parseTaxa(' 2 % ')).toBe(2)
+  })
+
+  it('recusa o que Number aceitaria mas ninguém digita como taxa', () => {
+    expect(parseTaxa('1e2')).toBeNull()
+    expect(parseTaxa('0x5')).toBeNull()
+    expect(parseTaxa('.5')).toBeNull()
+  })
+})
+
+describe('entradaVendaVazia', () => {
+  it('nasce em branco, com a data de hoje, o dia de hoje como vencimento e multa e juros desligados', () => {
+    expect(entradaVendaVazia(new Date(2026, 8, 5, 23, 30))).toEqual({
+      dataVenda: '2026-09-05', valor: '', numeroParcelas: '', diaVencimento: '5', cobrarTaxas: false,
+      multaTipo: 'percentual', multaPercentual: '', multaFixa: '', jurosPercentualDia: '', observacao: '',
+    })
   })
 })
 
@@ -95,9 +123,64 @@ describe('validarVenda', () => {
     expect(validarVenda(venda({ valor: '0,03', numeroParcelas: '3' })).numeroParcelas).toBeUndefined()
   })
 
+  it('pede pelo menos uma parcela e o dia do vencimento', () => {
+    expect(validarVenda(venda({ numeroParcelas: '0' })).numeroParcelas).toBe('Pelo menos uma parcela')
+    expect(validarVenda(venda({ diaVencimento: '' })).diaVencimento).toBe('Informe o dia do vencimento')
+  })
+
+  it('recusa observação acima de 500 caracteres, que é o teto da regra', () => {
+    expect(validarVenda(venda({ observacao: 'a'.repeat(501) })).observacao).toBeDefined()
+    expect(validarVenda(venda({ observacao: 'a'.repeat(500) })).observacao).toBeUndefined()
+  })
+
+  it('multa fixa vazia vale zero; texto que não é valor é recusado', () => {
+    const fixa = (multaFixa: string) =>
+      validarVenda(venda({ cobrarTaxas: true, multaTipo: 'fixo', multaFixa })).multaFixa
+
+    expect(fixa('')).toBeUndefined()
+    expect(fixa('5,00')).toBeUndefined()
+    expect(fixa('cinco')).toBe('Valor inválido')
+  })
+
   it('recusa dia de vencimento fora de 1..31', () => {
     expect(validarVenda(venda({ diaVencimento: '0' })).diaVencimento).toBeDefined()
     expect(validarVenda(venda({ diaVencimento: '32' })).diaVencimento).toBeDefined()
+  })
+
+  it('as bordas valem: 1 parcela, dia 1, dia 31 e taxa de 100%', () => {
+    expect(validarVenda(venda({ numeroParcelas: '1' }))).toEqual({})
+    expect(validarVenda(venda({ diaVencimento: '1' }))).toEqual({})
+    expect(validarVenda(venda({ diaVencimento: '31' }))).toEqual({})
+    expect(validarVenda(venda({
+      cobrarTaxas: true, multaTipo: 'percentual', multaPercentual: '100', jurosPercentualDia: '100',
+    }))).toEqual({})
+  })
+
+  it('valor inválido acusa só no valor, não em "parcelas demais"', () => {
+    expect(validarVenda(venda({ valor: '0,00' })).numeroParcelas).toBeUndefined()
+    expect(validarVenda(venda({ valor: '' })).numeroParcelas).toBeUndefined()
+    expect(validarVenda(venda({ valor: 'abc' })).numeroParcelas).toBeUndefined()
+  })
+
+  it('taxas escondidas não bloqueiam: sem multa e juros, nada delas é conferido, em nenhum tipo', () => {
+    // O dono escolheu um tipo, digitou errado e depois desmarcou "Informar multa e juros".
+    for (const multaTipo of ['percentual', 'fixo'] as const) {
+      expect(validarVenda(venda({
+        cobrarTaxas: false, multaTipo, multaPercentual: '999', multaFixa: 'abc', jurosPercentualDia: 'x',
+      }))).toEqual({})
+    }
+  })
+
+  it('confere só a multa do tipo escolhido', () => {
+    expect(validarVenda(venda({ cobrarTaxas: true, multaTipo: 'fixo', multaPercentual: 'abc', multaFixa: '5,00' })))
+      .toEqual({})
+    expect(validarVenda(venda({ cobrarTaxas: true, multaTipo: 'percentual', multaPercentual: '2', multaFixa: 'abc' })))
+      .toEqual({})
+  })
+
+  it('espaços sobrando não viram erro: multa fixa só de espaços, observação no teto com espaços', () => {
+    expect(validarVenda(venda({ cobrarTaxas: true, multaTipo: 'fixo', multaFixa: '   ' })).multaFixa).toBeUndefined()
+    expect(validarVenda(venda({ observacao: `${'a'.repeat(500)}   ` })).observacao).toBeUndefined()
   })
 
   it('recusa data que não existe no calendário', () => {
@@ -125,7 +208,29 @@ describe('validarVenda', () => {
       venda({ dataVenda: '9999-12-01', numeroParcelas: '1', diaVencimento: '1' }),
     )
 
-    expect(erros.dataVenda).toBeDefined()
+    expect(erros.dataVenda).toBe('Confira o ano: a última parcela passaria do ano 9999.')
+  })
+
+  it('o teto do ano também vale nas bordas: 120 parcelas e dia 31', () => {
+    expect(validarVenda(venda({ dataVenda: '9990-06-01', numeroParcelas: '120', diaVencimento: '10' })).dataVenda)
+      .toBeDefined()
+    expect(validarVenda(venda({ dataVenda: '9999-12-01', numeroParcelas: '1', diaVencimento: '31' })).dataVenda)
+      .toBeDefined()
+  })
+
+  it('perto do ano 9999, parcelas ou dia inválidos acusam no próprio campo, não na data', () => {
+    const perto = { dataVenda: '9999-06-01' }
+
+    for (const numeroParcelas of ['121', '0', '']) {
+      const erros = validarVenda(venda({ ...perto, numeroParcelas }))
+      expect(erros.numeroParcelas).toBeDefined()
+      expect(erros.dataVenda).toBeUndefined()
+    }
+    for (const diaVencimento of ['32', '0', '']) {
+      const erros = validarVenda(venda({ dataVenda: '9999-12-01', numeroParcelas: '1', diaVencimento }))
+      expect(erros.diaVencimento).toBeDefined()
+      expect(erros.dataVenda).toBeUndefined()
+    }
   })
 
   it('parcelas em branco não geram erro na data válida', () => {
@@ -234,6 +339,30 @@ describe('montarCamposVenda', () => {
     expect('observacao' in v).toBe(false)
   })
 
+  it('observação preenchida vai aparada para o documento', () => {
+    const { venda: v } = montarCamposVenda('c1', venda({ observacao: '  geladeira  ' }), CONTEXTO)
+
+    expect(v.observacao).toBe('geladeira')
+  })
+
+  it('taxa ilegível nunca chega ao documento como NaN', () => {
+    const { venda: v } = montarCamposVenda(
+      'c1',
+      venda({ cobrarTaxas: true, multaTipo: 'percentual', multaPercentual: 'x', jurosPercentualDia: 'y' }),
+      CONTEXTO,
+    )
+
+    expect(v.multaPercentual).toBe(0)
+    expect(v.jurosPercentualDia).toBe(0)
+
+    const fixa = montarCamposVenda(
+      'c1',
+      venda({ cobrarTaxas: true, multaTipo: 'fixo', multaFixa: 'x' }),
+      CONTEXTO,
+    ).venda
+    expect(fixa.multaFixaCentavos).toBe(0)
+  })
+
   it('a soma das parcelas fecha com o total, sempre', () => {
     for (const total of ['100,00', '300,00', '999,99', '1.234,56']) {
       for (const n of ['1', '3', '7', '12']) {
@@ -250,7 +379,20 @@ describe('montarCamposVenda', () => {
   })
 
   it('recusa montar o que a validação recusaria', () => {
-    expect(() => montarCamposVenda('c1', venda({ valor: '' }), CONTEXTO)).toThrow(TypeError)
+    // A mensagem, e não só o tipo: sem o guarda, outro TypeError estouraria mais adiante.
+    const montar = (extras: Partial<EntradaVenda>) => () => montarCamposVenda('c1', venda(extras), CONTEXTO)
+    const valor = 'montarCamposVenda recebeu um valor que não passou na validação'
+    const parcelas = 'montarCamposVenda recebeu parcelas que não passaram na validação'
+    const dia = 'montarCamposVenda recebeu um dia que não passou na validação'
+
+    expect(montar({ valor: '' })).toThrow(valor)
+    expect(montar({ valor: '0,00' })).toThrow(valor)
+    expect(montar({ numeroParcelas: '' })).toThrow(parcelas)
+    expect(montar({ numeroParcelas: '0' })).toThrow(parcelas)
+    expect(montar({ diaVencimento: '' })).toThrow(dia)
+    expect(montar({ diaVencimento: '0' })).toThrow(dia)
+    expect(montar({ diaVencimento: '32' })).toThrow(dia)
+    expect(montar({ valor: '0,01', numeroParcelas: '1', diaVencimento: '1' })).not.toThrow()
   })
 })
 
@@ -291,11 +433,19 @@ describe('cancelamento da venda', () => {
       agora: new Date(Number.NaN), dispositivo: 'abc',
     })).toThrow(TypeError)
   })
+
+  it('recusa data que a regra recusaria, como o ano 10000', () => {
+    expect(() => montarCancelamentoVenda({
+      agora: new Date(10000, 0, 1), dispositivo: 'abc',
+    })).toThrow('montarCancelamentoVenda recebeu uma data que não passou na validação')
+  })
 })
 
 describe('pagamento', () => {
-  it('pré-preenche o que falta na parcela', () => {
-    expect(entradaPagamentoVazia(new Date(2026, 8, 22), 8_750).valor).toBe('87,50')
+  it('pré-preenche o que falta na parcela, com hoje, dinheiro e sem observação', () => {
+    expect(entradaPagamentoVazia(new Date(2026, 8, 22), 8_750)).toEqual({
+      data: '2026-09-22', valor: '87,50', forma: 'dinheiro', observacao: '',
+    })
   })
 
   it('parcela sem saldo não sugere valor nenhum', () => {
@@ -314,6 +464,24 @@ describe('pagamento', () => {
 
   it('o pagamento válido passa', () => {
     expect(validarPagamento(pagamento())).toEqual({})
+  })
+
+  it('recusa data fora do formato civil e observação acima do teto da regra', () => {
+    expect(validarPagamento(pagamento({ data: '22/09/2026' })).data).toBe('Data inválida')
+    expect(validarPagamento(pagamento({ observacao: 'a'.repeat(501) })).observacao).toBeDefined()
+  })
+
+  it('observação preenchida vai aparada; em branco não vira campo', () => {
+    expect(montarCamposPagamento('c1', 'v1', pagamento({ observacao: ' troco ' }), CONTEXTO).observacao)
+      .toBe('troco')
+    expect('observacao' in montarCamposPagamento('c1', 'v1', pagamento({ observacao: '  ' }), CONTEXTO))
+      .toBe(false)
+  })
+
+  it('recusa montar pagamento que a validação recusaria', () => {
+    const mensagem = 'montarCamposPagamento recebeu um valor que não passou na validação'
+    expect(() => montarCamposPagamento('c1', 'v1', pagamento({ valor: '0,00' }), CONTEXTO)).toThrow(mensagem)
+    expect(() => montarCamposPagamento('c1', 'v1', pagamento({ valor: '' }), CONTEXTO)).toThrow(mensagem)
   })
 
   it('nasce por cancelar e sem canceladoEm — a regra recusa o contrário', () => {
