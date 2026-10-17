@@ -8,7 +8,13 @@ service cloud.firestore {
     }
 
     function ehDono() {
-      return autenticado() && request.auth.uid == 'B3HGx0RggpXWzy400742432aLw72';
+      return autenticado() && request.auth.uid == 'zQKH3lJ6mtYu5uE32PeHcUGZEEs1';
+    }
+
+    function ehTesteNoTreino(businessId) {
+      return autenticado()
+        && request.auth.uid == 'B3HGx0RggpXWzy400742432aLw72'
+        && businessId == 'loja-treino';
     }
 
     function pertenceAEmpresa(businessId) {
@@ -18,7 +24,7 @@ service cloud.firestore {
     }
 
     function podeAcessar(businessId) {
-      return ehDono() || pertenceAEmpresa(businessId);
+      return ehDono() || ehTesteNoTreino(businessId) || pertenceAEmpresa(businessId);
     }
 
     match /businesses/{businessId} {
