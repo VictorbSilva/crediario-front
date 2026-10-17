@@ -7,8 +7,10 @@ export const PROJETO = 'demo-crediario'
 
 export const EMPRESA = 'loja-principal'
 export const OUTRA_EMPRESA = 'loja-do-vizinho'
+export const EMPRESA_TREINO = 'loja-treino'
 
-export const UID_DONO = 'B3HGx0RggpXWzy400742432aLw72'
+export const UID_DONO = 'zQKH3lJ6mtYu5uE32PeHcUGZEEs1'
+export const UID_TESTE = 'B3HGx0RggpXWzy400742432aLw72'
 export const UID_INTRUSO = 'intruso-sem-vinculo-nenhum'
 
 export function criarAmbiente(): Promise<RulesTestEnvironment> {

@@ -22,9 +22,31 @@ Os comentários estão agrupados por arquivo, em ordem alfabética de caminho. C
 
 Este projeto não tem Cloud Functions e não vai ter (plano Spark), nem service account: não existe credencial administrativa que ignore estas regras. Elas são a validação completa dos dados, não a primeira de várias camadas.
 
-**ACESSO, HOJE:** só o dono usa o app, e `ehDono()` é a única porta que abre. `pertenceAEmpresa()` depende do custom claim `businessId`, e custom claim só o Admin SDK grava — que este projeto não tem. O caminho do funcionário está escrito e testado (o emulador forja o claim à vontade), mas não tem como existir em produção. Múltiplos usuários são atualização pós-MVP.
+**ACESSO, HOJE:** duas contas abrem porta, as duas por UID literal e nenhuma por claim. `ehDono()` é a conta do dono (`zQKH3lJ6mtYu5uE32PeHcUGZEEs1`, conta própria dele desde 17/10/2026) e abre todas as lojas. `ehTesteNoTreino(businessId)` é a conta de testes do Victor (`B3HGx0RggpXWzy400742432aLw72`, que até 17/10/2026 era o literal de `ehDono()`) e abre só `loja-treino`. `pertenceAEmpresa()` depende do custom claim `businessId`, e custom claim só o Admin SDK grava — que este projeto não tem. O caminho do funcionário está escrito e testado (o emulador forja o claim à vontade), mas não tem como existir em produção. Múltiplos usuários são atualização pós-MVP.
 
-— referente ao cabeçalho de firestore.rules
+> **AVISO**
+> **A conta de testes fica presa à `loja-treino` de propósito.** Ela existe para suporte e
+> teste, e é na `loja-treino` que os dois acontecem: `npm run dev`, `preview:treino`, todo
+> Preview da Vercel e a branch `treino` gravam lá. A `loja-principal` é do dono, e os
+> clientes dela não vão existir em outro lugar além do Firestore e da exportação. Se a conta
+> de testes abrisse a `loja-principal`, bastaria um build com `VITE_BUSINESS_ID` errado e
+> o Victor logado nele para um cliente de teste ("Maria Teste, R$ 1,00 em 1×") cair no meio
+> dos clientes reais — e `delete` é proibido, então ele ficaria lá. Com a trava, essa escrita
+> volta `permission-denied`. Suporte em dado real continua possível pelo console do
+> Firebase, que não passa por regra.
+>
+> **Trocar o dono de novo é trocar o literal em dois lugares, no mesmo commit:** `ehDono()`
+> no `firestore.rules` e `UID_DONO` no `tests/regras/ambiente.ts`. Trocar só um dos dois
+> derruba todo teste que grava como dono, em `acesso`, `clients` e `vendas`. A conta de
+> testes é o mesmo par: `ehTesteNoTreino()` e `UID_TESTE`. E nenhuma das duas pode herdar o
+> UID da outra: se `ehDono()` voltasse ao UID antigo, a conta de testes voltaria a abrir
+> todas as lojas — é isso que os testes `negado` de `acesso — a conta de testes` pegam.
+>
+> O teste `o intruso não lê cliente da loja-treino` existe porque, sem ele, `ehTesteNoTreino()`
+> podia perder a conferência do UID e abrir a `loja-treino` para qualquer conta autenticada
+> sem nenhum teste quebrar. A mutação foi aplicada à mão em 17/10/2026 e sobrevivia.
+
+— referente ao cabeçalho de firestore.rules, `ehDono()` e `ehTesteNoTreino()`
 
 A lista fechada de `camposConhecidos()` é o que transforma um campo digitado errado em erro de escrita, em vez de um documento silenciosamente torto. O preço é que campo novo exige mexer na regra e no teste — que é exatamente a regra do `CLAUDE.md`, não um efeito colateral dela.
 
@@ -63,14 +85,18 @@ O regex `^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$` recusa a classe grosseir
 >
 > O acesso era negado do mesmo jeito, porque erro em regra nega. Mas negar por acidente é
 > diferente de negar por decisão, e a fragilidade é concreta: `podeAcessar()` é
-> `ehDono() || pertenceAEmpresa(...)`, e o `||` da linguagem de regras faz curto-circuito.
-> Hoje o dono passa porque `ehDono()` resolve primeiro e o segundo operando nunca roda.
-> **Inverter a ordem dos dois operandos — mudança que parece inofensiva — faria o erro
-> disparar antes e trancaria o dono para fora dos próprios dados.**
+> `ehDono() || ehTesteNoTreino(...) || pertenceAEmpresa(...)`, e o `||` da linguagem de
+> regras faz curto-circuito. Hoje o dono passa porque `ehDono()` resolve primeiro e os outros
+> operandos nunca rodam. **Pôr `pertenceAEmpresa()` antes de `ehDono()` — mudança que parece
+> inofensiva — faria o erro disparar antes e trancaria o dono para fora dos próprios dados.**
+> `ehTesteNoTreino()` fica no meio sem esse risco: só lê `request.auth.uid` e o `businessId`
+> do caminho, que existem para toda conta autenticada. Mesmo assim, `ehDono()` continua
+> primeiro.
 >
 > O teste `o dono lê sem ter claim nenhum` existe para quebrar nessa inversão. Ele descreve
 > a situação real: nenhum usuário deste projeto tem claim, porque só o Admin SDK grava claim
-> e o projeto não tem Admin SDK.
+> e o projeto não tem Admin SDK. A conta de testes também não tem, e os testes dela usam o
+> contexto sem claim pelo mesmo motivo.
 
 ### Campos de rota no cliente — acrescentados em 13/10/2026
 
@@ -234,9 +260,9 @@ Projeto com prefixo `demo-`: o SDK reconhece esse prefixo como projeto de emulad
 
 — referente a tests/regras/ambiente.ts, `PROJETO`
 
-`UID_DONO` é o UID real do dono, o mesmo que está literal em `firestore.rules`.
+`UID_DONO` é o UID real do dono — a conta própria dele, desde 17/10/2026 —, o mesmo literal de `ehDono()` em `firestore.rules`. `UID_TESTE` é a conta de testes do Victor, o mesmo literal de `ehTesteNoTreino()`, e `EMPRESA_TREINO` é a única loja que ela abre. Trocar qualquer uma das duas contas é trocar o literal nos dois arquivos, no mesmo commit; ver a seção firestore.rules.
 
-— referente a tests/regras/ambiente.ts, `UID_DONO`
+— referente a tests/regras/ambiente.ts, `UID_DONO`, `UID_TESTE` e `EMPRESA_TREINO`
 
 `clienteValido()` é o documento que passa em todas as validações. Os testes de schema partem daqui e estragam **um campo por vez** — assim a causa da recusa é sempre o campo em questão, e não uma segunda coisa errada que ninguém percebeu.
 

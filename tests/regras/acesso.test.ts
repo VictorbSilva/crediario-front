@@ -4,9 +4,11 @@ import { doc, getDoc, setDoc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import {
   EMPRESA,
+  EMPRESA_TREINO,
   OUTRA_EMPRESA,
   UID_DONO,
   UID_INTRUSO,
+  UID_TESTE,
   caminhoCliente,
   clienteValido,
   criarAmbiente,
@@ -68,6 +70,44 @@ describe('acesso — o dono', () => {
     const banco = bancoDe(ambiente.authenticatedContext(UID_DONO))
     expect(await veredito(setDoc(doc(banco, `businesses/${EMPRESA}`), { nome: 'Loja' }))).toBe('permitido')
   })
+
+  it('lê e cria cliente na loja-treino', async () => {
+    await semearCliente('c1', EMPRESA_TREINO)
+    const banco = bancoDe(ambiente.authenticatedContext(UID_DONO))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1', EMPRESA_TREINO))))).toBe('permitido')
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c2', EMPRESA_TREINO)), clienteValido()))).toBe('permitido')
+  })
+})
+
+describe('acesso — a conta de testes', () => {
+  it('lê e cria cliente na loja-treino', async () => {
+    await semearCliente('c1', EMPRESA_TREINO)
+    const banco = bancoDe(ambiente.authenticatedContext(UID_TESTE))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1', EMPRESA_TREINO))))).toBe('permitido')
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c2', EMPRESA_TREINO)), clienteValido()))).toBe('permitido')
+  })
+
+  it('não lê cliente da loja-principal', async () => {
+    await semearCliente('c1', EMPRESA)
+    const banco = bancoDe(ambiente.authenticatedContext(UID_TESTE))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1', EMPRESA))))).toBe('negado')
+  })
+
+  it('não cria cliente na loja-principal', async () => {
+    const banco = bancoDe(ambiente.authenticatedContext(UID_TESTE))
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c1', EMPRESA)), clienteValido()))).toBe('negado')
+  })
+
+  it('não lê cliente da loja-do-vizinho', async () => {
+    await semearCliente('c1', OUTRA_EMPRESA)
+    const banco = bancoDe(ambiente.authenticatedContext(UID_TESTE))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1', OUTRA_EMPRESA))))).toBe('negado')
+  })
+
+  it('não escreve no documento da loja-treino — o app não grava esse documento', async () => {
+    const banco = bancoDe(ambiente.authenticatedContext(UID_TESTE))
+    expect(await veredito(setDoc(doc(banco, `businesses/${EMPRESA_TREINO}`), { nome: 'Loja de treino' }))).toBe('negado')
+  })
 })
 
 describe('acesso — o intruso', () => {
@@ -80,6 +120,12 @@ describe('acesso — o intruso', () => {
   it('não cria cliente', async () => {
     const banco = bancoDe(ambiente.authenticatedContext(UID_INTRUSO))
     expect(await veredito(setDoc(doc(banco, caminhoCliente('c1')), clienteValido()))).toBe('negado')
+  })
+
+  it('não lê cliente da loja-treino — ela abre só para a conta de testes', async () => {
+    await semearCliente('c1', EMPRESA_TREINO)
+    const banco = bancoDe(ambiente.authenticatedContext(UID_INTRUSO))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1', EMPRESA_TREINO))))).toBe('negado')
   })
 
   it('não lê o documento da empresa', async () => {
