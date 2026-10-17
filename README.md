@@ -8,14 +8,15 @@ consiga trabalhar em campo mesmo sem sinal, sincronizando quando a conexão volt
 
 ## Status
 
-**MVP em desenvolvimento.** A aplicação é um PWA instalável, abre offline, e a tela de
-**Clientes já grava e lê no Firestore de verdade** — cadastro com checagem de número
-repetido, busca, arquivamento e exportação de backup em JSON e CSV. O roteiro de aceite
-offline de 12 passos foi executado e aprovado em 21/09/2026: dado criado sem rede sobrevive
-a fechar o navegador e sincroniza sozinho quando a conexão volta.
+**MVP em desenvolvimento, com dados reais do Firestore em todas as telas de negócio.**
+Clientes oferece cadastro, busca, edição dos dados e dias de visita, arquivamento e
+desarquivamento. A página individual permite lançar vendas, registrar e estornar
+pagamentos e cancelar vendas, preservando o histórico.
 
-**Rotas e Financeiro continuam com dados de demonstração**, atrás do `DemoBanner`. A
-invariante é por tela: nenhuma tela mostra dado falso sem o banner, nem dado real com ele.
+Rotas mostra as visitas de hoje e o planejamento no calendário do mês atual e do seguinte,
+com ordenação por arrasto e marcas de visita. Financeiro é só leitura: a receber, vencido,
+recebido no mês atual e parcelas a receber no mês escolhido. O backup JSON inclui
+clientes, vendas, parcelas e pagamentos; o CSV continua sendo uma lista de clientes.
 
 ## Stack
 
@@ -72,27 +73,25 @@ Todo documento vive sob `businesses/{businessId}/…`. Isso existe desde o come�
 migrar dados vivos depois — com vendas, parcelas e pagamentos amarrados — é bem pior que
 carregar um segmento a mais no caminho.
 
-Como o app descobre a empresa do usuário, em ordem de precedência:
+Ao ler o token, o app prefere o **custom claim `businessId`** e usa `VITE_BUSINESS_ID`
+como alternativa. Só o claim é salvo em `localStorage`, por usuário; sem claim, esse
+valor salvo é removido. Se a leitura do token falhar, tenta o claim salvo e depois a
+variável de ambiente.
 
-1. **Custom claim `businessId`** do token, se existir.
-2. **`VITE_BUSINESS_ID`** do `.env`.
-3. O último valor conhecido, guardado em `localStorage` (só serve offline, quando a
-   renovação do token falha).
-
-Hoje só existe a opção 2: uma empresa, um usuário. Quando o multiusuário virar produto,
-basta passar a atribuir o claim — **o app não muda**, porque o claim já tem prioridade.
-Mudam apenas as regras e o script que atribui o claim.
-
-Se nenhuma das três resolver, o app mostra "Conta sem empresa vinculada" em vez de tentar
+Sem empresa resolvida, o app mostra "Conta sem empresa vinculada" em vez de tentar
 ler um caminho inválido.
 
 As regras ficam em `firestore.rules` (versionado). Elas negam tudo por padrão e liberam
-apenas: o UID do dono, ou quem tiver o claim da empresa correspondente.
+o dono em todas as empresas, a conta de testes somente em `loja-treino`, ou quem tiver o
+claim da empresa correspondente. As quatro coleções de negócio têm regras próprias:
+`clients`, `sales`, `installments` e `payments`.
 
 > O UID do dono fica fixo em `firestore.rules`, na função `ehDono()`. Ao publicar as
 > regras contra um projeto Firebase diferente do atual, troque esse UID pelo do dono de
 > lá (Firebase → Authentication → Users → coluna *Identificador do usuário*). Com o UID
-> errado o dono real perde o acesso e nenhuma escrita passa.
+> errado a conta do dono perde essa autorização. A conta de testes tem literal separado
+> em `ehTesteNoTreino()`; os identificadores correspondentes nos testes de regras precisam
+> acompanhar qualquer troca.
 
 Cada coleção nasce com a sua própria regra. **Não** existe `match /{documento=**}` no
 arquivo: as regras se combinam por *ou*, então um curinga permissivo anula qualquer regra
@@ -105,7 +104,7 @@ npx firebase-tools deploy --only firestore:rules
 
 ## Pré-requisitos
 
-- Node.js 22 (fixado em `.nvmrc` e em `engines`, com `engine-strict`)
+- Node.js **22** (`.nvmrc`; `engines: >=22 <23`, com `engine-strict` em `.npmrc`)
 - npm
 - JDK **21 ou superior**, apenas para rodar o emulador do Firestore (`npm run emu` e
   `npm run test:rules`). O `firebase-tools` 15 recusa o JDK 17 com
@@ -127,18 +126,23 @@ npm install
 | `npm run build` | Verifica os tipos (`tsc -b`) e gera o build de produção em `dist/` |
 | `npm run lint` | Roda o ESLint em todo o repositório |
 | `npm run preview:treino` | Gera o build de produção apontado para `loja-treino` e serve em `http://localhost:4174` |
-| `npm test` | Roda a suíte de testes unitários uma vez (Vitest) |
+| `npm test` | Roda a suíte de testes da aplicação uma vez (Vitest) |
 | `npm run test:watch` | A mesma suíte em modo *watch* |
+| `npm run test:coverage` | Roda a suíte com cobertura; exige pelo menos 70% em linhas, funções, ramos e instruções |
 | `npm run test:rules` | Sobe o emulador do Firestore e roda os testes das regras de segurança |
 | `npm run emu` | Sobe os emuladores de Firestore e Auth para desenvolvimento local |
 | `npm run generate-pwa-assets` | Regera os ícones do PWA a partir de `public/favicon.svg` |
+| `npm run revisar -- main` | Executa o revisor local contra a base informada; sem argumento usa `origin/main` |
 
 ### Testes
 
+Contagens verificadas em 17/10/2026 nesta revisão: **1.005 testes em 43 arquivos** por
+`npm test` e **144 testes em 3 arquivos** por `npm run test:rules`.
 São duas suítes separadas, cada uma com a sua configuração:
 
-- **`vitest.config.ts`** — testes unitários de `src/**/*.test.ts`. Hoje cobrem
-  `src/lib/dinheiro.ts` e `src/lib/texto.ts`. `globals` está desligado de propósito:
+- **`vitest.config.ts`** — testes de `src/**/*.test.{ts,tsx}`: funções de negócio,
+  camada de dados, autenticação, componentes e páginas. O ambiente padrão é `node`;
+  os testes que montam interfaces pedem `jsdom`. `globals` está desligado de propósito:
   importar `describe`/`it`/`expect` explicitamente é o que mantém o `tsc -b` passando sem
   configuração de tipos extra.
 - **`vitest.rules.config.ts`** — testes de `tests/regras/`, que exercitam o
@@ -166,7 +170,7 @@ isso não aparecem no `index.html`. Declará-los à mão duplica as tags.
 
 `registerType` é **`prompt`**, não `autoUpdate`: o requisito pede que a atualização seja
 comunicada ao usuário. Quem mostra o aviso é `src/components/pwa/PwaPrompt.tsx`, montado
-no `AppShell`. Ele cobre dois estados do service worker:
+no `App`, fora da guarda de autenticação, inclusive no login. Ele cobre dois estados do service worker:
 
 - **"Nova versão disponível."** com os botões *Atualizar* e *Depois*. *Atualizar* manda
   `SKIP_WAITING` ao worker em espera e recarrega a página já na versão nova.
@@ -174,7 +178,8 @@ no `AppShell`. Ele cobre dois estados do service worker:
 
 Esse componente **não** é o indicador de sincronização do Firestore. Ele só sabe sobre o
 service worker (o código do app); não sabe nada sobre dados pendentes de gravação. O
-indicador de sync é trabalho separado e sai de metadados de snapshot.
+`SyncBadge` em `TopBar` e `Sidebar` recebe o estado derivado dos snapshots de clientes;
+ele não agrega as escritas do carnê.
 
 ### Como testar offline
 
@@ -226,10 +231,11 @@ As variáveis ficam no painel (*Settings → Environment Variables*), por ambien
 | Variável | Production | Preview |
 | --- | --- | --- |
 | `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID` | sim | sim |
-| `VITE_BUSINESS_ID` | **não cadastrada até a entrega ao dono** | `loja-treino` |
+| `VITE_BUSINESS_ID` | **cadastrar somente na entrega ao dono** | `loja-treino` |
 
-Sem `VITE_BUSINESS_ID`, a URL de produção não tem onde gravar — de propósito:
-`loja-principal` só recebe dado quando o dono começar a usar.
+Sem claim, claim salvo ou `VITE_BUSINESS_ID`, o app não resolve uma empresa e a guarda
+impede abrir as telas de negócio. Manter a variável de Production ausente até a entrega
+é a orientação para que `loja-principal` só receba dado quando o dono começar a usar.
 
 Para atualizar o treino com o que está na `main`:
 
@@ -249,34 +255,40 @@ firestore:rules`); o CI só verifica.
 ## Estrutura do projeto
 
 ```
-public/              # favicon.svg (fonte) + ícones do PWA gerados a partir dele
-pwa-assets.config.ts # receita de geração dos ícones
-.env.example         # modelo do .env.local (config do Firebase)
+.github/workflows/   # CI: lint, build, cobertura e testes de regras
+.claude/scripts/     # revisor local de PR
+docs/                # armadilhas e invariantes técnicas
+public/              # favicon.svg (fonte) + ícones do PWA gerados
+scripts/             # firebase-com-jdk.mjs (prioriza o JDK do JAVA_HOME)
 src/
   auth/          # AuthProvider, contexto, useAuth, RequireAuth, recuperação de senha
-  data/          # ClientesProvider (o único onSnapshot global), useClientes, useCarne
-  types/         # Cliente, Venda, Parcela, Pagamento — espelham firestore.rules
-  lib/           # toda decisão de negócio, pura e testada
-    firebase.ts  # ponto único de inicialização do Firebase
-    cliente.ts   # validação e montagem do documento de cliente
-    parcelas.ts  # geração do carnê, alocação de pagamento, atraso, simulação de encargo
-    venda.ts     # validação e montagem dos documentos de venda e de pagamento
-    carne.ts     # textos e janela de parcelas da tela do carnê
-    exportacao.ts, dinheiro.ts, data.ts, texto.ts, cpf.ts, sync.ts, dispositivo.ts
+  data/          # ClientesProvider/contexto/useClientes, useCarne, useCarneDaEmpresa
+  types/         # cliente.ts e venda.ts: Cliente, Venda, Parcela, Pagamento
+  lib/           # funções de negócio (com testes ao lado) e inicialização do Firebase
+    ambiente.ts, carne.ts, cliente.ts, cpf.ts, data.ts, dinheiro.ts, dispositivo.ts
+    exportacao.ts, financeiro.ts, firebase.ts, parcelas.ts, rotas.ts, sync.ts, texto.ts, venda.ts
   components/
-    clientes/    # FormularioCliente, ListaDeClientes, PainelDoCliente, ExportarClientes
-      carne/     # CarneDoCliente, VendaExpansivel, ListaDeParcelas, LivroDePagamentos,
-                 # FormularioVenda, FormularioPagamento
-    layout/      # AppShell, Sidebar, BottomNav, TopBar, navItems, SignOutButton
+    clientes/    # cadastro/edição, dias de visita, lista, painel, identidade, arquivo e exportação
+      carne/     # carnê, resumos, vendas, parcelas, pagamentos e cancelamento de venda
+    layout/      # AppShell, navegação, TopBar, SyncBadge, SignOutButton, useTelaLarga
+    rotas/       # SeletorDoDia (calendário) e ParadaDaRota
     pwa/         # PwaPrompt (aviso de atualização / pronto offline)
     ui/          # componentes de apresentação reutilizáveis
     BrandMark.tsx
+    FaixaDeTreino.tsx
     SetupError.tsx
   pages/         # Login, Clientes, Cliente (/clientes/:id), Rotas, Financeiro
-scripts/         # firebase-com-jdk.mjs (põe o JDK do JAVA_HOME na frente do PATH)
+  test/          # apoio dos testes: diálogo e stub do registro do PWA
   App.tsx        # rotas + guarda de autenticação
   main.tsx       # ponto de entrada
   index.css      # diretivas do Tailwind + estilos globais
+tests/regras/    # acesso, clientes e vendas/parcelas/pagamentos, com ambiente comum
+.env.example     # modelo da configuração local do Firebase
+.env.development, .env.treino  # loja-treino nos modos locais de teste
+firestore.rules, firestore.indexes.json, firebase.json
+pwa-assets.config.ts, vite.config.ts
+vitest.config.ts, vitest.rules.config.ts
+package.json, .nvmrc, .npmrc
 ```
 
 O alias `@/*` aponta para `src/*` e está declarado em **dois** lugares —
@@ -288,22 +300,24 @@ apenas o mínimo que não dá para expressar como utilitário do Tailwind.
 
 ## O que já funciona ponta a ponta
 
-- Cadastro, busca e arquivamento de clientes sobre o Firestore, offline inclusive
-- Exportação em JSON/CSV — o **único backup** de uma base digitada à mão
+- Cadastro, busca, edição dos dados e dias de visita, arquivamento e desarquivamento de clientes
+- Backup JSON versão 2 de clientes, vendas, parcelas e pagamentos; CSV só de clientes
 - Página individual do cliente (`/clientes/:id`): carnê com vendas expansíveis, parcelas,
   situação derivada e simulação de encargo atrás de um interruptor desligado por padrão
-- Lançar venda (gera o carnê), registrar pagamento e estornar lançamento
+- Lançar venda (gera o carnê), registrar e estornar pagamento, cancelar venda sem estornar pagamentos
+- Rotas de hoje com Visitado/Ausente/Desmarcar e planejamento por calendário, com ordem por dia do mês
+- Financeiro só de leitura, com totais, clientes em atraso e parcelas a receber por mês
 
-Validado à mão no build de produção em 22/09/2026, numa bateria de 10 blocos que incluiu
-offline e as recusas de borda. **Mas quem validou foi o desenvolvedor, não o dono** — o
-app ainda não foi usado numa visita de verdade.
+O aceite manual de PWA e offline deve ser feito com `npm run preview:treino`, inclusive
+fechar e reabrir sem rede e sincronizar depois. As suítes automatizadas não certificam
+o comportamento no aparelho usado em campo.
 
 ## O que ainda não existe
 
-- Rotas e Financeiro sobre dado real (seguem em `src/demo/`)
-- Coleção `erros` para as falhas de escrita que chegam com o app fechado — **é o próximo
-  passo**, e a janela é antes de o app ir para a rua, senão o rastro do primeiro erro real
-  já se perdeu
+- Registro persistente de falhas de escrita entre sessões. Hoje os `.catch()` alimentam
+  apenas o estado em memória do provider/hook montado; reabrir o app não recupera a recusa
+  de uma escrita da sessão anterior. Essa recuperação fica fora do MVP; uma coleção de
+  erros, sozinha, não recuperaria os callbacks perdidos ao fechar o app.
 
 As **regras financeiras deixaram de ser a incógnita**: o dono respondeu em 21/09/2026 e
 elas estão em Domain Notes no `CLAUDE.md`. Em resumo — não existe renegociação como

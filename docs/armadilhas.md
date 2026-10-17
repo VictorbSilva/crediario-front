@@ -11,7 +11,78 @@ Este documento reúne os comentários explicativos que antes viviam no código-f
 
 **Leia isto antes de alterar `vite.config.ts`, `src/lib/firebase.ts`, `pwa-assets.config.ts` e `firestore.rules`.** Vários dos comentários abaixo, especialmente os destacados como `> **AVISO**`, registram armadilhas já pagas — bugs que não aparecem no build e que só se manifestam em produção, offline, ou em plataformas específicas (Android, iOS).
 
-Os comentários estão agrupados por arquivo, em ordem alfabética de caminho. Cada entrada termina com a referência ao trecho de código de origem (linhas do arquivo antes da remoção dos comentários, ou o nome da função quando a referência por linha envelheceria rápido).
+Os comentários estão agrupados por arquivo e por invariantes, na ordem indicada no índice.
+As referências antigas por linha apontam para o código antes da remoção dos comentários;
+para localizar o trecho atual, prefira o arquivo e o nome da função indicados.
+
+## Índice
+
+- [firestore.rules](#firestorerules)
+- [firestore.rules — sales, installments e payments](#firestorerules--sales-installments-e-payments)
+- [tests/regras/ambiente.ts — `veredito`](#testsregrasambientets--veredito)
+- [tests/regras/ambiente.ts](#testsregrasambientets)
+- [tests/regras/clients.test.ts](#testsregrasclientstestts)
+- [src/components/clientes/ListaDeClientes.tsx e PainelDoCliente.tsx](#srccomponentsclienteslistadeclientestsx-e-paineldoclientetsx)
+- [src/pages/ClientesPage.tsx](#srcpagesclientespagetsx)
+- [src/pages/FinanceiroPage.tsx](#srcpagesfinanceiropagetsx)
+- [src/pages/RotasPage.tsx e src/components/rotas/](#srcpagesrotaspagetsx-e-srccomponentsrotas)
+- [src/components/clientes/FormularioCliente.tsx](#srccomponentsclientesformularioclientetsx)
+- [src/data/useCarne.ts](#srcdatausecarnets)
+- [src/data/ClientesProvider.tsx](#srcdataclientesprovidertsx)
+- [src/lib/exportacao.ts](#srclibexportacaots)
+- [src/data/useCarneDaEmpresa.ts](#srcdatausecarnedaempresats)
+- [src/lib/rotas.ts](#srclibrotasts)
+- [src/lib/parcelas.ts](#srclibparcelasts)
+- [src/lib/financeiro.ts](#srclibfinanceirots)
+- [src/lib/cliente.ts](#srclibclientets)
+- [src/lib/sync.ts](#srclibsyncts)
+- [src/lib/data.ts](#srclibdatats)
+- [src/lib/cpf.ts](#srclibcpfts)
+- [src/lib/dispositivo.ts](#srclibdispositivots)
+- [src/lib/dispositivo.ts — nota antiga](#srclibdispositivots--nota-antiga)
+- [Apontamentos do SonarQube recusados de propósito](#apontamentos-do-sonarqube-recusados-de-propósito)
+- [scripts/firebase-com-jdk.mjs](#scriptsfirebase-com-jdkmjs)
+- [pwa-assets.config.ts](#pwa-assetsconfigts)
+- [src/App.tsx](#srcapptsx)
+- [src/auth/AuthProvider.tsx](#srcauthauthprovidertsx)
+- [src/auth/RequireAuth.tsx](#srcauthrequireauthtsx)
+- [src/auth/auth-context.ts](#srcauthauth-contextts)
+- [src/components/BrandMark.tsx](#srccomponentsbrandmarktsx)
+- [src/components/SetupError.tsx](#srccomponentssetuperrortsx)
+- [src/components/layout/SignOutButton.tsx](#srccomponentslayoutsignoutbuttontsx)
+- [src/components/layout/TopBar.tsx](#srccomponentslayouttopbartsx)
+- [src/components/layout/SyncBadge.tsx](#srccomponentslayoutsyncbadgetsx)
+- [src/components/layout/navItems.ts](#srccomponentslayoutnavitemsts)
+- [src/components/pwa/PwaPrompt.tsx](#srccomponentspwapwaprompttsx)
+- [src/index.css](#srcindexcss)
+- [src/lib/firebase.ts](#srclibfirebasets)
+- [src/main.tsx](#srcmaintsx)
+- [src/vite-env.d.ts](#srcvite-envdts)
+- [vite.config.ts](#viteconfigts)
+- [Invariantes acrescentadas na varredura de defeitos (08/08/2026)](#invariantes-acrescentadas-na-varredura-de-defeitos-08082026)
+- [src/lib/firebase.ts](#srclibfirebasets-1)
+- [src/auth/AuthProvider.tsx](#srcauthauthprovidertsx-1)
+- [src/App.tsx](#srcapptsx-1)
+- [Rejeições de Promise não tratadas](#rejeições-de-promise-não-tratadas)
+- [Dados reais nas páginas](#dados-reais-nas-páginas)
+- [Invariantes sem dono — o que as Security Rules não expressam (28/08/2026)](#invariantes-sem-dono--o-que-as-security-rules-não-expressam-28082026)
+- [1. Unicidade de `numero` — 🟢 com dono desde 21/09/2026](#1-unicidade-de-numero---com-dono-desde-21092026)
+- [2. `nomeBusca` ser de fato `normalizar(nome)` — 🟡 dono frágil](#2-nomebusca-ser-de-fato-normalizarnome---dono-frágil)
+- [3. `criadoEm` significa "quando sincronizou", não "quando cadastrei" — 🟢 resolvida em 03/09/2026](#3-criadoem-significa-quando-sincronizou-não-quando-cadastrei---resolvida-em-03092026)
+- [4. `atualizadoPor` ser mesmo o dispositivo que escreveu — 🟢 aceito](#4-atualizadopor-ser-mesmo-o-dispositivo-que-escreveu---aceito)
+- [5. Coerência entre documentos — geração testada e lote no app](#5-coerência-entre-documentos--geração-testada-e-lote-no-app)
+- [6. O Admin SDK ignora as regras por completo — 🟢 sem objeto hoje](#6-o-admin-sdk-ignora-as-regras-por-completo---sem-objeto-hoje)
+- [7. Dígito verificador de CPF — 🟢 com dono desde 21/09/2026](#7-dígito-verificador-de-cpf---com-dono-desde-21092026)
+- [8. O que É exprimível e ainda não foi feito](#8-o-que-é-exprimível-e-ainda-não-foi-feito)
+- [9. O curinga `{documento=**}` anulava tudo isto](#9-o-curinga-documento-anulava-tudo-isto)
+- [Bloqueador de anúncios × canal do Firestore](#bloqueador-de-anúncios--canal-do-firestore)
+- [src/lib/venda.ts — a regra recusa, mas offline ninguém fica sabendo](#srclibvendats--a-regra-recusa-mas-offline-ninguém-fica-sabendo)
+- [src/data/useCarne.ts — a venda e as parcelas vão num lote só](#srcdatausecarnets--a-venda-e-as-parcelas-vão-num-lote-só)
+- [src/components/layout/useTelaLarga.ts — CSS não resolve, e o custo é leitura](#srccomponentslayoutusetelalargats--css-não-resolve-e-o-custo-é-leitura)
+- [.env.development e .env.treino](#envdevelopment-e-envtreino)
+- [src/lib/ambiente.ts e src/components/FaixaDeTreino.tsx](#srclibambientets-e-srccomponentsfaixadetreinotsx)
+- [vercel.json e a Vercel](#verceljson-e-a-vercel)
+- [src/test/ e os testes com jsdom](#srctest-e-os-testes-com-jsdom)
 
 ---
 
@@ -271,7 +342,8 @@ Projeto com prefixo `demo-`: o SDK reconhece esse prefixo como projeto de emulad
 > **AVISO**
 > `clienteComoOAppEscreve()` é o documento **literal** que o formulário de cadastro monta (`src/lib/cliente.ts`). É **cópia manual**, e de propósito: `vitest.rules.config.ts` não tem o alias `@` porque estes testes exercitam a fronteira, não o código da aplicação. O preço da cópia é que os dois lados podem divergir — e os testes que usam esse helper são o **único** lugar que percebe quando divergem. Ao mexer nos campos que o formulário grava, mexer aqui também.
 >
-> Repare no que **não** está lá: `rotaId`. A coleção `routes/` ainda não tem regra, então é ingravável, e o formulário não oferece o campo.
+> Repare no que **não** está lá: `rotaId`. O formulário usa `diasDeVisita` no próprio cliente;
+> não há coleção de rotas em uso. `rotaId` continua aceito pela regra só por compatibilidade.
 
 — referente a tests/regras/ambiente.ts, `clienteComoOAppEscreve()`
 
@@ -308,20 +380,20 @@ estavam todos no mesmo.
 
 ## src/pages/ClientesPage.tsx
 
-Primeira tela do projeto lendo dado real. `DemoBanner` e `clientesDemo` saíram daqui, mas o
-`src/demo/` **continuou existindo** para Rotas e Financeiro (Rotas saiu em 14/10/2026; só o
-Financeiro segue demo): a invariante é por tela — nenhuma tela mostra dado falso sem o banner,
-nem dado real com ele —, então apagar o módulo inteiro quebraria as telas fora do escopo.
+A lista usa os clientes reais do `ClientesProvider`, com busca em memória, cadastro,
+arquivamento/desarquivamento e exportação. No desktop, o cliente selecionado (ou o primeiro
+resultado) monta o painel com o resumo de vendas; no celular, o clique abre a página do
+cliente. O diálogo de exportação só monta quando aberto, e é ali que entram os listeners
+do backup completo.
 
-Os KPIs **"Com atraso" e "Sem rota" sumiram**, e não é esquecimento. `situacao` e
-`emAbertoCentavos` não existem no modelo: nascem nas etapas 4 e 5, com as regras financeiras.
-Mostrar "Em dia" ou "R$ 0,00" para todo mundo seria inventar número, que é o que o
-`CLAUDE.md` proíbe. "Sem rota" daria 100% enquanto não houver rotas, o que não informa nada.
-O KPI de arquivados só aparece quando há algum, para não ensinar um zero permanente.
+Os KPIs da lista são **"Clientes", "Alterações pendentes" e, quando há algum, "Arquivados"**.
+`situacao` e `emAbertoCentavos` não são campos de `Cliente`: o carnê calcula saldos, e o
+Financeiro calcula os totais da empresa. A lista não inventa um saldo zero nem uma situação
+financeira para preencher um indicador.
 
-A busca é em memória, sobre o que o listener já trouxe. Termo com dígitos casa `numero` por
-**prefixo** e `telefoneDigits`/`cpfDigits` por trecho — buscar "137" tem que achar o cliente
-137 antes de achar quem tem 137 no meio do telefone.
+A busca é em memória, sobre o que o listener já trouxe: nome e endereço normalizados,
+`numero` por **prefixo** e `telefoneDigits`/`cpfDigits` por trecho. O filtro preserva a
+ordem por número do snapshot; não há priorização dos resultados pelo campo que casou.
 
 O botão de arquivar **não tem diálogo de confirmação**, de propósito: é alternância, desfaz
 num clique, e confirmação para ação reversível é ruído. O contrário — botão só de ida —
@@ -330,7 +402,7 @@ esconderia o cliente sem caminho de volta.
 > **AVISO**
 > O painel de detalhe **não avisa sobre CPF com dígito inconsistente.** Desde 21/09 o
 > formulário bloqueia, e a coleção nasceu vazia, então não existe caminho no app que grave um
-> CPF inválido. Se um aparecer — edição pelo console, ou uma futura tela de edição que
+> CPF inválido. Se um aparecer — edição pelo console, ou um caminho de escrita que
 > esqueça de validar —, ele fica invisível aqui. É dívida consciente: a rede de segunda
 > instância custaria cinco linhas e hoje não teria o que pegar.
 
@@ -536,9 +608,9 @@ SDK: o provider converte a lista em `deleteField()`, acrescenta `serverTimestamp
 ## src/data/useCarne.ts
 
 Três listeners por cliente aberto — `sales`, `installments` e `payments` —, cada um filtrado
-por `clientId`. É hook e não contexto: o único consumidor é a página do cliente e sua árvore,
-diferente do `ClientesProvider`, que existe como contexto porque o selo de sincronização o
-consome do outro lado do app.
+por `clientId`. O hook é consumido pela página do cliente e pelo painel desktop da lista;
+cada instância monta e encerra suas assinaturas. O `ClientesProvider`, por sua vez, é
+compartilhado via contexto, inclusive com o selo de sincronização do shell.
 
 **A consulta filtra por `clientId` e nada mais; a ordenação é em memória.** Somar um
 `orderBy` a um `where` exigiria índice composto declarado e publicado, e o
@@ -628,10 +700,13 @@ aviso: já não entra no saldo.
 
 ## src/data/ClientesProvider.tsx
 
-O único `onSnapshot` do app. Montado no `AppShell`, para que a lista, o formulário e o selo
-de sincronização compartilhem a mesma assinatura — é o que mantém o projeto dentro do plano
-Spark. `orderBy('numero')` usa o índice automático de campo único; `firestore.indexes.json`
-continua vazio de propósito.
+O listener compartilhado de **clientes**, montado no `AppShell` autenticado, com
+`businessId` resolvido, para que lista, formulário, Rotas, Financeiro e selo reutilizem a
+mesma assinatura. `orderBy('numero')` usa o índice automático de campo único;
+`firestore.indexes.json` continua vazio de propósito. Há outros `onSnapshot`:
+`useCarne` monta três por cliente aberto (página ou painel desktop), e
+`useCarneDaEmpresa` monta os das coleções pedidas enquanto Financeiro ou exportação
+estiverem abertos. Cada efeito devolve o encerramento de suas assinaturas.
 
 > **AVISO**
 > `{ includeMetadataChanges: true }` **não é opcional**. Sem ele o snapshot não dispara
@@ -650,9 +725,12 @@ continua vazio de propósito.
 > (regra), o SDK desfaz o documento no cache e o cliente some da lista dias depois, sem
 > aviso. Por isso o `.catch()` empilha em `falhas`, que a tela renderiza.
 >
-> **O `falhas` só cobre o caso de app aberto.** Cadastro offline com o app fechado antes da
-> sincronização tem a rejeição processada sem ninguém escutando: o documento é revertido e
-> nem o `.catch()` roda. Isso fica invisível até a coleção `erros` da etapa 6.
+> **`falhas` só vive na memória do provider/hook montado.** Fechar o app perde esse estado e
+> os callbacks da sessão; reabrir não recupera a recusa de uma escrita daquela sessão.
+> Não há registro persistente nem coleção `erros` no MVP. Uma futura coleta de erros só
+> registraria o que conseguisse observar: sozinha, não detectaria recusas entre sessões.
+> A recuperação dessa recusa invisível fica fora do MVP; não tratá-la como resolvida por
+> uma "etapa 6" de coleta.
 
 `serverTimestamp()` materializa como `null` no cache local até o servidor confirmar — por
 isso `criadoEm` e `atualizadoEm` são `Timestamp | null` no tipo `Cliente`. Tratar como
@@ -762,7 +840,7 @@ silêncio todo campo novo até alguém lembrar deste arquivo.
 
 ## src/data/useCarneDaEmpresa.ts
 
-O carnê da **empresa inteira**, para o backup e, depois, para o Financeiro. Um listener por
+O carnê da **empresa inteira**, usado pelo backup e pelo Financeiro. Um listener por
 coleção pedida, sobre a coleção **inteira** de `businesses/{businessId}`: sem `where`, sem
 `orderBy`. Coleção sem filtro usa o índice automático, e o `firestore.indexes.json` continua
 vazio de propósito.
@@ -774,7 +852,7 @@ vazio de propósito.
 > backup ocasional é aceitável; numa tela quente, aberta dezenas de vezes por dia, não é.
 > Por isso: (1) o hook só fica montado enquanto o componente que o usa está montado, e o
 > `ExportarClientes` só é montado aberto; (2) o hook recebe **quais** coleções ouvir, e o
-> Financeiro vai pedir só `sales` e `payments` — `installments` é de longe a maior das
+> Financeiro pede só `sales` e `payments` — `installments` é de longe a maior das
 > três, e o Financeiro não precisa dela.
 
 `colecoes` precisa ser **constante de módulo** (`CARNE_COMPLETO`, ou outra no mesmo
@@ -788,8 +866,10 @@ guarda, **por coleção**, se ela já chegou e o `fromCache` do último snapshot
 `carregando` é "alguma ainda não chegou"; `doCache` é "alguma veio do cache".
 
 A memória de já ter lido do servidor fica em
-`crediario:carne-sincronizou:<businessId>:<coleções>` no `localStorage`, gravada uma vez,
-quando **todas** as coleções pedidas já entregaram um snapshot com `fromCache: false`. A
+`crediario:carne-sincronizou:<businessId>:<coleções>` no `localStorage`, gravada uma vez
+por assinatura, quando **todas** as coleções pedidas já entregaram ao menos um snapshot
+com `fromCache: false`. Isso não exige que os últimos snapshots de todas sejam do servidor
+ao mesmo tempo; o `Set` guarda quais já chegaram do servidor naquela assinatura. A
 chave leva a lista de coleções porque provar `sales` e `payments` (Financeiro) não prova
 `installments` (backup). O valor inicial é lido no inicializador do `useState`, e todo
 acesso ao `localStorage` vai em `try/catch` — aba anônima e armazenamento bloqueado lançam.
@@ -1321,13 +1401,17 @@ Sem `forceRefresh`: usa o token em cache, então funciona offline. O preço é q
 
 — referente a src/auth/RequireAuth.tsx, linha 29
 
-Autenticado, mas o token não traz `businessId`. Sem isso não há caminho de dados possível — todo documento vive sob businesses/{businessId}/. Acontece quando a conta foi criada no console mas o claim não foi atribuído, ou quando o claim foi dado depois e o token ainda é o antigo.
+Autenticado, mas sem empresa resolvida pelo `AuthProvider`: nem claim nem alternativa
+disponível. A guarda usa `businessId` do contexto, não exige claim no token. A leitura
+normal prefere claim e depois `VITE_BUSINESS_ID`; se ler o token falhar, tenta o claim
+salvo por usuário e depois a variável. Todo caminho de dados vive sob `businesses/{businessId}/`.
 
 — referente a src/auth/RequireAuth.tsx, linhas 33–36
 
 ## src/auth/auth-context.ts
 
-Empresa a que este usuário pertence, lida do custom claim `businessId` do token. Todo caminho de dados vive sob `businesses/{businessId}/...`.
+Empresa resolvida pelo `AuthProvider`: claim `businessId` ou as alternativas descritas
+acima. Todo caminho de dados vive sob `businesses/{businessId}/...`.
 
 `null` com `usuario` preenchido significa conta autenticada mas sem empresa vinculada — ver AuthProvider.
 
@@ -1372,9 +1456,23 @@ Só confirmar "Sair" chama `sair()`, sem `await` e com o `.catch()` de falha pre
 
 ## src/components/layout/TopBar.tsx
 
-Cabeçalho apenas para telas pequenas. É o lugar previsto para o indicador de sincronização (offline-first) — ainda não implementado.
+Cabeçalho para telas pequenas. Já renderiza `SyncBadge` com `estadoSync` de `useClientes()`;
+a `Sidebar` usa o mesmo estado nas telas maiores.
 
 — referente a src/components/layout/TopBar.tsx, linhas 4–7
+
+## src/components/layout/SyncBadge.tsx
+
+O selo recebe `estado` por prop, vindo de `useClientes()` na `TopBar` e na `Sidebar`.
+O provider deriva esse valor com `estadoDeSync`: carregamento, erro de leitura,
+`fromCache` e documentos de clientes com `hasPendingWrites`. **Não é um agregado de
+clientes, vendas, parcelas e pagamentos**; o `estadoSync` do carnê não alimenta esse selo.
+
+`nao-configurado` continua legítimo no tipo de `src/lib/sync.ts` e na aparência do
+componente. Ele não está fixo nesse estado: `estadoDeSync` devolve `sincronizando`,
+`erro`, `offline`, `pendente` ou `sincronizado`, conforme os sinais do provider.
+
+— referente a src/components/layout/SyncBadge.tsx, `TopBar`, `Sidebar` e src/lib/sync.ts
 
 ## src/components/layout/navItems.ts
 
@@ -1386,7 +1484,9 @@ Fonte única de navegação — consumida pela Sidebar e pela BottomNav.
 
 Avisos do service worker: nova versão disponível e app pronto para uso offline.
 
-NÃO é o indicador de sincronização do Firestore. Este componente só sabe sobre o service worker (código do app); ele não sabe nada sobre dados pendentes de gravação. O indicador de sync sai de metadados de snapshot e ainda não existe.
+Este componente só acompanha o service worker (código do app), sem dados pendentes de
+gravação. O indicador de dados já existe: `SyncBadge`, ligado aos metadados dos snapshots
+de clientes. `PwaPrompt` monta em `App`, fora da guarda de autenticação, inclusive no login.
 
 — referente a src/components/pwa/PwaPrompt.tsx, linhas 3–11
 
@@ -1552,8 +1652,9 @@ módulo (HMR).
 >
 > A versão anterior concluía `businessId = null` nesse caso, e o usuário caía na tela
 > "Conta sem empresa vinculada" — justamente no cenário de aceite principal do projeto
-> (reabrir o app offline). Agora o `businessId` resolvido é gravado em `localStorage`
-> por uid e usado como fallback quando a leitura do token falha.
+> (reabrir o app offline). Hoje só o `businessId` vindo do claim é salvo em `localStorage`,
+> por uid; quando o token não traz claim, essa entrada é removida e o app usa
+> `VITE_BUSINESS_ID`. Se ler o token falhar, tenta o claim salvo antes da variável.
 >
 > Isso NÃO é brecha de segurança: o valor só escolhe o caminho dos dados
 > (`businesses/{businessId}/...`). Quem autoriza são as regras do Firestore — se o valor
@@ -1585,12 +1686,11 @@ Handlers de clique que chamam função assíncrona (`sair()`, `updateServiceWork
 usam `.catch()` com log. Antes usavam `void`, que descarta a Promise e transforma
 qualquer falha em `unhandledrejection` silencioso.
 
-## src/demo/dadosDemo.ts — histórico
+## Dados reais nas páginas
 
-Os dados fictícios e o `DemoBanner` foram removidos em 14/10/2026, quando o Financeiro
-passou a usar dados reais. Clientes e Rotas já tinham saído do demo. A troca de fonte e a
-remoção do banner aconteceram juntas: nenhuma tela deve apresentar dado inventado sem
-aviso, nem chamar dado real de demonstração. Não há mais `src/demo/` no projeto.
+As rotas de `src/App.tsx` montam Clientes, Cliente, Rotas e Financeiro com os hooks de
+dados reais. Clientes e Rotas usam `useClientes()`, Cliente e o painel desktop usam
+também `useCarne`, e Financeiro usa `useCarneDaEmpresa`. Nenhuma dessas páginas é demo.
 
 ---
 
@@ -1617,9 +1717,8 @@ um contra um cache que não conhece o outro.
 `validarCliente` e exibido ao vivo no campo de número do formulário. Verificado no roteiro
 de aceite do mesmo dia: número repetido recusa, número de arquivado aceita.
 
-Consequência prática: **nada impede dois clientes com o mesmo número.** É exatamente o
-buraco que a decisão de alocação do `numero` (etapa 3) precisa fechar, e é por isso que
-`max(numero) + 1` está descartado.
+Consequência prática: **a checagem local não garante unicidade entre aparelhos offline**.
+Ela recusa a duplicata que o cache já conhece; não aloca nem reserva números.
 
 **Dono decidido em 01/09/2026, confirmado pelo dono do negócio em 03/09/2026:** o caminho
 de escrita do app. O cliente cadastrado fica com **o mesmo número que já tem no papel**, e
@@ -1632,8 +1731,7 @@ Sendo assim, o formulário de cadastro consulta os clientes que o listener já m
 cache e **recusa um número que já exista**, com mensagem explícita. É verificação local,
 não garantia distribuída; mas com um usuário num dispositivo é o que dá para ter, e num
 cadastro manual de centenas de registros o erro de digitação é o caso comum, não a borda.
-Como nada mais guarda esse invariante, a checagem é **implementação obrigatória da etapa
-3**, não melhoria.
+Essa checagem já está em `validarCliente`, usando `clienteComNumero` sobre a lista local.
 
 > ⚠️ **A checagem tem que ignorar `arquivado: true`.** Corrigir número digitado errado é
 > arquivar e recadastrar (ver o comentário do `allow delete: if false`). Se o registro
@@ -1697,19 +1795,20 @@ tornar diagnosticável a perda de campo sob last-write-wins. **Nunca usar `atual
 numa condição de regra** — seria autorização baseada em algo que o próprio cliente
 escreve.
 
-## 5. Coerência entre documentos — 🔴 vai doer nas etapas 4 e 5
+## 5. Coerência entre documentos — geração testada e lote no app
 
-Regras avaliam **cada escrita isoladamente**, inclusive dentro de um `writeBatch`. Não
-existe "valide o lote inteiro". Portanto nada disto é exprimível:
+As regras atuais validam cada documento, mas não conferem estas relações entre eles:
 
 - a soma das parcelas ser igual ao valor da venda;
 - o número de parcelas gravadas bater com `numeroParcelas`;
-- `emAbertoCentavos` do cliente bater com as vendas dele;
 - uma parcela pertencer a uma venda que existe.
 
-Dono: a função pura que gera o carnê (`gerarParcelas()`, etapa 5) e os testes dela.
-Registrar aqui porque isso significa que **o teste unitário da função é a única barreira**
-entre um carnê torto e o Firestore — não há segunda linha de defesa.
+Dono: `gerarParcelas()` e seus testes em `src/lib/parcelas.test.ts`, com
+`montarCamposVenda` montando os documentos. `registrarVenda` em `useCarne` já grava venda
+e parcelas em um único `writeBatch`, evitando entrega parcial do lote. Na leitura,
+`montarCarne` compara as parcelas presentes com `venda.numeroParcelas` e não considera
+quitada uma venda não cancelada com carnê incompleto. Isso não faz a regra verificar
+a soma ou a relação entre os documentos.
 
 ## 6. O Admin SDK ignora as regras por completo — 🟢 sem objeto hoje
 
@@ -1843,10 +1942,11 @@ e está registrada aqui por isso.
 
 `registrarVenda` usa `writeBatch`, não vários `setDoc`. Não é preferência de estilo.
 
-Meia venda gravada — o cabeçalho sem as parcelas, ou as parcelas sem o cabeçalho — é pior
-do que venda nenhuma. `montarCarne` cruza os três listeners por `saleId`: uma venda sem
-parcelas vira um carnê de zero parcelas com saldo zero, que a tela mostra como **quitada**.
-Não existe sinal na interface que denuncie isso, e o dono acreditaria.
+Meia venda gravada — o cabeçalho sem as parcelas, ou as parcelas sem o cabeçalho — deixa
+um carnê que não fecha. `montarCarne` cruza os três listeners por `saleId`; hoje também
+compara a quantidade presente com `venda.numeroParcelas`. Uma venda não cancelada sem
+todas as parcelas fica incompleta, nunca quitada, e a tela avisa que o saldo pode estar
+menor que o real. Esse aviso de leitura não substitui a gravação atômica.
 
 Com o lote, offline a coisa toda fica na fila e sobe inteira ou não sobe. Verificado no
 bloco 8 da bateria de 22/09: criado offline, navegador fechado e reaberto ainda offline,
