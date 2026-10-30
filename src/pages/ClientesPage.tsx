@@ -37,6 +37,7 @@ export function ClientesPage() {
     arquivados,
     carregando,
     erro,
+    pendentes,
     falhas,
     descartarFalha,
     alternarArquivo,
@@ -147,7 +148,7 @@ export function ClientesPage() {
         </div>
       ) : null}
 
-      <div className="mb-5 grid grid-cols-3 gap-3">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {([
           { id: 'todos', rotulo: 'Clientes', valor: contagem.total },
           { id: 'com-vendas', rotulo: 'Com vendas', valor: contagem.comVendas.size },
@@ -159,15 +160,19 @@ export function ClientesPage() {
             aria-pressed={filtro === id}
             disabled={id !== 'todos' && confianca === 'desconhecida'}
             onClick={() => setFiltro(id)}
-            className="min-w-0 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:cursor-wait disabled:opacity-60"
+            className={`min-w-0 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:cursor-wait disabled:opacity-60 ${filtro === id ? 'ring-2 ring-brand-600' : ''}`}
           >
             <Kpi
               rotulo={rotulo}
               valor={id !== 'todos' && confianca === 'desconhecida' ? '—' : String(valor)}
-              tom={filtro === id ? 'marca' : 'neutro'}
+              tom="neutro"
             />
           </button>
         ))}
+        <Kpi rotulo="Alterações pendentes" valor={String(pendentes)} tom="marca" />
+        {arquivados.length > 0 ? (
+          <Kpi rotulo="Arquivados" valor={String(arquivados.length)} />
+        ) : null}
       </div>
 
       {confianca === 'parcial' ? (

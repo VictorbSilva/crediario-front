@@ -196,13 +196,18 @@ describe('ClientesPage — lista', () => {
     expect(listados()).toEqual([40])
   })
 
-  it('o KPI de clientes conta só os ativos e não há contadores de pendentes e arquivados', () => {
+  it('conta ativos, alterações pendentes e arquivados, com os dois últimos sem filtro', () => {
     simulado.clientes = estado([JOAO, ZECA, ARQUIVADA])
     montar()
 
     expect(screen.getByRole('button', { name: 'Clientes 2' })).toBeTruthy()
-    expect(screen.queryByText('Alterações pendentes')).toBeNull()
-    expect(screen.queryByText('Arquivados')).toBeNull()
+    const pendentes = screen.getByText('Alterações pendentes')
+    const arquivados = screen.getByText('Arquivados')
+    expect(pendentes.nextElementSibling?.textContent).toBe('1')
+    expect(pendentes.nextElementSibling?.classList.contains('text-brand-600')).toBe(true)
+    expect(arquivados.nextElementSibling?.textContent).toBe('1')
+    expect(pendentes.closest('button')).toBeNull()
+    expect(arquivados.closest('button')).toBeNull()
   })
 
   it('sem arquivados, o KPI de arquivados não aparece', () => {
@@ -227,11 +232,18 @@ describe('ClientesPage — contadores e filtros', () => {
 
   it('mostra os três números e filtra os vencidos, mantendo a busca', () => {
     montar()
-    expect(screen.getByRole('button', { name: 'Clientes 3' }).getAttribute('aria-pressed')).toBe('true')
+    const todos = screen.getByRole('button', { name: 'Clientes 3' })
+    expect(todos.getAttribute('aria-pressed')).toBe('true')
+    expect(todos.classList.contains('ring-2')).toBe(true)
+    expect(within(todos).getByText('3').classList.contains('text-slate-900')).toBe(true)
     expect(screen.getByRole('button', { name: 'Com vendas 2' })).toBeTruthy()
     const atrasados = screen.getByRole('button', { name: 'Em atraso 1' })
     fireEvent.click(atrasados)
     expect(atrasados.getAttribute('aria-pressed')).toBe('true')
+    expect(atrasados.classList.contains('ring-2')).toBe(true)
+    expect(atrasados.classList.contains('ring-brand-600')).toBe(true)
+    expect(within(atrasados).getByText('1').classList.contains('text-slate-900')).toBe(true)
+    expect(todos.classList.contains('ring-2')).toBe(false)
     expect(listados()).toEqual([137])
     expect(screen.queryByLabelText('Mostrar arquivados')).toBeNull()
     buscar('maria')
