@@ -67,6 +67,7 @@ function paraCliente(documento: QueryDocumentSnapshot<DocumentData>): Cliente {
     ultimaMarcaEm: dados.ultimaMarcaEm,
     ultimoVisitado: dados.ultimoVisitado,
     visitadoAnterior: dados.visitadoAnterior,
+    proximaCobranca: dados.proximaCobranca,
     observacao: dados.observacao,
     arquivado: dados.arquivado,
     cadastradoEm: dados.cadastradoEm,

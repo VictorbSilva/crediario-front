@@ -1157,3 +1157,152 @@ describe('bordas do arraste e do calendário', () => {
     expect(() => rotas.montarDiasDeVisita([5, 5])).toThrow('Dias de visita devem ser inteiros de 1 a 31, sem repetição')
   })
 })
+
+describe('próxima cobrança na rota (E7)', () => {
+  const hoje = '2026-10-12'
+  const ontem = '2026-10-11'
+  const amanha = '2026-10-13'
+  const doDia = (numero: number, campos: Partial<ClienteNaRota> = {}) =>
+    cliente({ id: String(numero), numero, diasDeVisita: [12], ...campos })
+  const deCobranca = (numero: number, campos: Partial<ClienteNaRota> = {}) =>
+    cliente({ id: `cobranca-${numero}`, numero, diasDeVisita: undefined, proximaCobranca: hoje, ...campos })
+  const pendenteSemDia = { situacao: 'pendente', atrasado: false, agendadoPara: hoje, diaAgendado: null, ausenteHoje: false }
+
+  it('agendaRecente: a cobrança até hoje é candidata sem dia, a futura não, e a antiga fica até a visita', () => {
+    expect(rotas.agendaRecente(deCobranca(1), hoje)).toEqual({ data: hoje, dia: null })
+    expect(rotas.agendaRecente(deCobranca(1, { diasDeVisita: [5] }), hoje)).toEqual({ data: hoje, dia: null })
+    expect(rotas.agendaRecente(deCobranca(1, { diasDeVisita: [12], proximaCobranca: '2026-10-05' }), hoje))
+      .toEqual({ data: hoje, dia: 12 })
+    expect(rotas.agendaRecente(deCobranca(1, { proximaCobranca: amanha }), hoje)).toBeNull()
+    expect(rotas.agendaRecente(deCobranca(1, { proximaCobranca: '2026-07-01' }), hoje))
+      .toEqual({ data: '2026-07-01', dia: null })
+  })
+
+  it.each([{ diasDeVisita: undefined }, { diasDeVisita: [] }])('só com a cobrança de hoje, entra pendente, sem atraso e sem dia (%j)', ({ diasDeVisita }) => {
+    expect(rotas.rotaDeHoje([deCobranca(1, { diasDeVisita })], hoje).map((item) => item.estado)).toEqual([pendenteSemDia])
+  })
+
+  it('cobrança de ontem sem Visitado fica atrasada, no bloco de atrasados', () => {
+    const itens = rotas.rotaDeHoje([deCobranca(2, { proximaCobranca: ontem }), doDia(1)], hoje)
+    expect(itens.map((item) => item.cliente.id)).toEqual(['1', 'cobranca-2'])
+    expect(itens[1].estado).toEqual({
+      situacao: 'pendente', atrasado: true, agendadoPara: ontem, diaAgendado: null, ausenteHoje: false,
+    })
+    expect(itens[1].chave).toBe(1_978_000_002)
+    expect(rotas.inicioDoBlocoDeAtrasados(itens)).toBe(1)
+  })
+
+  it('cobrança de ontem com Visitado ontem fica fora', () => {
+    expect(rotas.rotaDeHoje([deCobranca(1, { proximaCobranca: ontem, ultimoVisitado: ontem })], hoje)).toEqual([])
+  })
+
+  it('cobrança de amanhã fica fora hoje', () => {
+    expect(rotas.rotaDeHoje([deCobranca(1, { proximaCobranca: amanha })], hoje)).toEqual([])
+  })
+
+  it('dia de visita 5 e cobrança no mesmo dia 5: aparece uma vez, com o dia 5', () => {
+    const c = cliente({ diasDeVisita: [5], proximaCobranca: '2026-10-05' })
+    expect(rotas.rotaDeHoje([c], '2026-10-05').map((item) => item.estado)).toEqual([{
+      situacao: 'pendente', atrasado: false, agendadoPara: '2026-10-05', diaAgendado: 5, ausenteHoje: false,
+    }])
+    expect(rotas.estadoNaRota(c, hoje)).toEqual({
+      situacao: 'pendente', atrasado: true, agendadoPara: '2026-10-05', diaAgendado: 5, ausenteHoje: false,
+    })
+  })
+
+  it('dia 5 já visitado e cobrança no dia 12: no dia 12 fica pendente sem dia', () => {
+    expect(rotas.estadoNaRota(cliente({ diasDeVisita: [5], ultimoVisitado: '2026-10-05', proximaCobranca: hoje }), hoje))
+      .toEqual(pendenteSemDia)
+  })
+
+  it('rotaDesde posterior à cobrança não a esconde', () => {
+    expect(rotas.estadoNaRota(cliente({ diasDeVisita: [5], rotaDesde: '2026-10-20', proximaCobranca: hoje }), hoje))
+      .toEqual(pendenteSemDia)
+  })
+
+  it('arquivado com cobrança hoje fica fora', () => {
+    expect(rotas.rotaDeHoje([deCobranca(1, { arquivado: true })], hoje)).toEqual([])
+  })
+
+  it('a chave do cliente de cobrança vem da ordem de hoje; sem ela válida, do número', () => {
+    const chave = (campos: Partial<ClienteNaRota>) => rotas.rotaDeHoje([deCobranca(7, campos)], hoje)[0].chave
+    expect(chave({ ordemDoDia: { data: hoje, valor: 1500 } })).toBe(1500)
+    expect(chave({})).toBe(rotas.BASE_SEM_ORDEM + 7)
+    expect(chave({ ordemDoDia: { data: ontem, valor: 1500 } })).toBe(rotas.BASE_SEM_ORDEM + 7)
+    expect(chave({ ordemDoDia: { data: hoje, valor: Number.NaN } })).toBe(rotas.BASE_SEM_ORDEM + 7)
+  })
+
+  it('ordem de hoje gravada quando ainda era atrasado não põe o cliente de cobrança no bloco de atrasados', () => {
+    const itens = rotas.rotaDeHoje([
+      deCobranca(7, { ordemDoDia: { data: hoje, valor: rotas.BASE_ATRASADO + 5 } }),
+      doDia(1, { diasDeVisita: [11] }),
+    ], hoje)
+    expect(itens.map((item) => [item.cliente.id, item.estado.atrasado])).toEqual([['cobranca-7', false], ['1', true]])
+    expect(itens[0].chave).toBe(rotas.BASE_SEM_ORDEM + 7)
+    expect(rotas.inicioDoBlocoDeAtrasados(itens)).toBe(1)
+  })
+
+  it('arrastar o cliente de cobrança grava a ordem de hoje, abaixo do bloco de atrasados', () => {
+    const todos = [
+      doDia(1, { ordemPorDia: { '12': 1000 } }),
+      doDia(2, { ordemPorDia: { '12': 999_999_500 } }),
+      deCobranca(3),
+      doDia(4, { diasDeVisita: [11] }),
+    ]
+    const lista = rotas.rotaDeHoje(todos, hoje)
+    expect(lista.map((item) => item.cliente.id)).toEqual(['1', 'cobranca-3', '2', '4'])
+
+    // Solto sobre o atrasado: encaixa antes do bloco, com a chave abaixo de BASE_ATRASADO.
+    const alteracoes = rotas.arrasteNaRotaDeHoje(lista, 1, 3, hoje, todos)
+    expect(alteracoes).toEqual([{ clienteId: 'cobranca-3', tipo: 'hoje', data: hoje, valor: 999_999_750 }])
+    const depois = rotas.rotaDeHoje(aplicarReordenacoes(todos, alteracoes), hoje)
+    expect(depois.map((item) => item.cliente.id)).toEqual(['1', '2', 'cobranca-3', '4'])
+    expect(rotas.inicioDoBlocoDeAtrasados(depois)).toBe(3)
+  })
+
+  it('no rebalanceamento o cliente de cobrança também grava a ordem de hoje, e nenhum dia sai nulo', () => {
+    const todos = [
+      doDia(1, { ordemPorDia: { '12': 1 } }),
+      doDia(2, { ordemPorDia: { '12': 1 + Number.EPSILON } }),
+      doDia(3, { ordemPorDia: { '12': 1000 } }),
+      deCobranca(4),
+      doDia(5, { rotaDesde: amanha, ordemPorDia: { '12': 500 } }),
+    ]
+    const alteracoes = rotas.arrasteNaRotaDeHoje(rotas.rotaDeHoje(todos, hoje), 2, 1, hoje, todos)
+    expect(alteracoes).toEqual([
+      { clienteId: '1', tipo: 'dia', dia: 12, valor: 1000 },
+      { clienteId: '3', tipo: 'dia', dia: 12, valor: 2000 },
+      { clienteId: '2', tipo: 'dia', dia: 12, valor: 3000 },
+      { clienteId: 'cobranca-4', tipo: 'hoje', data: hoje, valor: 4000 },
+      { clienteId: '5', tipo: 'dia', dia: 12, valor: 5000 },
+    ])
+    expect(rotas.rotaDeHoje(aplicarReordenacoes(todos, alteracoes), hoje).map((item) => item.cliente.id))
+      .toEqual(['1', '3', '2', 'cobranca-4'])
+  })
+
+  it('cobrancasDaData traz os não arquivados com cobrança na data e sem dia de visita nela, por número', () => {
+    const data = '2026-11-30'
+    const clientes = [
+      deCobranca(5, { proximaCobranca: data }),
+      deCobranca(2, { proximaCobranca: data }),
+      deCobranca(3, { proximaCobranca: data, arquivado: true }),
+      deCobranca(4, { proximaCobranca: data, diasDeVisita: [31] }),
+      deCobranca(6, { proximaCobranca: data, diasDeVisita: [5] }),
+      deCobranca(1, { proximaCobranca: '2026-11-29' }),
+      cliente({ id: 'sem-cobranca', numero: 0, diasDeVisita: [30] }),
+    ]
+    const antes = structuredClone(clientes)
+    expect(rotas.cobrancasDaData(clientes, data).map((c) => c.id)).toEqual(['cobranca-2', 'cobranca-5', 'cobranca-6'])
+    expect(clientes).toEqual(antes)
+  })
+
+  it('contagemPorData conta a cobrança na data dela, uma vez só com dia de visita na mesma data', () => {
+    expect(rotas.contagemPorData([
+      cliente({ id: 'A', diasDeVisita: [5], proximaCobranca: '2026-11-05' }),
+      deCobranca(2, { proximaCobranca: '2026-11-12' }),
+      deCobranca(3, { proximaCobranca: '2026-12-12' }),
+      deCobranca(4, { proximaCobranca: '2026-11-12', arquivado: true }),
+      cliente({ id: 'B', diasDeVisita: [31], proximaCobranca: '2026-11-30' }),
+    ], 2026, 11)).toEqual(new Map([['2026-11-05', 1], ['2026-11-12', 1], ['2026-11-30', 1]]))
+  })
+})

@@ -985,7 +985,7 @@ item no arrasto simples; sem precisão, também completa os dias coincidentes, c
 - **Limitação aceita:** Ausente → Visitado → Desmarcar perde a marca de Ausente; ela é informativa e sua perda não altera pendência nem rota, então o modelo de desfazer de um nível permanece.
 
 **Pendente é derivado, nunca gravado.** `agendaRecente` escolhe a maior data até hoje
-entre os dias de visita no mês atual e no anterior. Sem Visitado cobrindo essa agenda,
+entre os dias de visita no mês atual e no anterior e a `proximaCobranca` (seção abaixo). Sem Visitado cobrindo essa agenda,
 o cliente segue pendente no dia seguinte, inclusive na virada do mês. Ausente registra
 só a tentativa e não encerra a pendência; `ausenteHoje` vale apenas na data da marca.
 Visitado hoje continua na lista, na mesma posição. Desfazer volta `ultimoVisitado` para
@@ -1009,6 +1009,34 @@ quando está configurado, porque os demais foram limitados para baixo. Assim, em
 28/02/2027, `[29, 31]` e `[31, 29]` usam 29; `[28, 31]` usa 28. Um dia 31 sozinho
 continua usando 31. O desempate nunca inventa um dia fora de `diasDeVisita` e não
 depende da ordem dos dias ou dos meses percorridos, preservando a chave de `ordemPorDia`.
+
+**A próxima cobrança põe o cliente na rota daquela data (E7, pedido do dono em 30/10).**
+`proximaCobranca` é uma data civil opcional. Em `agendaRecente` ela é candidata **sem dia**
+(`dia: null`) quando é `<= hoje` e maior que a agenda dos dias de visita; no empate de datas
+vence o dia de visita, com `dia` preenchido, e o cliente aparece uma vez. `rotaDesde` não a
+corta, porque é marcada à mão. Como no dia de visita, só Visitado encerra: Ausente mantém o
+cliente, e a data passada vira atraso. Exemplo, hoje 12/10: dias `[5]` visitado em 05/10 e
+cobrança em 12/10 dá pendente sem dia; dias `[5]` sem visita e cobrança em 05/10 dá atrasado
+desde 05/10 com dia 5; um cliente só com cobrança em 13/10 fica fora até amanhã.
+
+- **Ordem na rota de hoje:** sem dia do mês não há `ordemPorDia`. A chave é a `ordemDoDia` de
+  hoje quando existe **e é menor que `BASE_ATRASADO`**; senão, `BASE_SEM_ORDEM + numero`. O teto
+  não é enfeite: um atrasado arrastado de manhã grava, por exemplo, `ordemDoDia.valor =
+  1_000_000_005`; se no mesmo dia ganha `proximaCobranca = hoje`, deixa de ser atrasado, mas
+  com essa chave seria o início do bloco de atrasados. Com o teto, o cliente 7 volta a 1 000 007.
+- **Arraste:** `arrasteNaRotaDeHoje` grava `tipo: 'hoje'` para o atrasado **e para quem não tem
+  `diaAgendado`** — nunca `ordemPorDia` com dia nulo. O encaixe dele é o do cliente do dia
+  (`chaveDoDiaEntre`, com o teto): solto sobre o primeiro atrasado depois de um 999 999 500,
+  grava 999 999 750 e fica antes do bloco. No rebalanceamento ele recebe `PASSO * (i + 1)` como
+  ordem de hoje, e os dias a completar ignoram o `null`. A ordem vale só hoje.
+- **Calendário de outra data:** `rotaDaData` e `arrasteNaRotaDaData` não mudam (só dias de
+  visita). `cobrancasDaData(clientes, data)` lista à parte os não arquivados com
+  `proximaCobranca === data` e sem dia de visita nessa data, por número; a tela mostra essa
+  lista sem alça, porque não há ordem por data para gravar. `contagemPorData` conta a cobrança
+  na data dela, com o cliente uma vez só por data.
+- **Para a tela:** `estado.diaAgendado === null` é o que identifica o cliente de cobrança na
+  rota de hoje. Compare com `=== null`: no calendário `estado` é `undefined`, e `== null`
+  poria a etiqueta de cobrança em todo item.
 
 **A ordem não é recalculada por endereço ou nome.** No dia agendado, a chave vem de
 `ordemPorDia[String(dia)]`; sem ela, vem de `BASE_SEM_ORDEM + numero`, usando o número
@@ -1052,7 +1080,7 @@ a média das chaves dos novos vizinhos, ou um `PASSO` antes/depois na borda. Se 
 não fica estritamente entre os vizinhos, acabou a precisão numérica: só então a lista
 é rebalanceada na ordem nova com `PASSO * (i + 1)`. Na rota de hoje, cada item
 rebalanceado mantém seu destino: ordem por dia para os do dia, temporária para os
-atrasados, incluindo os soltos. Posição sem mudança não produz escrita. As funções
+atrasados, incluindo os soltos, e para os de cobrança. Posição sem mudança não produz escrita. As funções
 não modificam as listas nem os clientes recebidos.
 
 **O rebalanceamento de hoje leva o dia inteiro (C3).** `arrasteNaRotaDeHoje` recebe
