@@ -4,8 +4,20 @@ import {
   dataLocalISO,
   diferencaEmDias,
   ehDataCivil,
+  subtrairMeses,
   vencimentoDaParcela,
 } from './data'
+
+describe('subtrairMeses', () => {
+  it.each([
+    ['2026-10-30', 4, '2026-06-30'],
+    ['2026-07-31', 4, '2026-03-31'],
+    ['2026-06-30', 4, '2026-02-28'],
+    ['2027-02-15', 4, '2026-10-15'],
+  ])('subtrai meses de %s preservando o dia quando existe', (data, meses, esperado) => {
+    expect(subtrairMeses(data, meses)).toBe(esperado)
+  })
+})
 
 describe('dataLocalISO', () => {
   it('formata uma data comum', () => {

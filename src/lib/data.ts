@@ -54,6 +54,16 @@ export function diasNoMes(ano: number, mes: number): number {
   return new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate()
 }
 
+export function subtrairMeses(data: string, meses: number): string {
+  const base = comoUTC(data)
+  const alvo = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - meses, 1))
+  const ano = alvo.getUTCFullYear()
+  const mes = alvo.getUTCMonth()
+  const dia = Math.min(base.getUTCDate(), diasNoMes(ano, mes))
+
+  return comoISO(new Date(Date.UTC(ano, mes, dia)))
+}
+
 export function vencimentoDaParcela(dataVenda: string, ordem: number, diaDesejado: number): string {
   const base = comoUTC(dataVenda)
   const alvo = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + ordem, 1))

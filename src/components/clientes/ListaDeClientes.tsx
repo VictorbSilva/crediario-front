@@ -8,6 +8,7 @@ type ListaDeClientesProps = Readonly<{
   encontrados: readonly Cliente[]
   cadastrados: number
   carregando: boolean
+  mensagemVazia?: string
   selecionadoId?: string
   aoSelecionar: (id: string) => void
 }>
@@ -16,6 +17,7 @@ export function ListaDeClientes({
   encontrados,
   cadastrados,
   carregando,
+  mensagemVazia,
   selecionadoId,
   aoSelecionar,
 }: ListaDeClientesProps) {
@@ -23,12 +25,12 @@ export function ListaDeClientes({
     return <EmptyState>Carregando os clientes deste aparelho…</EmptyState>
   }
 
-  if (cadastrados === 0) {
+  if (cadastrados === 0 && !mensagemVazia) {
     return <EmptyState>Nenhum cliente cadastrado ainda. Comece pelo botão “Novo cliente”.</EmptyState>
   }
 
   if (encontrados.length === 0) {
-    return <EmptyState>Nenhum cliente encontrado para esta busca.</EmptyState>
+    return <EmptyState>{mensagemVazia ?? 'Nenhum cliente encontrado para esta busca.'}</EmptyState>
   }
 
   return (

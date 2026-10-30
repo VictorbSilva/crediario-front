@@ -1,3 +1,5 @@
+import type { DocumentoExportavel } from './exportacao'
+import { subtrairMeses } from './data'
 import { VERSAO_CALCULO, alocarPagamentos, gerarParcelas, situacaoDaParcela } from './parcelas'
 import type { ParcelaGerada } from './parcelas'
 
@@ -45,6 +47,33 @@ export type SituacaoFinanceira = {
   recebidoNoMesCentavos: number
   vendasNaoCalculadas: number
   porCliente: Map<string, AtrasoDoCliente>
+}
+
+export function contagemDeClientes<C extends { id: string; arquivado?: boolean }>(
+  situacao: SituacaoFinanceira,
+  vendas: readonly VendaParaFinanceiro[],
+  clientes: readonly C[],
+  hoje: string,
+): { total: number; comVendas: Set<string>; emAtraso: Set<string> } {
+  const ativos = clientes.filter((cliente) => cliente.arquivado !== true)
+  const idsAtivos = new Set(ativos.map((cliente) => cliente.id))
+  const comVendas = new Set<string>()
+  const emAtraso = new Set<string>()
+
+  for (const [id, situacaoDoCliente] of situacao.porCliente) {
+    if (!idsAtivos.has(id)) continue
+    if (situacaoDoCliente.abertoCentavos > 0) comVendas.add(id)
+    if (situacaoDoCliente.vencidoCentavos > 0) emAtraso.add(id)
+  }
+
+  const corte = subtrairMeses(hoje, 4)
+  for (const venda of vendas) {
+    if (idsAtivos.has(venda.clientId) && venda.cancelada !== true && venda.dataVenda >= corte) {
+      comVendas.add(venda.clientId)
+    }
+  }
+
+  return { total: ativos.length, comVendas, emAtraso }
 }
 
 export function situacaoFinanceira(
@@ -252,4 +281,31 @@ export function mesesDeRecebimento(
   }
 
   return meses
+}
+
+export function documentosParaFinanceiro(
+  vendas: readonly DocumentoExportavel[],
+  pagamentos: readonly DocumentoExportavel[],
+) {
+  return {
+    vendas: vendas.map(({ id, dados }): VendaParaFinanceiro => ({
+      id,
+      clientId: dados.clientId as string,
+      dataVenda: dados.dataVenda as string,
+      valorTotalCentavos: dados.valorTotalCentavos as number,
+      numeroParcelas: dados.numeroParcelas as number,
+      diaVencimento: dados.diaVencimento as number,
+      versaoCalculo: dados.versaoCalculo as number,
+      cancelada: dados.cancelada === true,
+    })),
+    pagamentos: pagamentos.map(({ id, dados }): PagamentoParaFinanceiro => ({
+      id,
+      clientId: dados.clientId as string,
+      saleId: dados.saleId as string,
+      data: dados.data as string,
+      valorCentavos: dados.valorCentavos as number,
+      encargoCentavos: dados.encargoCentavos as number | undefined,
+      cancelado: dados.cancelado === true,
+    })),
+  }
 }

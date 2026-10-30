@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClientesContextValue } from '@/data/clientes-context'
+import type { CarneDaEmpresa } from '@/data/useCarneDaEmpresa'
+import type { DocumentoExportavel } from '@/lib/exportacao'
 import { instalarDialogo } from '@/test/dialogo'
 import type { Cliente } from '@/types/cliente'
 import { ClientesPage } from './ClientesPage'
@@ -11,6 +13,7 @@ const simulado = vi.hoisted(() => ({
   larga: true,
   clientes: {} as ClientesContextValue,
   useCarne: vi.fn(),
+  carneDaEmpresa: {} as CarneDaEmpresa,
 }))
 
 vi.mock('@/data/useClientes', () => ({ useClientes: () => simulado.clientes }))
@@ -18,10 +21,7 @@ vi.mock('@/components/layout/useTelaLarga', () => ({ useTelaLarga: () => simulad
 vi.mock('@/data/useCarne', () => ({ useCarne: simulado.useCarne }))
 vi.mock('@/data/useCarneDaEmpresa', () => ({
   CARNE_COMPLETO: ['sales', 'installments', 'payments'],
-  useCarneDaEmpresa: () => ({
-    vendas: [], parcelas: [], pagamentos: [], carregando: false, pendentes: 0,
-    confianca: 'confiavel', erro: null,
-  }),
+  useCarneDaEmpresa: () => simulado.carneDaEmpresa,
 }))
 
 function cliente(id: string, numero: number, nome: string, extras: Partial<Cliente> = {}): Cliente {
@@ -36,6 +36,16 @@ const JOAO = cliente('joao', 137, 'João da Silva', { endereco: 'Rua das Flôres
 const MARIA = cliente('maria', 1370, 'Maria Souza', { cpf: '529.982.247-25', cpfDigits: '52998224725' })
 const ZECA = cliente('zeca', 2137, 'Zeca Lima', { telefoneDigits: '1133334444', pendente: true })
 const ARQUIVADA = cliente('rita', 40, 'Rita Arquivada', { arquivado: true })
+
+function venda(id: string, clientId: string, dataVenda: string, extras = {}): DocumentoExportavel {
+  return {
+    id,
+    dados: {
+      clientId, dataVenda, valorTotalCentavos: 10_000, numeroParcelas: 1,
+      diaVencimento: 10, versaoCalculo: 1, ...extras,
+    },
+  }
+}
 
 function estado(clientes: Cliente[], extras: Partial<ClientesContextValue> = {}): ClientesContextValue {
   const ativos = clientes.filter((c) => c.arquivado !== true)
@@ -79,14 +89,21 @@ function painel(): HTMLElement {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 9, 30, 12))
   instalarDialogo()
   simulado.larga = true
   simulado.clientes = estado([JOAO, MARIA, ZECA])
   simulado.useCarne.mockReset().mockReturnValue({ carnes: [], carregando: false, erro: null })
+  simulado.carneDaEmpresa = {
+    vendas: [], parcelas: [], pagamentos: [], carregando: false, pendentes: 0,
+    confianca: 'confiavel', erro: null,
+  }
 })
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
 })
 
 describe('ClientesPage — busca', () => {
@@ -179,19 +196,100 @@ describe('ClientesPage — lista', () => {
     expect(listados()).toEqual([40])
   })
 
-  it('o KPI de clientes conta só os ativos; pendentes e arquivados têm o seu', () => {
+  it('o KPI de clientes conta só os ativos e não há contadores de pendentes e arquivados', () => {
     simulado.clientes = estado([JOAO, ZECA, ARQUIVADA])
     montar()
 
-    const kpi = (rotulo: string) => screen.getByText(rotulo, { selector: 'div' }).nextElementSibling?.textContent
-    expect(kpi('Clientes')).toBe('2')
-    expect(kpi('Alterações pendentes')).toBe('1')
-    expect(kpi('Arquivados')).toBe('1')
+    expect(screen.getByRole('button', { name: 'Clientes 2' })).toBeTruthy()
+    expect(screen.queryByText('Alterações pendentes')).toBeNull()
+    expect(screen.queryByText('Arquivados')).toBeNull()
   })
 
   it('sem arquivados, o KPI de arquivados não aparece', () => {
     montar()
     expect(screen.queryByText('Arquivados')).toBeNull()
+  })
+})
+
+describe('ClientesPage — contadores e filtros', () => {
+  beforeEach(() => {
+    simulado.clientes = estado([JOAO, MARIA, ZECA, ARQUIVADA])
+    simulado.carneDaEmpresa.vendas = [
+      venda('vencida', 'joao', '2026-08-10'),
+      venda('recente', 'maria', '2026-09-10'),
+      venda('arquivada', 'rita', '2026-08-10'),
+      venda('ausente', 'ausente', '2026-08-10'),
+    ]
+    simulado.carneDaEmpresa.pagamentos = [{
+      id: 'pago', dados: { clientId: 'maria', saleId: 'recente', data: '2026-10-01', valorCentavos: 10_000 },
+    }]
+  })
+
+  it('mostra os três números e filtra os vencidos, mantendo a busca', () => {
+    montar()
+    expect(screen.getByRole('button', { name: 'Clientes 3' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Com vendas 2' })).toBeTruthy()
+    const atrasados = screen.getByRole('button', { name: 'Em atraso 1' })
+    fireEvent.click(atrasados)
+    expect(atrasados.getAttribute('aria-pressed')).toBe('true')
+    expect(listados()).toEqual([137])
+    expect(screen.queryByLabelText('Mostrar arquivados')).toBeNull()
+    buscar('maria')
+    expect(listados()).toEqual([])
+    buscar('')
+    fireEvent.click(screen.getByRole('button', { name: 'Com vendas 2' }))
+    expect(listados()).toEqual([137, 1370])
+  })
+
+  it('mostrar arquivados vale só em Clientes, sem alterar os contadores', () => {
+    montar()
+    fireEvent.click(screen.getByLabelText('Mostrar arquivados'))
+    expect(listados()).toEqual([137, 1370, 2137, 40])
+    fireEvent.click(screen.getByRole('button', { name: 'Com vendas 2' }))
+    expect(listados()).toEqual([137, 1370])
+    fireEvent.click(screen.getByRole('button', { name: 'Clientes 3' }))
+    expect(listados()).toEqual([137, 1370, 2137, 40])
+  })
+
+  it('ordena atrasados por dias, valor vencido e número como o Financeiro', () => {
+    simulado.carneDaEmpresa.pagamentos = []
+    simulado.carneDaEmpresa.vendas = [
+      venda('joao', 'joao', '2026-08-10'),
+      venda('maria', 'maria', '2026-07-10'),
+      venda('zeca', 'zeca', '2026-07-10', { valorTotalCentavos: 20_000 }),
+    ]
+    montar()
+    fireEvent.click(screen.getByRole('button', { name: 'Em atraso 3' }))
+    expect(listados()).toEqual([2137, 1370, 137])
+  })
+
+  it('confiança desconhecida mostra traços e desabilita os filtros financeiros', () => {
+    simulado.carneDaEmpresa.confianca = 'desconhecida'
+    montar()
+    for (const rotulo of ['Com vendas —', 'Em atraso —']) {
+      const botao = screen.getByRole('button', { name: rotulo }) as HTMLButtonElement
+      expect(botao.disabled).toBe(true)
+      fireEvent.click(botao)
+    }
+    expect(listados()).toEqual([137, 1370, 2137])
+  })
+
+  it('confiança parcial mostra os números e o aviso; erro do carnê também aparece', () => {
+    simulado.carneDaEmpresa.confianca = 'parcial'
+    simulado.carneDaEmpresa.erro = 'Não foi possível carregar o carnê da empresa.'
+    montar()
+    expect(screen.getByRole('button', { name: 'Em atraso 1' })).toBeTruthy()
+    expect(screen.getByText(/Este aparelho ainda não baixou todas as vendas e pagamentos/)).toBeTruthy()
+    expect(screen.getByText('Não foi possível carregar o carnê da empresa.')).toBeTruthy()
+  })
+
+  it('lista vazia explica o filtro aplicado', () => {
+    simulado.carneDaEmpresa.vendas = []
+    montar()
+    fireEvent.click(screen.getByRole('button', { name: 'Em atraso 0' }))
+    expect(screen.getByText('Nenhum cliente em atraso.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Com vendas 0' }))
+    expect(screen.getByText('Nenhum cliente com vendas.')).toBeTruthy()
   })
 })
 

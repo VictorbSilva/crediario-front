@@ -9,9 +9,14 @@ import { useTelaLarga } from '@/components/layout/useTelaLarga'
 import { Kpi } from '@/components/ui/Kpi'
 import { Nota } from '@/components/ui/Nota'
 import { SearchInput } from '@/components/ui/SearchInput'
+import { useCarneDaEmpresa } from '@/data/useCarneDaEmpresa'
 import { useClientes } from '@/data/useClientes'
+import { dataLocalISO } from '@/lib/data'
+import { contagemDeClientes, documentosParaFinanceiro, listaDeAtrasados, situacaoFinanceira } from '@/lib/financeiro'
 import { normalizar, somenteDigitos } from '@/lib/texto'
 import type { Cliente } from '@/types/cliente'
+
+const COLECOES_DOS_CONTADORES = ['sales', 'payments'] as const
 
 function combina(cliente: Cliente, termo: string, digitos: string): boolean {
   if (cliente.nomeBusca.includes(termo)) return true
@@ -32,22 +37,39 @@ export function ClientesPage() {
     arquivados,
     carregando,
     erro,
-    pendentes,
     falhas,
     descartarFalha,
     alternarArquivo,
   } = useClientes()
+  const { vendas, pagamentos, confianca, erro: erroDoCarne } = useCarneDaEmpresa(COLECOES_DOS_CONTADORES)
 
   const larga = useTelaLarga()
   const navigate = useNavigate()
 
   const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState<'todos' | 'com-vendas' | 'em-atraso'>('todos')
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null)
   const [mostrarArquivados, setMostrarArquivados] = useState(false)
   const [cadastrando, setCadastrando] = useState(false)
   const [exportando, setExportando] = useState(false)
 
-  const visiveis = mostrarArquivados ? clientes : ativos
+  const hoje = dataLocalISO(new Date())
+  const { contagem, atrasados } = useMemo(() => {
+    const documentos = documentosParaFinanceiro(vendas, pagamentos)
+    const situacao = situacaoFinanceira(documentos.vendas, documentos.pagamentos, hoje)
+    return {
+      contagem: contagemDeClientes(situacao, documentos.vendas, clientes, hoje),
+      atrasados: listaDeAtrasados(situacao, ativos),
+    }
+  }, [vendas, pagamentos, clientes, ativos, hoje])
+
+  const visiveis = useMemo(() => {
+    if (filtro === 'todos') return mostrarArquivados ? clientes : ativos
+    if (filtro === 'com-vendas') return ativos.filter((cliente) => contagem.comVendas.has(cliente.id))
+    return atrasados.flatMap(({ cliente }) =>
+      cliente !== null && contagem.emAtraso.has(cliente.id) ? [cliente] : [],
+    )
+  }, [filtro, mostrarArquivados, clientes, ativos, contagem, atrasados])
 
   const encontrados = useMemo(() => {
     const termo = normalizar(busca)
@@ -106,6 +128,8 @@ export function ClientesPage() {
         </div>
       ) : null}
 
+      {erroDoCarne ? <div className="mb-4"><Nota tom="alerta">{erroDoCarne}</Nota></div> : null}
+
       {falhas.length > 0 ? (
         <div className="mb-4 flex flex-col gap-2">
           {falhas.map((falha) => (
@@ -123,13 +147,37 @@ export function ClientesPage() {
         </div>
       ) : null}
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi rotulo="Clientes" valor={String(ativos.length)} />
-        <Kpi rotulo="Alterações pendentes" valor={String(pendentes)} tom="marca" />
-        {arquivados.length > 0 ? (
-          <Kpi rotulo="Arquivados" valor={String(arquivados.length)} />
-        ) : null}
+      <div className="mb-5 grid grid-cols-3 gap-3">
+        {([
+          { id: 'todos', rotulo: 'Clientes', valor: contagem.total },
+          { id: 'com-vendas', rotulo: 'Com vendas', valor: contagem.comVendas.size },
+          { id: 'em-atraso', rotulo: 'Em atraso', valor: contagem.emAtraso.size },
+        ] as const).map(({ id, rotulo, valor }) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={filtro === id}
+            disabled={id !== 'todos' && confianca === 'desconhecida'}
+            onClick={() => setFiltro(id)}
+            className="min-w-0 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:cursor-wait disabled:opacity-60"
+          >
+            <Kpi
+              rotulo={rotulo}
+              valor={id !== 'todos' && confianca === 'desconhecida' ? '—' : String(valor)}
+              tom={filtro === id ? 'marca' : 'neutro'}
+            />
+          </button>
+        ))}
       </div>
+
+      {confianca === 'parcial' ? (
+        <div className="mb-4">
+          <Nota tom="alerta">
+            Este aparelho ainda não baixou todas as vendas e pagamentos. Os números podem
+            estar incompletos ou desatualizados.
+          </Nota>
+        </div>
+      ) : null}
 
       <div className="grid items-start gap-5 lg:grid-cols-[1fr_340px]">
         <div>
@@ -143,7 +191,7 @@ export function ClientesPage() {
             />
           </div>
 
-          {arquivados.length > 0 ? (
+          {filtro === 'todos' && arquivados.length > 0 ? (
             <label className="mb-3 flex w-fit cursor-pointer items-center gap-2 text-sm text-slate-600">
               <input
                 type="checkbox"
@@ -158,7 +206,8 @@ export function ClientesPage() {
           <ListaDeClientes
             encontrados={encontrados}
             cadastrados={clientes.length}
-            carregando={carregando}
+            carregando={carregando || (filtro !== 'todos' && confianca === 'desconhecida')}
+            mensagemVazia={filtro === 'em-atraso' ? 'Nenhum cliente em atraso.' : filtro === 'com-vendas' ? 'Nenhum cliente com vendas.' : undefined}
             selecionadoId={selecionado?.id}
             aoSelecionar={aoSelecionar}
           />
