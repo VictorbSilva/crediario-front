@@ -9,40 +9,11 @@ import { useCarneDaEmpresa } from '@/data/useCarneDaEmpresa'
 import { useClientes } from '@/data/useClientes'
 import { dataBonita, dataLocalISO } from '@/lib/data'
 import { formatarCentavos } from '@/lib/dinheiro'
-import type { DocumentoExportavel } from '@/lib/exportacao'
-import { aReceberNoMes, listaDeAtrasados, mesesDeRecebimento, situacaoFinanceira } from '@/lib/financeiro'
-import type { PagamentoParaFinanceiro, VendaParaFinanceiro } from '@/lib/financeiro'
+import { aReceberNoMes, documentosParaFinanceiro, listaDeAtrasados, mesesDeRecebimento, situacaoFinanceira } from '@/lib/financeiro'
 import { nomeDoMes } from '@/lib/rotas'
 import { normalizar } from '@/lib/texto'
 
 const COLECOES_DO_FINANCEIRO = ['sales', 'payments'] as const
-
-function converterDocumentos(
-  vendas: readonly DocumentoExportavel[],
-  pagamentos: readonly DocumentoExportavel[],
-) {
-  return {
-    vendas: vendas.map(({ id, dados }): VendaParaFinanceiro => ({
-      id,
-      clientId: dados.clientId as string,
-      dataVenda: dados.dataVenda as string,
-      valorTotalCentavos: dados.valorTotalCentavos as number,
-      numeroParcelas: dados.numeroParcelas as number,
-      diaVencimento: dados.diaVencimento as number,
-      versaoCalculo: dados.versaoCalculo as number,
-      cancelada: dados.cancelada === true,
-    })),
-    pagamentos: pagamentos.map(({ id, dados }): PagamentoParaFinanceiro => ({
-      id,
-      clientId: dados.clientId as string,
-      saleId: dados.saleId as string,
-      data: dados.data as string,
-      valorCentavos: dados.valorCentavos as number,
-      encargoCentavos: dados.encargoCentavos as number | undefined,
-      cancelado: dados.cancelado === true,
-    })),
-  }
-}
 
 export function FinanceiroPage() {
   const { vendas, pagamentos, confianca, erro } = useCarneDaEmpresa(COLECOES_DO_FINANCEIRO)
@@ -55,7 +26,7 @@ export function FinanceiroPage() {
   }))
 
   const { situacao, atrasados, meses, mes, aReceber } = useMemo(() => {
-    const documentos = converterDocumentos(vendas, pagamentos)
+    const documentos = documentosParaFinanceiro(vendas, pagamentos)
     const situacao = situacaoFinanceira(documentos.vendas, documentos.pagamentos, hoje)
     const meses = mesesDeRecebimento(documentos.vendas, hoje)
     const mes = meses.find(({ ano, mes }) =>

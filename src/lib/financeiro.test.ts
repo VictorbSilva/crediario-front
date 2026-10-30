@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   aReceberNoMes,
+  contagemDeClientes,
+  documentosParaFinanceiro,
   listaDeAtrasados,
   mesesDeRecebimento,
   parcelasRegeneradas,
@@ -41,6 +43,71 @@ function pagamento(partes: Partial<PagamentoParaFinanceiro> = {}): PagamentoPara
     ...partes,
   }
 }
+
+describe('documentosParaFinanceiro', () => {
+  it('copia os campos financeiros de uma venda e um pagamento', () => {
+    const { id: vendaId, ...dadosVenda } = venda({ cancelada: true })
+    const { id: pagamentoId, ...dadosPagamento } = pagamento({ cancelado: true, encargoCentavos: 200 })
+
+    expect(documentosParaFinanceiro(
+      [{ id: vendaId, dados: { ...dadosVenda, observacao: 'ignorada' } }],
+      [{ id: pagamentoId, dados: { ...dadosPagamento, observacao: 'ignorada' } }],
+    )).toEqual({ vendas: [{ id: vendaId, ...dadosVenda }], pagamentos: [{ id: pagamentoId, ...dadosPagamento }] })
+  })
+
+  it('normaliza cancelamentos ausentes e preserva encargo ausente', () => {
+    const { id: vendaId, ...dadosVenda } = venda()
+    const { id: pagamentoId, ...dadosPagamento } = pagamento()
+    expect(documentosParaFinanceiro(
+      [{ id: vendaId, dados: dadosVenda }], [{ id: pagamentoId, dados: dadosPagamento }],
+    )).toEqual({
+      vendas: [{ id: vendaId, ...dadosVenda, cancelada: false }],
+      pagamentos: [{ id: pagamentoId, ...dadosPagamento, cancelado: false, encargoCentavos: undefined }],
+    })
+  })
+})
+
+describe('contagemDeClientes', () => {
+  it('conta ativos e separa dívida, compra recente, cancelamento e cadastros ausentes', () => {
+    const clientes = [
+      { id: 'sem-venda' }, { id: 'a-vencer' }, { id: 'vencido' },
+      { id: 'quitado-recente' }, { id: 'quitado-antigo' }, { id: 'cancelada' },
+      { id: 'arquivado', arquivado: true },
+    ]
+    const vendas = [
+      venda({ id: 'futura', clientId: 'a-vencer', dataVenda: '2026-10-01' }),
+      venda({ id: 'antiga', clientId: 'vencido', dataVenda: '2026-01-10' }),
+      venda({ id: 'recente', clientId: 'quitado-recente', dataVenda: '2026-08-14' }),
+      venda({ id: 'quitada', clientId: 'quitado-antigo', dataVenda: '2026-05-14' }),
+      venda({ clientId: 'cancelada', dataVenda: '2026-10-07', cancelada: true }),
+      venda({ id: 'arquivo', clientId: 'arquivado' }),
+      venda({ id: 'ausente', clientId: 'ausente' }),
+    ]
+    const pagamentos = [
+      pagamento({ saleId: 'recente', valorCentavos: 30_000 }),
+      pagamento({ saleId: 'quitada', valorCentavos: 30_000 }),
+    ]
+    const situacao = situacaoFinanceira(vendas, pagamentos, HOJE)
+
+    expect(contagemDeClientes(situacao, vendas, clientes, HOJE)).toEqual({
+      total: 6,
+      comVendas: new Set(['a-vencer', 'vencido', 'quitado-recente']),
+      emAtraso: new Set(['vencido']),
+    })
+  })
+
+  it('inclui o dia do corte de quatro meses e exclui o dia anterior no fim do mês', () => {
+    const vendas = [
+      venda({ id: 'limite', clientId: 'limite', dataVenda: '2026-02-28' }),
+      venda({ id: 'antes', clientId: 'antes', dataVenda: '2026-02-27' }),
+    ]
+    const pagamentos = vendas.map((v) => pagamento({ saleId: v.id, valorCentavos: 30_000 }))
+    const hoje = '2026-06-30'
+    expect(contagemDeClientes(
+      situacaoFinanceira(vendas, pagamentos, hoje), vendas, [{ id: 'limite' }, { id: 'antes' }], hoje,
+    )).toEqual({ total: 2, comVendas: new Set(['limite']), emAtraso: new Set() })
+  })
+})
 
 describe('parcelasRegeneradas', () => {
   it('devolve as parcelas de gerarParcelas, campo a campo, com o id da venda', () => {
