@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   aReceberNoMes,
+  caixaDoDia,
+  caixaDoMes,
   contagemDeClientes,
   documentosParaFinanceiro,
   listaDeAtrasados,
@@ -40,11 +42,19 @@ function pagamento(partes: Partial<PagamentoParaFinanceiro> = {}): PagamentoPara
     saleId: 'v1',
     data: '2026-10-01',
     valorCentavos: 5_000,
+    forma: 'pix',
     ...partes,
   }
 }
 
 describe('documentosParaFinanceiro', () => {
+  it('leva a forma de cada pagamento até o Financeiro', () => {
+    const pagamentos = ['pix', 'dinheiro', 'cartao'].map((forma) => ({
+      id: forma, dados: { forma },
+    }))
+    expect(documentosParaFinanceiro([], pagamentos).pagamentos.map((p) => p.forma))
+      .toEqual(['pix', 'dinheiro', 'cartao'])
+  })
   it('copia os campos financeiros de uma venda e um pagamento', () => {
     const { id: vendaId, ...dadosVenda } = venda({ cancelada: true })
     const { id: pagamentoId, ...dadosPagamento } = pagamento({ cancelado: true, encargoCentavos: 200 })
@@ -64,6 +74,51 @@ describe('documentosParaFinanceiro', () => {
       vendas: [{ id: vendaId, ...dadosVenda, cancelada: false }],
       pagamentos: [{ id: pagamentoId, ...dadosPagamento, cancelado: false, encargoCentavos: undefined }],
     })
+  })
+})
+
+describe('caixa diário', () => {
+  const pagamentos = [
+    pagamento({ id: 'pix', data: '2026-10-30', valorCentavos: 12_000, encargoCentavos: 2_000 }),
+    pagamento({ id: 'pix2', data: '2026-10-30', valorCentavos: 3_000, cancelado: false }),
+    pagamento({ id: 'dinheiro', data: '2026-10-30', forma: 'dinheiro', valorCentavos: 5_000 }),
+    pagamento({ id: 'cartao', data: '2026-10-30', forma: 'cartao', valorCentavos: 7_000 }),
+    pagamento({ id: 'cancelado', data: '2026-10-30', valorCentavos: 99_000, cancelado: true }),
+    pagamento({ id: 'outro-dia', data: '2026-10-29', valorCentavos: 1_000 }),
+    pagamento({ id: 'outro-mes', data: '2026-09-30', valorCentavos: 2_000 }),
+    pagamento({ id: 'outro-ano', data: '2025-10-30', valorCentavos: 4_000 }),
+    pagamento({ id: 'so-cancelado', data: '2026-10-28', cancelado: true }),
+  ]
+
+  it('soma o valor cheio por forma só dos pagamentos não cancelados do dia', () => {
+    expect(caixaDoDia(pagamentos, '2026-10-30')).toEqual({
+      pixCentavos: 15_000, dinheiroCentavos: 5_000, cartaoCentavos: 7_000,
+      totalCentavos: 27_000, quantidade: 4,
+    })
+  })
+
+  it('dia vazio ou só com cancelamento tem todas as formas zeradas', () => {
+    for (const data of ['2026-10-01', '2026-10-28']) {
+      expect(caixaDoDia(pagamentos, data)).toEqual({
+        pixCentavos: 0, dinheiroCentavos: 0, cartaoCentavos: 0, totalCentavos: 0, quantidade: 0,
+      })
+    }
+  })
+
+  it('agrupa somente dias com entrada no mês e bate com o recebido no mês', () => {
+    const mes = caixaDoMes(pagamentos, 2026, 10)
+    expect(mes).toEqual(new Map([['2026-10-30', 27_000], ['2026-10-29', 1_000]]))
+    expect([...mes.values()].reduce((soma, valor) => soma + valor, 0))
+      .toBe(situacaoFinanceira([], pagamentos, '2026-10-30').recebidoNoMesCentavos)
+    expect(caixaDoMes(pagamentos, 2026, 11)).toEqual(new Map())
+  })
+
+  it('cancelar depois remove a entrada do dia original', () => {
+    const original = pagamento({ data: '2026-10-30' })
+    const cancelado = { ...original, cancelado: true }
+    expect(caixaDoDia([original], original.data).totalCentavos).toBe(5_000)
+    expect(caixaDoDia([cancelado], original.data).totalCentavos).toBe(0)
+    expect(caixaDoMes([cancelado], 2026, 10)).toEqual(new Map())
   })
 })
 

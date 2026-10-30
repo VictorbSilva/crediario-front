@@ -43,7 +43,7 @@ function venda(id: string, dados: Record<string, unknown>): DocumentoExportavel 
 }
 
 function pagamento(id: string, dados: Record<string, unknown>): DocumentoExportavel {
-  return { id, dados: { cancelado: false, ...dados } }
+  return { id, dados: { cancelado: false, forma: 'pix', ...dados } }
 }
 
 // Em 15/10/2026 (contas no texto da tarefa):
@@ -131,6 +131,7 @@ describe('FinanceiroPage — leitura', () => {
     expect(screen.getByText('Carregando…')).toBeTruthy()
     expect(screen.queryByText('A receber', { selector: 'div' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Clientes em atraso' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Caixa do dia' })).toBeNull()
   })
 
   it('erro de leitura aparece no topo', () => {
@@ -154,6 +155,86 @@ describe('FinanceiroPage — leitura', () => {
 
     expect(screen.queryByText(/versão mais nova/)).toBeNull()
     expect(screen.queryByText(/ainda não baixou/)).toBeNull()
+  })
+})
+
+describe('FinanceiroPage — caixa do dia', () => {
+  it('começa hoje e tocar num dia mostra as três formas, o valor cheio e os pagamentos', () => {
+    simulado.carne = carne({ pagamentos: [
+      pagamento('pix', { clientId: 'ana', data: '2026-10-14', valorCentavos: 12000, encargoCentavos: 2000 }),
+      pagamento('dinheiro', { clientId: 'bia', data: '2026-10-14', valorCentavos: 5000, forma: 'dinheiro' }),
+      pagamento('cartao', { clientId: 'caio', data: '2026-10-14', valorCentavos: 7000, forma: 'cartao' }),
+      pagamento('cancelado', { clientId: 'ana', data: '2026-10-14', valorCentavos: 99000, cancelado: true }),
+      pagamento('outro-dia', { clientId: 'ana', data: '2026-10-13', valorCentavos: 1000 }),
+    ] })
+    render(<Pagina />)
+    const caixa = within(screen.getByRole('region', { name: 'Caixa do dia' }))
+    expect(caixa.getByRole('button', { name: /15\/10\/2026/ }).getAttribute('aria-pressed')).toBe('true')
+    expect(caixa.getByText('Nenhum recebimento neste dia.')).toBeTruthy()
+
+    fireEvent.click(caixa.getByRole('button', { name: /14\/10\/2026/ }))
+
+    const resumo = within(caixa.getByRole('group', { name: 'Recebimentos de 14/10/2026' }))
+    for (const [forma, valor] of [['Pix', 12000], ['Dinheiro', 5000], ['Cartão', 7000], ['Total', 24000]] as const) {
+      expect(resumo.getByText(forma).nextElementSibling?.textContent).toBe(formatarCentavos(valor))
+    }
+    const itens = caixa.getAllByRole('listitem')
+    expect(itens).toHaveLength(3)
+    for (const [indice, nome, numero, forma, valor] of [
+      [0, 'Ana Lima', '#12', 'Pix', 12000],
+      [1, 'Bia Souza', '#13', 'Dinheiro', 5000],
+      [2, 'Caio Reis', '#14', 'Cartão', 7000],
+    ] as const) {
+      const item = within(itens[indice])
+      expect(item.getByText(nome)).toBeTruthy()
+      expect(item.getByText(numero)).toBeTruthy()
+      expect(item.getByText(forma)).toBeTruthy()
+      expect(item.getByText(reais(valor))).toBeTruthy()
+    }
+    expect(kpi('Recebido no mês').textContent).toBe(formatarCentavos(25000))
+  })
+
+  it('navega só do mês mais antigo ao atual, inclusive na virada do ano', () => {
+    vi.setSystemTime(new Date(2027, 0, 15, 12))
+    simulado.carne = carne({ pagamentos: [pagamento('antigo', {
+      clientId: 'ana', data: '2026-12-30', valorCentavos: 5000,
+    })] })
+    render(<Pagina />)
+    const caixa = within(screen.getByRole('region', { name: 'Caixa do dia' }))
+    expect((caixa.getByRole('button', { name: 'Próximo mês' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(caixa.getByRole('button', { name: 'Mês anterior' }))
+    expect(caixa.getByRole('group', { name: 'Dezembro de 2026' })).toBeTruthy()
+    expect((caixa.getByRole('button', { name: 'Mês anterior' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(caixa.getByRole('button', { name: /30\/12\/2026/ }).textContent).toContain(formatarCentavos(5000))
+    fireEvent.click(caixa.getByRole('button', { name: 'Próximo mês' }))
+    expect(caixa.getByRole('group', { name: 'Janeiro de 2027' })).toBeTruthy()
+  })
+
+  it('sem pagamentos fica no mês atual com as duas setas desabilitadas', () => {
+    simulado.carne = carne({ pagamentos: [] })
+    render(<Pagina />)
+    const caixa = within(screen.getByRole('region', { name: 'Caixa do dia' }))
+    for (const nome of ['Mês anterior', 'Próximo mês']) {
+      expect((caixa.getByRole('button', { name: nome }) as HTMLButtonElement).disabled).toBe(true)
+    }
+    expect(caixa.getByText('Nenhum recebimento neste dia.')).toBeTruthy()
+  })
+
+  it('cancelamento recebido pelo listener remove total e pagamento do dia selecionado', () => {
+    simulado.carne = carne({ pagamentos: [pagamento('pg', {
+      clientId: 'fantasma', data: '2026-10-15', valorCentavos: 5000,
+    })] })
+    const { rerender } = render(<Pagina />)
+    expect(screen.getByRole('region', { name: 'Caixa do dia' }).textContent)
+      .toContain('Cliente não encontrado neste aparelho')
+    simulado.carne = carne({ pagamentos: [pagamento('pg', {
+      clientId: 'fantasma', data: '2026-10-15', valorCentavos: 5000, cancelado: true,
+    })] })
+    rerender(<Pagina />)
+    const caixa = within(screen.getByRole('region', { name: 'Caixa do dia' }))
+    expect(caixa.getByText('Nenhum recebimento neste dia.')).toBeTruthy()
+    expect(caixa.queryAllByRole('listitem')).toHaveLength(0)
+    expect(caixa.getByRole('button', { name: /15\/10\/2026/ }).textContent).not.toContain(formatarCentavos(5000))
   })
 })
 

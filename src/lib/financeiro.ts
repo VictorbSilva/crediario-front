@@ -2,6 +2,7 @@ import type { DocumentoExportavel } from './exportacao'
 import { subtrairMeses } from './data'
 import { VERSAO_CALCULO, alocarPagamentos, gerarParcelas, situacaoDaParcela } from './parcelas'
 import type { ParcelaGerada } from './parcelas'
+import type { FormaDePagamento } from '@/types/venda'
 
 export type VendaParaFinanceiro = {
   id: string
@@ -20,6 +21,7 @@ export type PagamentoParaFinanceiro = {
   saleId: string
   data: string
   valorCentavos: number
+  forma: FormaDePagamento
   encargoCentavos?: number
   cancelado?: boolean
 }
@@ -185,6 +187,31 @@ function chaveDoMes(ano: number, mes: number): string {
   return `${ano}-${String(mes).padStart(2, '0')}`
 }
 
+export function caixaDoDia(pagamentos: readonly PagamentoParaFinanceiro[], data: string) {
+  const caixa = {
+    pixCentavos: 0, dinheiroCentavos: 0, cartaoCentavos: 0, totalCentavos: 0, quantidade: 0,
+  }
+  for (const pagamento of pagamentos) {
+    if (pagamento.cancelado === true || pagamento.data !== data) continue
+    caixa[`${pagamento.forma}Centavos`] += pagamento.valorCentavos
+    caixa.totalCentavos += pagamento.valorCentavos
+    caixa.quantidade += 1
+  }
+  return caixa
+}
+
+export function caixaDoMes(
+  pagamentos: readonly PagamentoParaFinanceiro[], ano: number, mes: number,
+): Map<string, number> {
+  const chave = chaveDoMes(ano, mes)
+  const totais = new Map<string, number>()
+  for (const pagamento of pagamentos) {
+    if (pagamento.cancelado === true || pagamento.data.slice(0, 7) !== chave) continue
+    totais.set(pagamento.data, (totais.get(pagamento.data) ?? 0) + pagamento.valorCentavos)
+  }
+  return totais
+}
+
 export function aReceberNoMes<
   C extends { id: string; numero: number; nome: string; arquivado?: boolean },
 >(
@@ -304,6 +331,7 @@ export function documentosParaFinanceiro(
       saleId: dados.saleId as string,
       data: dados.data as string,
       valorCentavos: dados.valorCentavos as number,
+      forma: dados.forma as FormaDePagamento,
       encargoCentavos: dados.encargoCentavos as number | undefined,
       cancelado: dados.cancelado === true,
     })),
