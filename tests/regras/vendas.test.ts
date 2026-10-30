@@ -259,6 +259,104 @@ describe('sales — cancelamento', () => {
   })
 })
 
+describe('sales — itens e periodicidade', () => {
+  const doisItens = [
+    { quantidade: 1, descricao: 'Jogo de panelas', valorUnitarioCentavos: 90000 },
+    { quantidade: 2, descricao: 'Pano de prato', valorUnitarioCentavos: 15000 },
+  ]
+
+  const item = { quantidade: 1, descricao: 'Pano de prato', valorUnitarioCentavos: 4000 }
+
+  const semanal = { periodicidade: 'semanal', versaoCalculo: 2, diaVencimento: 5 }
+
+  it('aceita a venda como o app grava hoje, sem periodicidade e com versaoCalculo 1', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida()))).toBe('permitido')
+  })
+
+  it('aceita periodicidade mensal explícita, com o dia do mês de sempre', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida({ periodicidade: 'mensal' })))).toBe('permitido')
+  })
+
+  it('aceita venda semanal com versaoCalculo 2 e dia da semana de 1 a 7', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda('v1')), vendaValida(semanal)))).toBe('permitido')
+    expect(await veredito(setDoc(doc(bancoDono(), venda('v2')), vendaValida({ ...semanal, diaVencimento: 1 })))).toBe('permitido')
+    expect(await veredito(setDoc(doc(bancoDono(), venda('v3')), vendaValida({ ...semanal, diaVencimento: 7 })))).toBe('permitido')
+  })
+
+  it('recusa venda semanal com versaoCalculo 1, que o aparelho antigo calcularia como mensal', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida({ ...semanal, versaoCalculo: 1 })))).toBe('negado')
+  })
+
+  it('recusa venda semanal com dia de vencimento 8', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida({ ...semanal, diaVencimento: 8 })))).toBe('negado')
+  })
+
+  it('recusa periodicidade fora de mensal e semanal', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida({ periodicidade: 'quinzenal' })))).toBe('negado')
+  })
+
+  it('aceita itens com 1, 2 e 30 elementos', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda('v1')), vendaValida({ itens: [item] })))).toBe('permitido')
+    expect(await veredito(setDoc(doc(bancoDono(), venda('v2')), vendaValida({ itens: doisItens })))).toBe('permitido')
+    expect(await veredito(setDoc(
+        doc(bancoDono(), venda('v3')),
+        vendaValida({ itens: Array.from({ length: 30 }, () => item) }),
+      ))).toBe('permitido')
+  })
+
+  it('recusa itens vazio', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida({ itens: [] })))).toBe('negado')
+  })
+
+  it('recusa itens com 31 elementos', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), venda()),
+        vendaValida({ itens: Array.from({ length: 31 }, () => item) }),
+      ))).toBe('negado')
+  })
+
+  it('recusa itens que não é lista', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida({ itens: 'panela' })))).toBe('negado')
+  })
+
+  it('recusa trocar os itens de uma venda gravada', async () => {
+    await semear(venda(), vendaValida({ itens: doisItens }))
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        itens: [doisItens[0]],
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('recusa acrescentar itens a uma venda gravada sem eles', async () => {
+    await semear(venda(), vendaValida())
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        itens: doisItens,
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('recusa trocar a periodicidade de uma venda gravada', async () => {
+    await semear(venda(), vendaValida({ periodicidade: 'mensal', versaoCalculo: 2, diaVencimento: 5 }))
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        periodicidade: 'semanal',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('cancela uma venda semanal com itens', async () => {
+    await semear(venda(), vendaValida({ ...semanal, itens: doisItens }))
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        cancelada: true,
+        canceladaEm: '2026-10-30',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('permitido')
+  })
+})
+
 describe('installments', () => {
   it('o dono cria uma parcela válida', async () => {
     expect(await veredito(setDoc(doc(bancoDono(), parcela()), parcelaValida()))).toBe('permitido')

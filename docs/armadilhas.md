@@ -221,6 +221,39 @@ inatualizável.
 — referente a firestore.rules, `match /clients/{clientId}`, e tests/regras/clients.test.ts,
 `describe('clients — rota')`
 
+### Endereço em três campos e próxima cobrança — acrescentados em 30/10/2026
+
+Pedido do dono em 30/10/2026. Quatro campos entram em `camposConhecidos()` e `tiposValidos()`:
+
+- `rua` — string de 1 a 120 caracteres: rua e número, como o dono digitar.
+- `bairro` e `cidade` — strings de 1 a 80 caracteres.
+- `proximaCobranca` — data civil. Põe o cliente na rota daquela data; a lógica é do app, não da
+  regra.
+
+**Todos são opcionais**, pelo mesmo motivo dos campos de rota: já existe cliente gravado sem
+eles, e campo obrigatório depois de haver dado é porta de mão única (ver `cadastradoEm`,
+acima). Também é o que deixa um aparelho com a versão anterior do app continuar gravando: ele
+não conhece os campos e não os manda. Os quatro saem com `deleteField()` numa edição, como os
+outros opcionais.
+
+**`endereco` continua aceito**, para os clientes antigos. Tirá-lo da lista fechada seria a
+mesma porta de mão única de `rotaId`: `camposConhecidos()` vale no update, e todo cliente que
+tivesse o campo ficaria inatualizável. O teste `aceita editar o nome de cliente antigo que só
+tem endereco` existe para pegar isso.
+
+> **AVISO**
+> Diferente de `endereco`, que aceita string vazia, **`rua`, `bairro` e `cidade` recusam
+> `''`**. O formulário que gravar esses campos precisa mandar `deleteField()` (ou omitir o
+> campo) quando o dono apagar o texto — gravar `''` volta `permission-denied`, e offline essa
+> recusa chega horas depois. É a regra do `CLAUDE.md`: toda restrição que a regra impõe também
+> existe no formulário.
+>
+> A regra é publicada à mão, e **antes** de qualquer código gravar esses campos, pelo mesmo
+> motivo dos campos de rota.
+
+— referente a firestore.rules, `match /clients/{clientId}`, e tests/regras/clients.test.ts,
+`describe('clients — endereço e próxima cobrança')`
+
 ## firestore.rules — sales, installments e payments
 
 Nascidas em 21/09/2026, com regra e teste no mesmo commit. Os helpers `dados()`,
@@ -299,6 +332,47 @@ combinados continua sendo `imutaveisPreservados()`, que também vale no update q
 > A regra é publicada à mão, e **antes** de qualquer código gravar o campo: a regra antiga
 > recusa `cancelada` pela lista fechada, e offline essa recusa chega horas depois, longe de
 > quem tocou no botão.
+
+**Itens da venda e venda semanal** (pedido do dono em 30/10/2026). Dois campos novos em
+`sales`, opcionais e imutáveis depois de criados, como o resto do plano:
+
+- `itens` — lista de 1 a 30 elementos, cada um `{ quantidade, descricao,
+  valorUnitarioCentavos }`.
+- `periodicidade` — `'mensal'` ou `'semanal'`. **Ausente vale `'mensal'`**, que é o que toda
+  venda gravada até 30/10/2026 é. Por isso a regra lê sempre `dados().get('periodicidade',
+  'mensal')`, pelo mesmo motivo do AVISO de `cancelada`, acima.
+
+Os dois são opcionais pela mesma porta de mão única: já existe venda gravada sem eles, e um
+aparelho com a versão anterior do app continua gravando venda mensal sem mandar nenhum dos
+dois. Para a venda mensal nada muda — `diaVencimento` segue de 1 a 31 e `versaoCalculo`
+segue livre.
+
+> **AVISO**
+> **A regra valida o tipo e o tamanho de `itens`, não o conteúdo.** A linguagem de regras não
+> percorre os elementos de uma lista, então não há como exigir que cada item tenha
+> `quantidade`, `descricao` e `valorUnitarioCentavos`, nem que esses valores tenham o tipo
+> certo, nem que a soma dos itens bata com `valorTotalCentavos`. Um `itens: ['panela']` passa
+> pela regra. **O dono do conteúdo e da soma é o código do app** — mesma situação dos valores
+> de `ordemPorDia`, na seção dos campos de rota.
+
+> **AVISO**
+> **Venda semanal exige `versaoCalculo == 2` e `diaVencimento` de 1 a 7** — o dia da semana
+> ISO do vencimento, 1 = segunda … 7 = domingo. O `versaoCalculo` é a trava de
+> compatibilidade: um aparelho com a versão anterior do app não conhece `periodicidade` e
+> calcularia as parcelas da venda semanal como mensais. Com `versaoCalculo` 2, o Financeiro
+> antigo (`src/lib/financeiro.ts`) deixa a venda de fora e conta em `vendasNaoCalculadas`, em
+> vez de mostrar número errado. O teste `recusa venda semanal com versaoCalculo 1` existe para
+> que essa trava não caia sem ninguém perceber.
+
+**Imutáveis com `.get()` dos dois lados.** `imutaveisPreservados()` compara
+`get('itens', null)` e `get('periodicidade', 'mensal')` com o estado anterior. Consequências:
+acrescentar `itens` a uma venda gravada sem eles é negado (`null` contra uma lista); trocar a
+periodicidade é negado; gravar `periodicidade: 'mensal'` explícito numa venda antiga passa,
+porque é igual ao padrão. Cancelar continua valendo para venda semanal com itens — o teste
+`cancela uma venda semanal com itens` cobre isso, inclusive a comparação de lista de mapas.
+
+`installments` não muda: as datas semanais chegam prontas em `vencimento`, que já é data
+civil.
 
 — referente a firestore.rules e tests/regras/vendas.test.ts
 
