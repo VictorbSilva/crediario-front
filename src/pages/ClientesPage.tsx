@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Download, Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { ExportarClientes } from '@/components/clientes/ExportarClientes'
@@ -10,6 +10,7 @@ import { Kpi } from '@/components/ui/Kpi'
 import { Nota } from '@/components/ui/Nota'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { useCarneDaEmpresa } from '@/data/useCarneDaEmpresa'
+import type { CarneDaEmpresa } from '@/data/useCarneDaEmpresa'
 import { useClientes } from '@/data/useClientes'
 import { dataLocalISO } from '@/lib/data'
 import { contagemDeClientes, documentosParaFinanceiro, listaDeAtrasados, situacaoFinanceira } from '@/lib/financeiro'
@@ -17,6 +18,20 @@ import { normalizar, somenteDigitos } from '@/lib/texto'
 import type { Cliente } from '@/types/cliente'
 
 const COLECOES_DOS_CONTADORES = ['sales', 'payments'] as const
+
+type DadosDosContadores = Pick<CarneDaEmpresa, 'vendas' | 'pagamentos' | 'confianca' | 'erro'>
+
+const CONTADORES_NAO_CARREGADOS: DadosDosContadores = {
+  vendas: [], pagamentos: [], confianca: 'desconhecida', erro: null,
+}
+
+function LeituraDosContadores({ aoReceber }: { aoReceber: (dados: DadosDosContadores) => void }) {
+  const dados = useCarneDaEmpresa(COLECOES_DOS_CONTADORES)
+  useEffect(() => {
+    aoReceber(dados)
+  }, [dados, aoReceber])
+  return null
+}
 
 function combina(cliente: Cliente, termo: string, digitos: string): boolean {
   if (cliente.nomeBusca.includes(termo)) return true
@@ -42,7 +57,9 @@ export function ClientesPage() {
     descartarFalha,
     alternarArquivo,
   } = useClientes()
-  const { vendas, pagamentos, confianca, erro: erroDoCarne } = useCarneDaEmpresa(COLECOES_DOS_CONTADORES)
+  const [consultandoContadores, setConsultandoContadores] = useState(false)
+  const [dadosDosContadores, setDadosDosContadores] = useState(CONTADORES_NAO_CARREGADOS)
+  const { vendas, pagamentos, confianca, erro: erroDoCarne } = dadosDosContadores
 
   const larga = useTelaLarga()
   const navigate = useNavigate()
@@ -94,6 +111,7 @@ export function ClientesPage() {
 
   return (
     <div>
+      {consultandoContadores ? <LeituraDosContadores aoReceber={setDadosDosContadores} /> : null}
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Clientes</h1>
@@ -158,8 +176,11 @@ export function ClientesPage() {
             key={id}
             type="button"
             aria-pressed={filtro === id}
-            disabled={id !== 'todos' && confianca === 'desconhecida'}
-            onClick={() => setFiltro(id)}
+            disabled={id !== 'todos' && consultandoContadores && confianca === 'desconhecida'}
+            onClick={() => {
+              if (id !== 'todos') setConsultandoContadores(true)
+              setFiltro(id)
+            }}
             className={`min-w-0 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:cursor-wait disabled:opacity-60 ${filtro === id ? 'ring-2 ring-brand-600' : ''}`}
           >
             <Kpi

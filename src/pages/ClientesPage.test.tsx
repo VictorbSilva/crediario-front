@@ -14,6 +14,7 @@ const simulado = vi.hoisted(() => ({
   clientes: {} as ClientesContextValue,
   useCarne: vi.fn(),
   carneDaEmpresa: {} as CarneDaEmpresa,
+  useCarneDaEmpresa: vi.fn(),
 }))
 
 vi.mock('@/data/useClientes', () => ({ useClientes: () => simulado.clientes }))
@@ -21,7 +22,7 @@ vi.mock('@/components/layout/useTelaLarga', () => ({ useTelaLarga: () => simulad
 vi.mock('@/data/useCarne', () => ({ useCarne: simulado.useCarne }))
 vi.mock('@/data/useCarneDaEmpresa', () => ({
   CARNE_COMPLETO: ['sales', 'installments', 'payments'],
-  useCarneDaEmpresa: () => simulado.carneDaEmpresa,
+  useCarneDaEmpresa: simulado.useCarneDaEmpresa,
 }))
 
 function cliente(id: string, numero: number, nome: string, extras: Partial<Cliente> = {}): Cliente {
@@ -99,6 +100,7 @@ beforeEach(() => {
     vendas: [], parcelas: [], pagamentos: [], carregando: false, pendentes: 0,
     confianca: 'confiavel', erro: null,
   }
+  simulado.useCarneDaEmpresa.mockReset().mockImplementation(() => simulado.carneDaEmpresa)
 })
 
 afterEach(() => {
@@ -230,12 +232,40 @@ describe('ClientesPage — contadores e filtros', () => {
     }]
   })
 
+  it.each([true, false])('não ouve coleções inteiras ao abrir a lista (tela larga: %s)', (larga) => {
+    simulado.larga = larga
+    montar()
+    expect(simulado.useCarneDaEmpresa).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Com vendas —' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Em atraso —' })).toBeTruthy()
+    buscar('joao')
+    expect(simulado.useCarneDaEmpresa).not.toHaveBeenCalled()
+  })
+
+  it.each(['Com vendas', 'Em atraso'])('ouve só sales e payments ao solicitar %s, com referência estável', (rotulo) => {
+    montar()
+    expect(simulado.useCarneDaEmpresa).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: `${rotulo} —` }))
+    expect(simulado.useCarneDaEmpresa).toHaveBeenCalledWith(['sales', 'payments'])
+    const colecoes = simulado.useCarneDaEmpresa.mock.calls[0][0]
+    buscar('joao')
+    for (const [pedidas] of simulado.useCarneDaEmpresa.mock.calls) {
+      expect(pedidas).toBe(colecoes)
+    }
+    // Sair e reabrir a rota não solicita os dados sem um novo toque.
+    cleanup()
+    simulado.useCarneDaEmpresa.mockClear()
+    montar()
+    expect(simulado.useCarneDaEmpresa).not.toHaveBeenCalled()
+  })
+
   it('mostra os três números e filtra os vencidos, mantendo a busca', () => {
     montar()
     const todos = screen.getByRole('button', { name: 'Clientes 3' })
     expect(todos.getAttribute('aria-pressed')).toBe('true')
     expect(todos.classList.contains('ring-2')).toBe(true)
     expect(within(todos).getByText('3').classList.contains('text-slate-900')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Com vendas —' }))
     expect(screen.getByRole('button', { name: 'Com vendas 2' })).toBeTruthy()
     const atrasados = screen.getByRole('button', { name: 'Em atraso 1' })
     fireEvent.click(atrasados)
@@ -257,7 +287,7 @@ describe('ClientesPage — contadores e filtros', () => {
     montar()
     fireEvent.click(screen.getByLabelText('Mostrar arquivados'))
     expect(listados()).toEqual([137, 1370, 2137, 40])
-    fireEvent.click(screen.getByRole('button', { name: 'Com vendas 2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Com vendas —' }))
     expect(listados()).toEqual([137, 1370])
     fireEvent.click(screen.getByRole('button', { name: 'Clientes 3' }))
     expect(listados()).toEqual([137, 1370, 2137, 40])
@@ -271,18 +301,23 @@ describe('ClientesPage — contadores e filtros', () => {
       venda('zeca', 'zeca', '2026-07-10', { valorTotalCentavos: 20_000 }),
     ]
     montar()
-    fireEvent.click(screen.getByRole('button', { name: 'Em atraso 3' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Em atraso —' }))
+    expect(screen.getByRole('button', { name: 'Em atraso 3' })).toBeTruthy()
     expect(listados()).toEqual([2137, 1370, 137])
   })
 
   it('confiança desconhecida mostra traços e desabilita os filtros financeiros', () => {
     simulado.carneDaEmpresa.confianca = 'desconhecida'
     montar()
+    fireEvent.click(screen.getByRole('button', { name: 'Com vendas —' }))
+    expect(simulado.useCarneDaEmpresa).toHaveBeenCalledWith(['sales', 'payments'])
     for (const rotulo of ['Com vendas —', 'Em atraso —']) {
       const botao = screen.getByRole('button', { name: rotulo }) as HTMLButtonElement
       expect(botao.disabled).toBe(true)
       fireEvent.click(botao)
     }
+    expect(screen.getByText('Carregando os clientes deste aparelho…')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Clientes 3' }))
     expect(listados()).toEqual([137, 1370, 2137])
   })
 
@@ -290,6 +325,7 @@ describe('ClientesPage — contadores e filtros', () => {
     simulado.carneDaEmpresa.confianca = 'parcial'
     simulado.carneDaEmpresa.erro = 'Não foi possível carregar o carnê da empresa.'
     montar()
+    fireEvent.click(screen.getByRole('button', { name: 'Com vendas —' }))
     expect(screen.getByRole('button', { name: 'Em atraso 1' })).toBeTruthy()
     expect(screen.getByText(/Este aparelho ainda não baixou todas as vendas e pagamentos/)).toBeTruthy()
     expect(screen.getByText('Não foi possível carregar o carnê da empresa.')).toBeTruthy()
@@ -298,7 +334,7 @@ describe('ClientesPage — contadores e filtros', () => {
   it('lista vazia explica o filtro aplicado', () => {
     simulado.carneDaEmpresa.vendas = []
     montar()
-    fireEvent.click(screen.getByRole('button', { name: 'Em atraso 0' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Em atraso —' }))
     expect(screen.getByText('Nenhum cliente em atraso.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Com vendas 0' }))
     expect(screen.getByText('Nenhum cliente com vendas.')).toBeTruthy()
