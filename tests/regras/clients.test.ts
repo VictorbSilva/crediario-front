@@ -532,3 +532,112 @@ describe('clients — rota', () => {
       }))).toBe('negado')
   })
 })
+
+describe('clients — endereço e próxima cobrança', () => {
+  const enderecoCompleto = {
+    rua: 'Rua das Flores, 120',
+    bairro: 'Centro',
+    cidade: 'Sorocaba',
+    proximaCobranca: '2026-11-06',
+  }
+
+  async function semearAntigo(clientId: string, extra: Record<string, unknown> = {}) {
+    await semear(clientId, {
+      numero: 7,
+      nome: 'Maria Aparecida Santos',
+      nomeBusca: 'maria aparecida santos',
+      cadastradoEm: '2026-01-01',
+      criadoEm: new Date('2026-01-01'),
+      atualizadoEm: new Date('2026-01-01'),
+      atualizadoPor: 'importacao',
+      ...extra,
+    })
+  }
+
+  it('aceita rua, bairro, cidade e proximaCobranca preenchidos', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), caminhoCliente('c1')), clienteValido(enderecoCompleto)))).toBe('permitido')
+  })
+
+  const limites: Array<[string, number]> = [
+    ['rua', 120],
+    ['bairro', 80],
+    ['cidade', 80],
+  ]
+
+  for (const [campo, limite] of limites) {
+    it(`aceita ${campo} com 1 e com ${limite} caracteres`, async () => {
+      expect(await veredito(setDoc(
+          doc(bancoDono(), caminhoCliente('c1')),
+          clienteValido({ [campo]: 'x' }),
+        ))).toBe('permitido')
+      expect(await veredito(setDoc(
+          doc(bancoDono(), caminhoCliente('c2')),
+          clienteValido({ [campo]: 'x'.repeat(limite) }),
+        ))).toBe('permitido')
+    })
+
+    it(`recusa ${campo} vazio`, async () => {
+      expect(await veredito(setDoc(doc(bancoDono(), caminhoCliente('c1')), clienteValido({ [campo]: '' })))).toBe('negado')
+    })
+
+    it(`recusa ${campo} com ${limite + 1} caracteres`, async () => {
+      expect(await veredito(setDoc(
+          doc(bancoDono(), caminhoCliente('c1')),
+          clienteValido({ [campo]: 'x'.repeat(limite + 1) }),
+        ))).toBe('negado')
+    })
+
+    it(`recusa ${campo} que não é string, inclusive lista, que também tem size()`, async () => {
+      expect(await veredito(setDoc(doc(bancoDono(), caminhoCliente('c1')), clienteValido({ [campo]: 5 })))).toBe('negado')
+      expect(await veredito(setDoc(doc(bancoDono(), caminhoCliente('c2')), clienteValido({ [campo]: ['Centro'] })))).toBe('negado')
+    })
+  }
+
+  it('recusa proximaCobranca fora do formato de data civil', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        clienteValido({ proximaCobranca: '06/11/2026' }),
+      ))).toBe('negado')
+  })
+
+  it('aceita gravar só proximaCobranca em cliente que não a tinha', async () => {
+    await semearAntigo('c1')
+    const referencia = doc(bancoDono(), caminhoCliente('c1'))
+    expect(await veredito(updateDoc(referencia, {
+        proximaCobranca: '2026-11-06',
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: 'celular-do-dono',
+      }))).toBe('permitido')
+    expect((await getDoc(referencia)).data()!.proximaCobranca).toBe('2026-11-06')
+  })
+
+  it('aceita remover proximaCobranca com deleteField', async () => {
+    await semearAntigo('c1', { proximaCobranca: '2026-11-06' })
+    expect(await veredito(updateDoc(doc(bancoDono(), caminhoCliente('c1')), {
+        proximaCobranca: deleteField(),
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: 'celular-do-dono',
+      }))).toBe('permitido')
+  })
+
+  it('aceita remover rua, bairro e cidade com deleteField', async () => {
+    await semearAntigo('c1', { rua: 'Rua das Flores, 120', bairro: 'Centro', cidade: 'Sorocaba' })
+    expect(await veredito(updateDoc(doc(bancoDono(), caminhoCliente('c1')), {
+        rua: deleteField(),
+        bairro: deleteField(),
+        cidade: deleteField(),
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: 'celular-do-dono',
+      }))).toBe('permitido')
+  })
+
+  it('aceita editar o nome de cliente antigo que só tem endereco', async () => {
+    await semearAntigo('c1', { endereco: 'Rua das Flores 120, Centro' })
+    expect(await veredito(updateDoc(doc(bancoDono(), caminhoCliente('c1')), {
+        nome: 'Maria A. Santos',
+        nomeBusca: 'maria a. santos',
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: 'celular-do-dono',
+      }))).toBe('permitido')
+  })
+})

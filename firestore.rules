@@ -88,6 +88,7 @@ service cloud.firestore {
             'telefone', 'telefoneDigits',
             'cpf', 'cpfDigits',
             'endereco', 'rotaId', 'observacao', 'arquivado',
+            'rua', 'bairro', 'cidade', 'proximaCobranca',
             'cadastradoEm',
             'diasDeVisita', 'rotaDesde', 'ordemPorDia', 'ordemDoDia',
             'ultimaMarca', 'ultimaMarcaEm', 'ultimoVisitado', 'visitadoAnterior',
@@ -123,6 +124,13 @@ service cloud.firestore {
                 || (dados().cpfDigits is string && dados().cpfDigits.size() <= 11))
             && (!('endereco' in dados())
                 || (dados().endereco is string && dados().endereco.size() <= 200))
+            && (!('rua' in dados())
+                || (dados().rua is string && dados().rua.size() >= 1 && dados().rua.size() <= 120))
+            && (!('bairro' in dados())
+                || (dados().bairro is string && dados().bairro.size() >= 1 && dados().bairro.size() <= 80))
+            && (!('cidade' in dados())
+                || (dados().cidade is string && dados().cidade.size() >= 1 && dados().cidade.size() <= 80))
+            && (!('proximaCobranca' in dados()) || ehDataCivil(dados().proximaCobranca))
             && (!('rotaId' in dados())
                 || dados().rotaId == null
                 || (dados().rotaId is string && dados().rotaId.size() <= 64))
@@ -195,6 +203,7 @@ service cloud.firestore {
             'valorTotalCentavos', 'numeroParcelas', 'valorParcelaCentavos', 'diaVencimento',
             'multaTipo', 'multaPercentual', 'multaFixaCentavos', 'jurosPercentualDia',
             'observacao', 'versaoCalculo', 'cancelada', 'canceladaEm',
+            'itens', 'periodicidade',
             'criadoEm', 'atualizadoEm', 'atualizadoPor'
           ]);
         }
@@ -230,7 +239,15 @@ service cloud.firestore {
             && (!('cancelada' in dados()) || dados().cancelada is bool)
             && (dados().get('cancelada', false) == true
                 ? ehDataCivil(dados().get('canceladaEm', ''))
-                : !('canceladaEm' in dados()));
+                : !('canceladaEm' in dados()))
+            && (!('itens' in dados())
+                || (dados().itens is list
+                    && dados().itens.size() >= 1
+                    && dados().itens.size() <= 30))
+            && (!('periodicidade' in dados())
+                || dados().periodicidade in ['mensal', 'semanal'])
+            && (dados().get('periodicidade', 'mensal') != 'semanal'
+                || (dados().versaoCalculo == 2 && dados().diaVencimento <= 7));
         }
 
         function nasceNaoCancelada() {
@@ -251,6 +268,8 @@ service cloud.firestore {
             && dados().valorParcelaCentavos == anterior().valorParcelaCentavos
             && dados().diaVencimento == anterior().diaVencimento
             && dados().versaoCalculo == anterior().versaoCalculo
+            && dados().get('itens', null) == anterior().get('itens', null)
+            && dados().get('periodicidade', 'mensal') == anterior().get('periodicidade', 'mensal')
             && dados().criadoEm == anterior().criadoEm;
         }
 
