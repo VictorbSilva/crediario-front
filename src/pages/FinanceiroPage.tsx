@@ -9,23 +9,27 @@ import { useCarneDaEmpresa } from '@/data/useCarneDaEmpresa'
 import { useClientes } from '@/data/useClientes'
 import { dataBonita, dataLocalISO } from '@/lib/data'
 import { formatarCentavos } from '@/lib/dinheiro'
-import { aReceberNoMes, documentosParaFinanceiro, listaDeAtrasados, mesesDeRecebimento, situacaoFinanceira } from '@/lib/financeiro'
-import { nomeDoMes } from '@/lib/rotas'
+import { aReceberNoMes, caixaDoDia, caixaDoMes, documentosParaFinanceiro, listaDeAtrasados, mesesDeRecebimento, situacaoFinanceira } from '@/lib/financeiro'
+import { gradeDoMes, mesSeguinte, nomeDoMes } from '@/lib/rotas'
 import { normalizar } from '@/lib/texto'
 
 const COLECOES_DO_FINANCEIRO = ['sales', 'payments'] as const
+const FORMAS = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão' } as const
+const BOTAO_DO_MES = 'flex min-h-11 min-w-11 items-center justify-center rounded-lg text-2xl leading-none text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent'
 
 export function FinanceiroPage() {
   const { vendas, pagamentos, confianca, erro } = useCarneDaEmpresa(COLECOES_DO_FINANCEIRO)
   const { clientes } = useClientes()
   const [busca, setBusca] = useState('')
   const hoje = dataLocalISO(new Date())
+  const [diaDoCaixaEscolhido, setDiaDoCaixaEscolhido] = useState<string | null>(null)
+  const diaDoCaixa = diaDoCaixaEscolhido ?? hoje
   const [mesEscolhido, setMesEscolhido] = useState<{ ano: number; mes: number }>(() => ({
     ano: Number(hoje.slice(0, 4)),
     mes: Number(hoje.slice(5, 7)),
   }))
 
-  const { situacao, atrasados, meses, mes, aReceber } = useMemo(() => {
+  const { documentos, situacao, atrasados, meses, mes, aReceber } = useMemo(() => {
     const documentos = documentosParaFinanceiro(vendas, pagamentos)
     const situacao = situacaoFinanceira(documentos.vendas, documentos.pagamentos, hoje)
     const meses = mesesDeRecebimento(documentos.vendas, hoje)
@@ -35,10 +39,43 @@ export function FinanceiroPage() {
     const aReceber = aReceberNoMes(
       documentos.vendas, documentos.pagamentos, clientes, mes.ano, mes.mes, hoje,
     )
-    return { situacao, atrasados: listaDeAtrasados(situacao, clientes), meses, mes, aReceber }
+    return { documentos, situacao, atrasados: listaDeAtrasados(situacao, clientes), meses, mes, aReceber }
   }, [vendas, pagamentos, clientes, hoje, mesEscolhido])
 
   const mesPorExtenso = nomeDoMes(mes.ano, mes.mes)
+
+  const caixa = useMemo(() => {
+    const mesAtual = hoje.slice(0, 7)
+    const primeiroMes = documentos.pagamentos.reduce(
+      (primeiro, pagamento) => pagamento.data.slice(0, 7) < primeiro ? pagamento.data.slice(0, 7) : primeiro,
+      mesAtual,
+    )
+    const mesSelecionado = diaDoCaixa.slice(0, 7)
+    const data = mesSelecionado < primeiroMes || mesSelecionado > mesAtual ? hoje : diaDoCaixa
+    const ano = Number(data.slice(0, 4))
+    const mes = Number(data.slice(5, 7))
+    return {
+      data, ano, mes,
+      podeVoltar: data.slice(0, 7) > primeiroMes,
+      podeAvancar: data.slice(0, 7) < mesAtual,
+      totais: caixaDoMes(documentos.pagamentos, ano, mes),
+      resumo: caixaDoDia(documentos.pagamentos, data),
+      pagamentos: documentos.pagamentos
+        .filter((pagamento) => pagamento.cancelado !== true && pagamento.data === data)
+        .map((pagamento) => ({
+          ...pagamento, cliente: clientes.find((cliente) => cliente.id === pagamento.clientId) ?? null,
+        })),
+    }
+  }, [documentos.pagamentos, clientes, hoje, diaDoCaixa])
+
+  function trocarMesDoCaixa(direcao: -1 | 1) {
+    if ((direcao === -1 && !caixa.podeVoltar) || (direcao === 1 && !caixa.podeAvancar)) return
+    const proximo = direcao === 1
+      ? mesSeguinte(caixa.ano, caixa.mes)
+      : caixa.mes === 1 ? { ano: caixa.ano - 1, mes: 12 } : { ano: caixa.ano, mes: caixa.mes - 1 }
+    const inicio = `${proximo.ano}-${String(proximo.mes).padStart(2, '0')}`
+    setDiaDoCaixaEscolhido(inicio === hoje.slice(0, 7) ? null : `${inicio}-01`)
+  }
 
   const encontrados = useMemo(() => {
     const termo = normalizar(busca)
@@ -129,6 +166,90 @@ export function FinanceiroPage() {
               </Nota>
             </div>
           ) : null}
+
+          <section aria-labelledby="caixa-do-dia" className="mb-6">
+            <h2 id="caixa-do-dia" className="mb-3 text-lg font-semibold text-slate-900">
+              Caixa do dia
+            </h2>
+            <div className="max-w-2xl">
+              <div className="mb-2 flex items-center justify-between">
+                <button type="button" aria-label="Mês anterior" disabled={!caixa.podeVoltar}
+                  onClick={() => trocarMesDoCaixa(-1)} className={BOTAO_DO_MES}>
+                  <span aria-hidden>‹</span>
+                </button>
+                <p aria-live="polite" className="text-sm font-semibold text-slate-900">
+                  {nomeDoMes(caixa.ano, caixa.mes)}
+                </p>
+                <button type="button" aria-label="Próximo mês" disabled={!caixa.podeAvancar}
+                  onClick={() => trocarMesDoCaixa(1)} className={BOTAO_DO_MES}>
+                  <span aria-hidden>›</span>
+                </button>
+              </div>
+              <div aria-hidden className="mb-1.5 grid grid-cols-7 gap-1.5 text-center text-xs font-medium text-slate-500 sm:gap-2">
+                {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((letra, i) => <span key={i}>{letra}</span>)}
+              </div>
+              <div role="group" aria-label={nomeDoMes(caixa.ano, caixa.mes)} className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                {gradeDoMes(caixa.ano, caixa.mes).map((data, i) => {
+                  if (data === null) return <div key={`vazio-${i}`} aria-hidden />
+                  const selecionada = data === caixa.data
+                  const total = caixa.totais.get(data)
+                  const aparencia = selecionada
+                    ? 'border-brand-600 bg-brand-600 text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  const anel = data === hoje ? 'ring-2 ring-brand-600 ring-offset-1' : ''
+                  return (
+                    <button key={data} type="button" aria-pressed={selecionada}
+                      aria-label={`${dataBonita(data)}${data === hoje ? ', hoje' : ''}, ${total === undefined ? 'nenhum recebimento' : formatarCentavos(total)}`}
+                      onClick={() => setDiaDoCaixaEscolhido(data === hoje ? null : data)}
+                      className={`flex min-h-11 min-w-0 flex-col items-center justify-center rounded-lg border px-0.5 py-1 leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${aparencia} ${anel}`}>
+                      <span aria-hidden className="text-sm font-semibold">{Number(data.slice(8, 10))}</span>
+                      {total !== undefined ? (
+                        <span aria-hidden className={`w-full break-words text-center text-[10px] font-medium sm:text-xs ${selecionada ? 'text-brand-50' : 'text-slate-500'}`}>
+                          {formatarCentavos(total)}
+                        </span>
+                      ) : null}
+                      {data === hoje ? (
+                        <span aria-hidden className={`text-[10px] font-semibold uppercase ${selecionada ? 'text-brand-50' : 'text-brand-700'}`}>Hoje</span>
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <h3 className="mb-3 mt-5 text-sm font-semibold text-slate-900">Recebimentos de {dataBonita(caixa.data)}</h3>
+            <div role="group" aria-label={`Recebimentos de ${dataBonita(caixa.data)}`} className="mb-3 max-w-2xl rounded-xl border border-slate-200 bg-white p-3.5">
+              <dl className="space-y-2 text-sm">
+                {(Object.keys(FORMAS) as Array<keyof typeof FORMAS>).map((forma) => (
+                  <div key={forma} className="flex justify-between gap-3">
+                    <dt className="text-slate-600">{FORMAS[forma]}</dt>
+                    <dd className="font-semibold text-slate-900">{formatarCentavos(caixa.resumo[`${forma}Centavos`])}</dd>
+                  </div>
+                ))}
+                <div className="flex justify-between gap-3 border-t border-slate-200 pt-2 font-bold text-slate-900">
+                  <dt>Total</dt><dd>{formatarCentavos(caixa.resumo.totalCentavos)}</dd>
+                </div>
+              </dl>
+            </div>
+            {caixa.resumo.quantidade === 0 ? (
+              <EmptyState>Nenhum recebimento neste dia.</EmptyState>
+            ) : (
+              <ul className="flex max-w-2xl flex-col gap-2.5">
+                {caixa.pagamentos.map((pagamento) => (
+                  <li key={pagamento.id} className="flex min-h-11 items-center gap-3.5 rounded-xl border border-slate-200 bg-white p-3.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        {pagamento.cliente ? <span className="shrink-0 text-xs font-semibold text-slate-500">#{pagamento.cliente.numero}</span> : null}
+                        <span className="truncate text-sm font-semibold text-slate-900">{pagamento.cliente?.nome ?? 'Cliente não encontrado neste aparelho'}</span>
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-500">{FORMAS[pagamento.forma]}</span>
+                    </span>
+                    <span className="shrink-0 text-sm font-bold text-slate-900">{formatarCentavos(pagamento.valorCentavos)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           <section aria-labelledby="clientes-em-atraso">
             <h2 id="clientes-em-atraso" className="mb-3 text-lg font-semibold text-slate-900">
