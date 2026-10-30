@@ -14,6 +14,7 @@ export type ClienteNaRota = {
   ultimaMarcaEm?: string
   ultimoVisitado?: string
   visitadoAnterior?: string
+  proximaCobranca?: string
 }
 
 export const PASSO = 1000
@@ -35,7 +36,7 @@ export function diaNaData(cliente: ClienteNaRota, data: string): number | null {
   return menor
 }
 
-export function agendaRecente(cliente: ClienteNaRota, hoje: string): { data: string; dia: number } | null {
+export function agendaRecente(cliente: ClienteNaRota, hoje: string): { data: string; dia: number | null } | null {
   const [ano, mes] = hoje.split('-').map(Number)
   const anterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 }
   let recente: { data: string; dia: number } | null = null
@@ -49,6 +50,10 @@ export function agendaRecente(cliente: ClienteNaRota, hoje: string): { data: str
       }
     }
   }
+  // A próxima cobrança é marcada à mão, então `rotaDesde` não a corta. No empate com um
+  // dia de visita, vale o dia, que tem ordem em `ordemPorDia`.
+  const cobranca = cliente.proximaCobranca
+  if (cobranca && cobranca <= hoje && (!recente || cobranca > recente.data)) return { data: cobranca, dia: null }
   return recente
 }
 
@@ -93,8 +98,14 @@ function chaveDoDia(cliente: ClienteNaRota, dia: number): number {
 }
 
 function chaveDeHoje(cliente: ClienteNaRota, estado: EstadoNaRota, hoje: string): number {
-  if (!estado.atrasado) return chaveDoDia(cliente, estado.diaAgendado!)
-  if (cliente.ordemDoDia?.data === hoje && Number.isFinite(cliente.ordemDoDia.valor)) return cliente.ordemDoDia.valor
+  if (!estado.atrasado && estado.diaAgendado !== null) return chaveDoDia(cliente, estado.diaAgendado)
+  const ordem = cliente.ordemDoDia
+  // Cobrança de hoje: sem dia do mês, não há `ordemPorDia`; sem ordem de hoje, vale o número.
+  // Uma ordem de hoje gravada quando ele ainda era atrasado o deixaria dentro do bloco.
+  if (ordem?.data === hoje && Number.isFinite(ordem.valor) && (estado.atrasado || ordem.valor < BASE_ATRASADO)) {
+    return ordem.valor
+  }
+  if (!estado.atrasado) return BASE_SEM_ORDEM + cliente.numero
   return BASE_ATRASADO + diferencaEmDias('2000-01-01', estado.agendadoPara!) * ESPACO_POR_DIA + cliente.numero
 }
 
@@ -131,11 +142,19 @@ export function rotaDaData<C extends ClienteNaRota>(clientes: readonly C[], data
   return itens.sort(compararChaves)
 }
 
+export function cobrancasDaData<C extends ClienteNaRota>(clientes: readonly C[], data: string): C[] {
+  return clientes
+    .filter((cliente) => !cliente.arquivado && cliente.proximaCobranca === data && diaNaData(cliente, data) === null)
+    .sort((a, b) => a.numero - b.numero)
+}
+
 export function contagemPorData(clientes: readonly ClienteNaRota[], ano: number, mes: number): Map<string, number> {
   const contagem = new Map<string, number>()
+  const doMes = dataDaVisita(ano, mes, 1).slice(0, 7)
   for (const cliente of clientes) {
     if (cliente.arquivado) continue
     const datas = new Set((cliente.diasDeVisita ?? []).map((dia) => dataDaVisita(ano, mes, dia)))
+    if (cliente.proximaCobranca?.slice(0, 7) === doMes) datas.add(cliente.proximaCobranca)
     for (const data of datas) contagem.set(data, (contagem.get(data) ?? 0) + 1)
   }
   return contagem
@@ -211,13 +230,16 @@ export function arrasteNaRotaDeHoje(
   const anterior = nova[para - 1]?.chave ?? null
   const proxima = nova[para + 1]?.chave ?? null
   const chave = doDia ? chaveDoDiaEntre(anterior, proxima) : chaveEntre(anterior, proxima)
+  // Atrasado e cliente de cobrança (sem dia do mês) gravam a ordem de hoje.
   const alteracao = (item: ItemDaRota<ClienteNaRota>, valor: number): Reordenacao => {
-    if (item.estado.atrasado) return { clienteId: item.cliente.id, tipo: 'hoje', data: hoje, valor }
-    return { clienteId: item.cliente.id, tipo: 'dia', dia: item.estado.diaAgendado!, valor }
+    const dia = item.estado.diaAgendado
+    if (item.estado.atrasado || dia === null) return { clienteId: item.cliente.id, tipo: 'hoje', data: hoje, valor }
+    return { clienteId: item.cliente.id, tipo: 'dia', dia, valor }
   }
   if (chave !== null) return [alteracao(movido, chave)]
   const alteracoes = nova.map((item, i) => alteracao(item, PASSO * (i + 1)))
-  const dias = new Set(nova.filter((item) => !item.estado.atrasado).map((item) => item.estado.diaAgendado!))
+  const dias = new Set(nova.flatMap((item) =>
+    !item.estado.atrasado && item.estado.diaAgendado !== null ? [item.estado.diaAgendado] : []))
   for (const dia of dias) {
     const reordenadosNesteDia = new Set(alteracoes.filter((a) => a.tipo === 'dia' && a.dia === dia).map((a) => a.clienteId))
     const restantesDoDia = rotaDoDia(todos, dia).filter((item) => !reordenadosNesteDia.has(item.cliente.id))
