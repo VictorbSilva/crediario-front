@@ -2040,6 +2040,48 @@ espelho do que o código deve produzir — mas **nada automatiza essa comparaç�
 `vitest.rules.config.ts` deliberadamente não importa de `src/`. É conferência manual,
 e está registrada aqui por isso.
 
+### Itens da venda — aqui a validação do código é a única (30/10/2026)
+
+Pedido do dono: cada venda registra a quantidade, a descrição e o valor de cada produto. O
+formulário troca o campo "Valor" por uma lista de itens, e o total **não é mais digitado**:
+`valorTotalCentavos` sai de `totalDosItens`, a soma de `quantidade × valorUnitarioCentavos`.
+As parcelas continuam saindo do total, como antes, e "parcelas demais para este valor"
+passa a conferir contra a soma dos itens.
+
+**O resto desta seção é sobre o formulário espelhar a regra. Para `itens`, não há o que
+espelhar.** A regra confere só que `itens` é uma lista de 1 a 30 elementos — a linguagem de
+regras não percorre os elementos (AVISO na seção dos itens em `firestore.rules`). Então:
+
+- cada item precisa ter `quantidade` inteira de 1 a 999, `descricao` de 1 a 120 caracteres
+  depois do `trim` e `valorUnitarioCentavos` inteiro maior que zero — **só `validarItens`
+  confere isso**;
+- a soma precisa ser inteiro exato (`Number.isSafeInteger`) e bater com
+  `valorTotalCentavos` — **só `totalDosItens` garante isso**;
+- os tetos de 999 e de 120 caracteres não existem na regra. Se mudarem, mudam só em
+  `LIMITES_VENDA`.
+
+O risco aqui é o contrário do zero centavo acima. Lá, o erro do código vira **recusa**
+silenciosa e atrasada. Aqui, vira **aceitação** silenciosa: o servidor grava o item errado
+ou o total que não bate, e `imutaveisPreservados()` não deixa corrigir nem `itens` nem
+`valorTotalCentavos` depois. Por isso `montarCamposVenda` não confia no formulário: monta
+os itens por `lerItens` e **lança** se algum não passar, antes de qualquer coisa chegar ao
+`writeBatch`. A mensagem do erro está nos testes, para o guarda não sumir.
+
+Soma grande demais não é teórica: 999 unidades de um valor de 13 dígitos cabem nos campos
+(o valor unitário aceita 15 caracteres) e passam de 9 × 10^15. `validarItens` devolve
+"Total grande demais" no erro geral, e o teste `total grande demais aparece ao lançar e não
+grava` cobre isso pela tela.
+
+**Venda antiga continua sem `itens`.** `paraVenda` deixa o campo `undefined`, e
+`VendaExpansivel` só mostra a lista quando há itens. Não existe migração, nem pode existir:
+a regra recusa acrescentar `itens` a uma venda já gravada.
+
+**A leitura confia no formato.** `paraVenda` copia `itens` como veio, sem conferir cada
+elemento. Uma venda gravada fora do app com `itens: ['panela']` passaria pela regra e
+apareceria na lista como uma linha sem quantidade nem descrição, com traços no lugar dos
+valores — sem quebrar a tela (`formatarCentavos` devolve "—" para o que não é número), mas
+sem sentido. Só o app grava vendas hoje, então ficou assim.
+
 ## src/data/useCarne.ts — a venda e as parcelas vão num lote só
 
 `registrarVenda` usa `writeBatch`, não vários `setDoc`. Não é preferência de estilo.
