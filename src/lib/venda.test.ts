@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   avisoDeValorAlto,
+  entradaItemVazia,
   entradaPagamentoVazia,
   entradaVendaVazia,
   formatarParaCampo,
@@ -10,17 +11,26 @@ import {
   parseInteiro,
   parseTaxa,
   podeCancelarVenda,
+  totalDosItens,
+  validarItens,
   validarPagamento,
   validarVenda,
 } from './venda'
-import type { EntradaPagamento, EntradaVenda } from './venda'
+import type { EntradaItem, EntradaPagamento, EntradaVenda } from './venda'
 
 const CONTEXTO = { agora: new Date(2026, 8, 22), dispositivo: 'ab12cd34' }
+
+function item(extras: Partial<EntradaItem> = {}): EntradaItem {
+  return { ...entradaItemVazia(), descricao: 'Panela', valorUnitario: '10,00', ...extras }
+}
+
+/** Venda de um item só, de quantidade 1: o total é o valor unitário. */
+const valor = (valorUnitario: string): Partial<EntradaVenda> => ({ itens: [item({ valorUnitario })] })
 
 function venda(extras: Partial<EntradaVenda> = {}): EntradaVenda {
   return {
     ...entradaVendaVazia(new Date(2026, 8, 22)),
-    valor: '300,00',
+    ...valor('300,00'),
     numeroParcelas: '3',
     diaVencimento: '10',
     ...extras,
@@ -87,11 +97,121 @@ describe('parseTaxa', () => {
 })
 
 describe('entradaVendaVazia', () => {
-  it('nasce em branco, com a data de hoje, o dia de hoje como vencimento e multa e juros desligados', () => {
-    expect(entradaVendaVazia(new Date(2026, 8, 5, 23, 30))).toEqual({
-      dataVenda: '2026-09-05', valor: '', numeroParcelas: '', diaVencimento: '5', cobrarTaxas: false,
+  it('nasce em branco, com um item de quantidade 1, a data de hoje, o dia de hoje como vencimento e multa e juros desligados', () => {
+    expect(entradaVendaVazia(new Date(2026, 8, 5, 23, 30))).toStrictEqual({
+      dataVenda: '2026-09-05', itens: [{ quantidade: '1', descricao: '', valorUnitario: '' }],
+      numeroParcelas: '', diaVencimento: '5', cobrarTaxas: false,
       multaTipo: 'percentual', multaPercentual: '', multaFixa: '', jurosPercentualDia: '', observacao: '',
     })
+  })
+})
+
+describe('entradaItemVazia', () => {
+  it('nasce com quantidade 1 e o resto em branco', () => {
+    expect(entradaItemVazia()).toStrictEqual({ quantidade: '1', descricao: '', valorUnitario: '' })
+  })
+})
+
+describe('validarItens', () => {
+  const errosDo = (extras: Partial<EntradaItem>) => validarItens([item(extras)]).porItem[0]
+
+  it('item completo não tem erro, e a lista não tem erro geral', () => {
+    expect(validarItens([item(), item({ quantidade: '2' })])).toStrictEqual({ porItem: [{}, {}] })
+  })
+
+  it('quantidade vazia, zero, acima de 999 ou com vírgula é recusada', () => {
+    expect(errosDo({ quantidade: '' })).toStrictEqual({ quantidade: 'Informe a quantidade' })
+    expect(errosDo({ quantidade: '   ' })).toStrictEqual({ quantidade: 'Informe a quantidade' })
+    expect(errosDo({ quantidade: '0' })).toStrictEqual({ quantidade: 'Pelo menos 1' })
+    expect(errosDo({ quantidade: '1000' })).toStrictEqual({ quantidade: 'No máximo 999' })
+    expect(errosDo({ quantidade: '1,5' })).toStrictEqual({ quantidade: 'Só número inteiro' })
+    expect(errosDo({ quantidade: '-1' })).toStrictEqual({ quantidade: 'Só número inteiro' })
+  })
+
+  it('as bordas da quantidade valem: 1 e 999', () => {
+    expect(errosDo({ quantidade: '1' })).toStrictEqual({})
+    expect(errosDo({ quantidade: '999' })).toStrictEqual({})
+  })
+
+  it('descrição vazia, só de espaços ou com 121 caracteres é recusada; 120 com espaços em volta passa', () => {
+    expect(errosDo({ descricao: '' })).toStrictEqual({ descricao: 'Informe a descrição' })
+    expect(errosDo({ descricao: '   ' })).toStrictEqual({ descricao: 'Informe a descrição' })
+    expect(errosDo({ descricao: 'a'.repeat(121) })).toStrictEqual({ descricao: 'No máximo 120 caracteres' })
+    expect(errosDo({ descricao: 'a'.repeat(120) })).toStrictEqual({})
+    expect(errosDo({ descricao: `  ${'a'.repeat(120)}  ` })).toStrictEqual({})
+  })
+
+  it('valor unitário vazio, ilegível ou zero é recusado; um centavo passa', () => {
+    expect(errosDo({ valorUnitario: '' })).toStrictEqual({ valorUnitario: 'Informe o valor' })
+    expect(errosDo({ valorUnitario: 'abc' })).toStrictEqual({ valorUnitario: 'Informe o valor' })
+    expect(errosDo({ valorUnitario: '0,00' })).toStrictEqual({ valorUnitario: 'O valor precisa ser maior que zero' })
+    expect(errosDo({ valorUnitario: '0,01' })).toStrictEqual({})
+  })
+
+  it('acusa cada campo errado do item, e só no item errado', () => {
+    const { porItem } = validarItens([item(), item({ quantidade: '0', descricao: '', valorUnitario: '' })])
+
+    expect(porItem).toStrictEqual([
+      {},
+      { quantidade: 'Pelo menos 1', descricao: 'Informe a descrição', valorUnitario: 'Informe o valor' },
+    ])
+  })
+
+  it('lista vazia é recusada no geral', () => {
+    expect(validarItens([])).toStrictEqual({ porItem: [], geral: 'Inclua pelo menos um item' })
+  })
+
+  it('31 itens é recusado no geral, que é o teto da regra; 30 passa', () => {
+    const itens = (quantos: number) => Array.from({ length: quantos }, () => item())
+
+    expect(validarItens(itens(31)).geral).toBe('No máximo 30 itens')
+    expect(validarItens(itens(30)).geral).toBeUndefined()
+  })
+
+  it('itens válidos cuja soma não é inteiro seguro são recusados no geral', () => {
+    // 5 × 10^15 centavos cada: um só cabe, dois passam do maior inteiro exato.
+    const caro = item({ valorUnitario: '50.000.000.000.000,00' })
+
+    expect(validarItens([caro]).geral).toBeUndefined()
+    expect(validarItens([caro, caro])).toStrictEqual({ porItem: [{}, {}], geral: 'Total grande demais' })
+  })
+
+  it('com item errado, não fala em total grande demais', () => {
+    expect(validarItens([item({ quantidade: '0' })]).geral).toBeUndefined()
+  })
+})
+
+describe('totalDosItens', () => {
+  it('soma quantidade vezes valor unitário de cada item, em centavos', () => {
+    expect(totalDosItens([
+      item({ quantidade: '2', valorUnitario: 'R$ 49,90' }),
+      item({ quantidade: '1', valorUnitario: '10' }),
+    ])).toBe(10_980)
+  })
+
+  it('a quantidade multiplica: 3 × um centavo são três centavos', () => {
+    expect(totalDosItens([item({ quantidade: '3', valorUnitario: '0,01' })])).toBe(3)
+  })
+
+  it('qualquer item inválido anula o total', () => {
+    for (const extras of [{ quantidade: '0' }, { descricao: ' ' }, { valorUnitario: '0,00' }]) {
+      expect(totalDosItens([item(), item(extras)])).toBeNull()
+    }
+  })
+
+  it('lista vazia ou acima de 30 itens não tem total', () => {
+    expect(totalDosItens([])).toBeNull()
+    expect(totalDosItens(Array.from({ length: 31 }, () => item({ valorUnitario: '0,01' })))).toBeNull()
+    expect(totalDosItens(Array.from({ length: 30 }, () => item({ valorUnitario: '0,01' })))).toBe(30)
+  })
+
+  it('total que não é inteiro seguro vira nulo, no produto e na soma', () => {
+    // 999 × 99.999.999.999,99 passa de 9 × 10^15.
+    expect(totalDosItens([item({ quantidade: '999', valorUnitario: '99.999.999.999,99' })])).toBeNull()
+
+    const caro = item({ valorUnitario: '50.000.000.000.000,00' })
+    expect(totalDosItens([caro])).toBe(5_000_000_000_000_000)
+    expect(totalDosItens([caro, caro])).toBeNull()
   })
 })
 
@@ -100,15 +220,31 @@ describe('validarVenda', () => {
     expect(validarVenda(venda())).toEqual({})
   })
 
-  it('cobra valor e parcelas', () => {
-    const erros = validarVenda(venda({ valor: '', numeroParcelas: '' }))
+  it('cobra itens e parcelas', () => {
+    const erros = validarVenda(venda({ itens: [], numeroParcelas: '' }))
 
-    expect(erros.valor).toBeDefined()
+    expect(erros.itens).toBe('Inclua pelo menos um item')
     expect(erros.numeroParcelas).toBeDefined()
   })
 
-  it('recusa valor zero', () => {
-    expect(validarVenda(venda({ valor: '0,00' })).valor).toBeDefined()
+  it('item com erro bloqueia a venda', () => {
+    expect(validarVenda(venda(valor('0,00'))).itens).toBe('Confira os itens')
+    expect(validarVenda(venda({ itens: [item(), item({ descricao: '' })] })).itens).toBe('Confira os itens')
+  })
+
+  it('o erro geral dos itens tem precedência sobre o de cada item', () => {
+    expect(validarVenda(venda({ itens: Array.from({ length: 31 }, () => item({ quantidade: '0' })) })).itens)
+      .toBe('No máximo 30 itens')
+  })
+
+  it('"parcelas demais" usa a soma dos itens, com a quantidade, e não um item só', () => {
+    const doisItens = { itens: [item({ valorUnitario: '0,01' }), item({ valorUnitario: '0,02' })] }
+    const tresUnidades = { itens: [item({ quantidade: '3', valorUnitario: '0,01' })] }
+
+    expect(validarVenda(venda({ ...doisItens, numeroParcelas: '4' })).numeroParcelas).toBeDefined()
+    expect(validarVenda(venda({ ...doisItens, numeroParcelas: '3' })).numeroParcelas).toBeUndefined()
+    expect(validarVenda(venda({ ...tresUnidades, numeroParcelas: '4' })).numeroParcelas).toBeDefined()
+    expect(validarVenda(venda({ ...tresUnidades, numeroParcelas: '3' })).numeroParcelas).toBeUndefined()
   })
 
   it('recusa acima de 120 parcelas, que é o teto da regra do Firestore', () => {
@@ -119,8 +255,8 @@ describe('validarVenda', () => {
   it('recusa parcelas demais para o valor — a regra exige parcela > 0 centavos', () => {
     // R$ 0,03 em 12 parcelas daria onze parcelas de zero centavo, que o
     // Firestore recusaria só na sincronização.
-    expect(validarVenda(venda({ valor: '0,03', numeroParcelas: '12' })).numeroParcelas).toBeDefined()
-    expect(validarVenda(venda({ valor: '0,03', numeroParcelas: '3' })).numeroParcelas).toBeUndefined()
+    expect(validarVenda(venda({ ...valor('0,03'), numeroParcelas: '12' })).numeroParcelas).toBeDefined()
+    expect(validarVenda(venda({ ...valor('0,03'), numeroParcelas: '3' })).numeroParcelas).toBeUndefined()
   })
 
   it('pede pelo menos uma parcela e o dia do vencimento', () => {
@@ -156,10 +292,11 @@ describe('validarVenda', () => {
     }))).toEqual({})
   })
 
-  it('valor inválido acusa só no valor, não em "parcelas demais"', () => {
-    expect(validarVenda(venda({ valor: '0,00' })).numeroParcelas).toBeUndefined()
-    expect(validarVenda(venda({ valor: '' })).numeroParcelas).toBeUndefined()
-    expect(validarVenda(venda({ valor: 'abc' })).numeroParcelas).toBeUndefined()
+  it('item inválido acusa só nos itens, não em "parcelas demais"', () => {
+    expect(validarVenda(venda(valor('0,00'))).numeroParcelas).toBeUndefined()
+    expect(validarVenda(venda(valor(''))).numeroParcelas).toBeUndefined()
+    expect(validarVenda(venda(valor('abc'))).numeroParcelas).toBeUndefined()
+    expect(validarVenda(venda({ itens: [] })).numeroParcelas).toBeUndefined()
   })
 
   it('taxas escondidas não bloqueiam: sem multa e juros, nada delas é conferido, em nenhum tipo', () => {
@@ -272,13 +409,13 @@ describe('montarCamposVenda', () => {
   })
 
   it('a sobra da divisão vai para a última parcela', () => {
-    const { parcelas } = montarCamposVenda('c1', venda({ valor: '100,00' }), CONTEXTO)
+    const { parcelas } = montarCamposVenda('c1', venda(valor('100,00')), CONTEXTO)
 
     expect(parcelas.map((p) => p.valorCentavos)).toEqual([3_333, 3_333, 3_334])
   })
 
   it('valorParcelaCentavos é a parcela comum, não a última com a sobra', () => {
-    const { venda: v } = montarCamposVenda('c1', venda({ valor: '100,00' }), CONTEXTO)
+    const { venda: v } = montarCamposVenda('c1', venda(valor('100,00')), CONTEXTO)
 
     expect(v.valorParcelaCentavos).toBe(3_333)
   })
@@ -368,7 +505,7 @@ describe('montarCamposVenda', () => {
       for (const n of ['1', '3', '7', '12']) {
         const { venda: v, parcelas } = montarCamposVenda(
           'c1',
-          venda({ valor: total, numeroParcelas: n }),
+          venda({ ...valor(total), numeroParcelas: n }),
           CONTEXTO,
         )
         const soma = parcelas.reduce((acc, p) => acc + p.valorCentavos, 0)
@@ -381,18 +518,48 @@ describe('montarCamposVenda', () => {
   it('recusa montar o que a validação recusaria', () => {
     // A mensagem, e não só o tipo: sem o guarda, outro TypeError estouraria mais adiante.
     const montar = (extras: Partial<EntradaVenda>) => () => montarCamposVenda('c1', venda(extras), CONTEXTO)
-    const valor = 'montarCamposVenda recebeu um valor que não passou na validação'
+    const itens = 'montarCamposVenda recebeu itens que não passaram na validação'
     const parcelas = 'montarCamposVenda recebeu parcelas que não passaram na validação'
     const dia = 'montarCamposVenda recebeu um dia que não passou na validação'
 
-    expect(montar({ valor: '' })).toThrow(valor)
-    expect(montar({ valor: '0,00' })).toThrow(valor)
+    expect(montar(valor(''))).toThrow(itens)
+    expect(montar(valor('0,00'))).toThrow(itens)
+    expect(montar({ itens: [] })).toThrow(itens)
+    expect(montar({ itens: [item(), item({ quantidade: '0' })] })).toThrow(itens)
+    expect(montar({ itens: [item({ quantidade: '1000' })] })).toThrow(itens)
+    expect(montar({ itens: [item({ descricao: '   ' })] })).toThrow(itens)
+    expect(montar({ itens: [item({ descricao: 'a'.repeat(121) })] })).toThrow(itens)
+    expect(montar({ itens: Array.from({ length: 31 }, () => item()) })).toThrow(itens)
     expect(montar({ numeroParcelas: '' })).toThrow(parcelas)
     expect(montar({ numeroParcelas: '0' })).toThrow(parcelas)
     expect(montar({ diaVencimento: '' })).toThrow(dia)
     expect(montar({ diaVencimento: '0' })).toThrow(dia)
     expect(montar({ diaVencimento: '32' })).toThrow(dia)
-    expect(montar({ valor: '0,01', numeroParcelas: '1', diaVencimento: '1' })).not.toThrow()
+    expect(montar({ ...valor('0,01'), numeroParcelas: '1', diaVencimento: '1' })).not.toThrow()
+  })
+
+  it('grava os itens com a descrição aparada e o total igual à soma deles', () => {
+    const { venda: v, parcelas } = montarCamposVenda('c1', venda({
+      itens: [
+        { quantidade: ' 2 ', descricao: '  Panela  ', valorUnitario: 'R$ 49,90' },
+        { quantidade: '1', descricao: 'Jogo de copos', valorUnitario: '10' },
+      ],
+    }), CONTEXTO)
+
+    expect(v.itens).toStrictEqual([
+      { quantidade: 2, descricao: 'Panela', valorUnitarioCentavos: 4_990 },
+      { quantidade: 1, descricao: 'Jogo de copos', valorUnitarioCentavos: 1_000 },
+    ])
+    expect(v.valorTotalCentavos).toBe(10_980)
+    expect(parcelas.map((p) => p.valorCentavos)).toEqual([3_660, 3_660, 3_660])
+    expect(parcelas.reduce((soma, p) => soma + p.valorCentavos, 0)).toBe(10_980)
+  })
+
+  it('o documento não leva o texto digitado, só os números', () => {
+    const { venda: v } = montarCamposVenda('c1', venda(), CONTEXTO)
+
+    expect('valor' in v).toBe(false)
+    expect(Object.keys(v.itens[0]).sort()).toEqual(['descricao', 'quantidade', 'valorUnitarioCentavos'])
   })
 })
 

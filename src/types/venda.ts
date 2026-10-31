@@ -4,6 +4,12 @@ export type TipoDeMulta = 'percentual' | 'fixo'
 
 export type FormaDePagamento = 'pix' | 'dinheiro' | 'cartao'
 
+export type ItemDaVenda = {
+  quantidade: number
+  descricao: string
+  valorUnitarioCentavos: number
+}
+
 export type Venda = {
   id: string
   clientId: string
@@ -17,6 +23,8 @@ export type Venda = {
   multaFixaCentavos?: number
   jurosPercentualDia?: number
   observacao?: string
+  /** Ausente nas vendas lançadas antes dos itens (30/10/2026). */
+  itens?: ItemDaVenda[]
   cancelada?: boolean
   canceladaEm?: string
   versaoCalculo: number

@@ -294,6 +294,45 @@ describe('CarneDoCliente — a venda aberta', () => {
     expect(screen.queryByText('Vencida há 5 dias')).toBeNull()
   })
 
+  it('venda com itens lista cada um, com quantidade, valor unitário e subtotal, antes das parcelas', () => {
+    const comItens = venda('v1', {
+      valorTotalCentavos: 10980, numeroParcelas: 3, valorParcelaCentavos: 3660,
+      itens: [
+        { quantidade: 2, descricao: 'Panela', valorUnitarioCentavos: 4990 },
+        { quantidade: 1, descricao: 'Jogo de copos', valorUnitarioCentavos: 1000 },
+      ],
+    })
+    render(<CarneDoCliente dados={dados([comItens], parcelasDe(comItens), [])} />)
+    abrirVenda()
+
+    const lista = screen.getByRole('list', { name: 'Itens da venda' })
+    expect(within(lista).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      `2 × Panela — ${formatarCentavos(4990)} = ${formatarCentavos(9980)}`,
+      `1 × Jogo de copos — ${formatarCentavos(1000)} = ${formatarCentavos(1000)}`,
+    ])
+    const primeiraParcela = screen.getByText('1/3')
+    expect(lista.compareDocumentPosition(primeiraParcela) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('venda antiga, sem itens, abre como antes, sem lista de itens', () => {
+    render(<CarneDoCliente dados={PADRAO()} />)
+    abrirVenda()
+
+    expect(screen.queryByRole('list', { name: 'Itens da venda' })).toBeNull()
+    expect(screen.getByText('Vencida há 5 dias')).toBeTruthy()
+  })
+
+  it('venda cancelada com itens ainda mostra o que foi vendido', () => {
+    const cancelada = venda('v1', {
+      cancelada: true, canceladaEm: '2026-10-01',
+      itens: [{ quantidade: 1, descricao: 'Geladeira', valorUnitarioCentavos: 30000 }],
+    })
+    render(<CarneDoCliente dados={dados([cancelada], parcelasDe(cancelada), [])} />)
+    abrirVenda()
+
+    expect(within(screen.getByRole('list', { name: 'Itens da venda' })).getByText(/Geladeira/)).toBeTruthy()
+  })
+
   it('no painel só de leitura, não há botão de escrita nenhum', () => {
     render(<CarneDoCliente dados={PADRAO()} />)
     abrirVenda()
@@ -566,10 +605,35 @@ describe('CarneDoCliente — nova venda', () => {
     return carne
   }
 
+  function item(numero: number) {
+    return within(within(dialogoAberto()).getByRole('group', { name: `Item ${numero}` }))
+  }
+
+  function digitarNoItem(numero: number, rotulo: string, valor: string) {
+    const campo = item(numero).getByLabelText(rotulo)
+    fireEvent.change(campo, { target: { value: valor } })
+    fireEvent.blur(campo)
+  }
+
+  function preencherItem(numero: number, descricao: string, valorUnitario: string, quantidade = '1') {
+    digitarNoItem(numero, 'Qtd', quantidade)
+    digitarNoItem(numero, 'Descrição', descricao)
+    digitarNoItem(numero, 'Valor unitário', valorUnitario)
+  }
+
+  function adicionarItem() {
+    fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Adicionar item' }))
+  }
+
+  const totalNaTela = () => within(dialogoAberto()).getByRole('status', { name: 'Total' }).textContent
+
   it('a prévia do carnê é a mesma conta que vai ser gravada, com a sobra na última', () => {
     abrirFormulario()
 
-    digitar('Valor total', '100,00')
+    // 2 × 25,00 + 1 × 50,00: o total da prévia sai da soma, com a quantidade.
+    preencherItem(1, 'Panela', '25,00', '2')
+    adicionarItem()
+    preencherItem(2, 'Jogo de copos', '50,00')
     digitar('Parcelas', '3')
     digitar('Dia do vencimento', '10')
 
@@ -583,7 +647,7 @@ describe('CarneDoCliente — nova venda', () => {
   it('divisão exata não fala em sobra', () => {
     abrirFormulario()
 
-    digitar('Valor total', '300,00')
+    preencherItem(1, 'Panela', '300,00')
     digitar('Parcelas', '3')
     digitar('Dia do vencimento', '10')
 
@@ -605,12 +669,16 @@ describe('CarneDoCliente — nova venda', () => {
       return id ? document.getElementById(id)?.textContent : undefined
     }
 
-    digitar('Valor total', 'abc')
+    digitarNoItem(1, 'Qtd', '0')
+    digitarNoItem(1, 'Descrição', '   ')
+    digitarNoItem(1, 'Valor unitário', 'abc')
     digitar('Dia do vencimento', '32')
     digitar('Data da venda', '')
     digitar(/^Observação/, 'a'.repeat(501))
 
-    expect(erroDe('Valor total')).toBe('Informe o valor da venda')
+    expect(erroDe('Qtd')).toBe('Pelo menos 1')
+    expect(erroDe('Descrição')).toBe('Informe a descrição')
+    expect(erroDe('Valor unitário')).toBe('Informe o valor')
     expect(erroDe('Dia do vencimento')).toBe('Entre 1 e 31')
     expect(erroDe('Data da venda')).toBe('Data inválida')
     expect(erroDe(/^Observação/)).toBeTruthy()
@@ -618,7 +686,7 @@ describe('CarneDoCliente — nova venda', () => {
 
   it('a data da venda muda a prévia; data que estoura o ano 9999 some com a prévia', () => {
     abrirFormulario()
-    digitar('Valor total', '300,00')
+    preencherItem(1, 'Panela', '300,00')
     digitar('Parcelas', '3')
     digitar('Dia do vencimento', '10')
 
@@ -633,7 +701,7 @@ describe('CarneDoCliente — nova venda', () => {
   it('multa percentual nasce marcada, e o que se digita nela vai para a venda', () => {
     const carne = abrirFormulario()
     const dialogo = dialogoAberto()
-    digitar('Valor total', '300,00')
+    preencherItem(1, 'Panela', '300,00')
     digitar('Parcelas', '3')
     digitar('Dia do vencimento', '10')
     fireEvent.click(within(dialogo).getByRole('checkbox'))
@@ -653,7 +721,7 @@ describe('CarneDoCliente — nova venda', () => {
     fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Lançar venda' }))
     expect(within(dialogoAberto()).getByText('Confira os campos marcados antes de lançar.')).toBeTruthy()
 
-    digitar('Valor total', '300,00')
+    preencherItem(1, 'Panela', '300,00')
     digitar('Parcelas', '3')
     digitar('Dia do vencimento', '10')
 
@@ -666,7 +734,8 @@ describe('CarneDoCliente — nova venda', () => {
     fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Lançar venda' }))
 
     expect(within(dialogoAberto()).getByText('Confira os campos marcados antes de lançar.')).toBeTruthy()
-    expect(within(dialogoAberto()).getByText('Informe o valor da venda')).toBeTruthy()
+    expect(item(1).getByText('Informe a descrição')).toBeTruthy()
+    expect(item(1).getByText('Informe o valor')).toBeTruthy()
     expect(within(dialogoAberto()).queryByText('Como fica o carnê')).toBeNull()
     expect(carne.registrarVenda).not.toHaveBeenCalled()
   })
@@ -685,7 +754,7 @@ describe('CarneDoCliente — nova venda', () => {
   it('multa e juros nascem desligados; ligados, aceitam multa percentual ou fixa', () => {
     const carne = abrirFormulario()
     const dialogo = dialogoAberto()
-    digitar('Valor total', '300,00')
+    preencherItem(1, 'Panela', '300,00')
     digitar('Parcelas', '3')
     digitar('Dia do vencimento', '10')
 
@@ -713,11 +782,140 @@ describe('CarneDoCliente — nova venda', () => {
 
     expect(carne.registrarVenda).toHaveBeenCalledWith(
       expect.objectContaining({
-        valor: '300,00', numeroParcelas: '3', diaVencimento: '10', dataVenda: HOJE,
+        itens: [{ quantidade: '1', descricao: 'Panela', valorUnitario: '300,00' }],
+        numeroParcelas: '3', diaVencimento: '10', dataVenda: HOJE,
         cobrarTaxas: true, multaTipo: 'fixo', multaFixa: '5,00', jurosPercentualDia: '0,5',
       }),
     )
     expect(document.querySelector('dialog')).toBeNull()
+  })
+
+  it('o formulário nasce com um item de quantidade 1, e não tem mais campo de valor da venda', () => {
+    abrirFormulario()
+
+    expect(within(dialogoAberto()).getAllByRole('group', { name: /^Item \d+$/ })).toHaveLength(1)
+    expect((item(1).getByLabelText('Qtd') as HTMLInputElement).value).toBe('1')
+    expect((item(1).getByLabelText('Descrição') as HTMLInputElement).value).toBe('')
+    expect((item(1).getByLabelText('Valor unitário') as HTMLInputElement).value).toBe('')
+    expect(within(dialogoAberto()).queryByLabelText('Valor total')).toBeNull()
+    expect(totalNaTela()).toBe('—')
+  })
+
+  it('o total é a soma dos itens, e cada linha mostra o próprio subtotal', () => {
+    abrirFormulario()
+
+    preencherItem(1, 'Panela', 'R$ 49,90', '2')
+    expect(totalNaTela()).toBe(formatarCentavos(9980))
+    expect(item(1).getByText(reais(9980))).toBeTruthy()
+
+    adicionarItem()
+    // A linha nova, em branco, ainda não tem subtotal e tira o total da tela.
+    expect(item(2).getByText('—')).toBeTruthy()
+    expect(totalNaTela()).toBe('—')
+
+    preencherItem(2, 'Jogo de copos', '10')
+    expect(item(2).getByText(reais(1000))).toBeTruthy()
+    expect(totalNaTela()).toBe(formatarCentavos(10980))
+  })
+
+  it('lança com todos os itens digitados', () => {
+    const carne = abrirFormulario()
+
+    preencherItem(1, 'Panela', '49,90', '2')
+    adicionarItem()
+    preencherItem(2, 'Jogo de copos', '10')
+    digitar('Parcelas', '3')
+    digitar('Dia do vencimento', '10')
+    fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Lançar venda' }))
+
+    expect(carne.registrarVenda).toHaveBeenCalledWith(expect.objectContaining({
+      itens: [
+        { quantidade: '2', descricao: 'Panela', valorUnitario: '49,90' },
+        { quantidade: '1', descricao: 'Jogo de copos', valorUnitario: '10' },
+      ],
+    }))
+  })
+
+  it('item com erro bloqueia o lançamento mesmo com o resto certo', () => {
+    const carne = abrirFormulario()
+
+    preencherItem(1, 'Panela', '300,00')
+    adicionarItem()
+    digitar('Parcelas', '3')
+    digitar('Dia do vencimento', '10')
+    fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Lançar venda' }))
+
+    expect(item(2).getByText('Informe a descrição')).toBeTruthy()
+    expect(item(1).queryByRole('alert')).toBeNull()
+    expect(carne.registrarVenda).not.toHaveBeenCalled()
+  })
+
+  it('só deixa remover com mais de uma linha', () => {
+    abrirFormulario()
+    const remover = (numero: number) =>
+      within(dialogoAberto()).getByRole('button', { name: `Remover item ${numero}` }) as HTMLButtonElement
+
+    expect(remover(1).disabled).toBe(true)
+    adicionarItem()
+    expect(remover(1).disabled).toBe(false)
+    expect(remover(2).disabled).toBe(false)
+
+    fireEvent.click(remover(2))
+    expect(within(dialogoAberto()).getAllByRole('group', { name: /^Item \d+$/ })).toHaveLength(1)
+    expect(remover(1).disabled).toBe(true)
+  })
+
+  it('remover a linha do meio leva os valores e os erros dela, não os da vizinha', () => {
+    abrirFormulario()
+    preencherItem(1, 'Panela', '10,00')
+    adicionarItem()
+    digitarNoItem(2, 'Descrição', '')
+    adicionarItem()
+    preencherItem(3, 'Copos', '5,00')
+    adicionarItem()
+
+    expect(item(2).getByText('Informe a descrição')).toBeTruthy()
+    fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Remover item 1' }))
+
+    // A antiga linha 2 virou a 1 e continua acusando; a antiga 4, em branco e
+    // nunca tocada, virou a 3 e continua sem erro.
+    expect(item(1).getByText('Informe a descrição')).toBeTruthy()
+    expect((item(2).getByLabelText('Descrição') as HTMLInputElement).value).toBe('Copos')
+    expect(item(3).queryByRole('alert')).toBeNull()
+    expect(totalNaTela()).toBe('—')
+
+    // Depois de remover, posição e linha já não coincidem: sair do campo da
+    // linha 3 acusa nela.
+    digitarNoItem(3, 'Descrição', '')
+    expect(item(3).getByText('Informe a descrição')).toBeTruthy()
+  })
+
+  it('"Adicionar item" para em 30 linhas, que é o teto da regra', () => {
+    abrirFormulario()
+    const adicionar = within(dialogoAberto()).getByRole('button', { name: 'Adicionar item' }) as HTMLButtonElement
+
+    for (let i = 0; i < 28; i++) adicionarItem()
+    expect(adicionar.disabled).toBe(false)
+    adicionarItem()
+
+    expect(within(dialogoAberto()).getAllByRole('group', { name: /^Item \d+$/ })).toHaveLength(30)
+    expect(adicionar.disabled).toBe(true)
+  })
+
+  it('total grande demais aparece ao lançar e não grava', () => {
+    const carne = abrirFormulario()
+
+    // Cabe no campo (13 dígitos), mas 999 vezes isso passa do maior inteiro exato.
+    preencherItem(1, 'Panela', '9999999999999', '999')
+    digitar('Parcelas', '1')
+    digitar('Dia do vencimento', '10')
+    expect(totalNaTela()).toBe('—')
+    expect(within(dialogoAberto()).queryByText('Total grande demais')).toBeNull()
+
+    fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Lançar venda' }))
+
+    expect(within(dialogoAberto()).getByText('Total grande demais')).toBeTruthy()
+    expect(carne.registrarVenda).not.toHaveBeenCalled()
   })
 
   it('cancelar fecha o formulário sem gravar', () => {
