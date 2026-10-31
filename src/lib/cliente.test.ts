@@ -3,6 +3,8 @@ import {
   ENTRADA_CLIENTE_VAZIA,
   clienteComNumero,
   entradaDoCliente,
+  enderecoDoCliente,
+  proximoNumero,
   montarCamposCliente,
   montarEdicaoCliente,
   parseNumeroCadastro,
@@ -37,7 +39,9 @@ describe('entradaDoCliente', () => {
       nome: 'Ana',
       telefone: '(83) 99999-0000',
       cpf: '',
-      endereco: '',
+      rua: '',
+      bairro: '',
+      cidade: '',
       observacao: '',
       diasDeVisita: [],
     })
@@ -47,7 +51,7 @@ describe('entradaDoCliente', () => {
     const dados = entrada({
       telefone: '9999',
       cpf: '529.982.247-25',
-      endereco: 'Rua A',
+      rua: 'Rua A',
       observacao: 'Aviso',
       diasDeVisita: [5, 20],
     })
@@ -78,7 +82,9 @@ describe('validarEdicaoCliente', () => {
     { cpf: '529.982.247' },
     { cpf: '529.982.247-24' },
     { cpf: '123456789012' },
-    { endereco: 'a'.repeat(201) },
+    { rua: 'a'.repeat(121) },
+    { bairro: 'a'.repeat(81) },
+    { cidade: 'a'.repeat(81) },
     { observacao: 'a'.repeat(501) },
   ])('devolve os mesmos erros do cadastro para %j', (partes) => {
     const dados = entrada(partes)
@@ -98,7 +104,7 @@ describe('montarEdicaoCliente', () => {
         nome: '  Joana   Cláudia  ',
         telefone: '  (83) 99999-0000  ',
         cpf: ' 529.982.247-25 ',
-        endereco: ' Rua A ',
+        rua: ' Rua A ',
         observacao: ' Aviso ',
       }),
       contexto,
@@ -110,16 +116,16 @@ describe('montarEdicaoCliente', () => {
       telefoneDigits: '83999990000',
       cpf: '529.982.247-25',
       cpfDigits: '52998224725',
-      endereco: 'Rua A',
+      rua: 'Rua A',
       observacao: 'Aviso',
       atualizadoPor: 'abc',
     })
-    expect(remover).toEqual(['diasDeVisita', 'rotaDesde'])
+    expect(remover).toEqual(['bairro', 'cidade', 'endereco', 'diasDeVisita', 'rotaDesde'])
   })
 
   it.each(['', '   '])('remove opcionais apagados (%j), incluindo os pares de dígitos', (vazio) => {
     const { definir, remover } = montarEdicaoCliente(
-      entrada({ telefone: vazio, cpf: vazio, endereco: vazio, observacao: vazio }),
+      entrada({ telefone: vazio, cpf: vazio, rua: vazio, observacao: vazio }),
       contexto,
     )
     expect(definir).toEqual({
@@ -128,12 +134,14 @@ describe('montarEdicaoCliente', () => {
       atualizadoPor: 'abc',
     })
     expect(remover.sort()).toEqual([
+      'bairro',
+      'cidade',
       'cpf',
       'cpfDigits',
       'diasDeVisita',
-      'endereco',
       'observacao',
       'rotaDesde',
+      'rua',
       'telefone',
       'telefoneDigits',
     ])
@@ -144,7 +152,7 @@ describe('montarEdicaoCliente', () => {
       entrada({
         telefone: ' sem telefone ',
         cpf: ' sem CPF ',
-        endereco: 'Rua A',
+        rua: 'Rua A',
         observacao: 'Aviso',
       }),
       contexto,
@@ -153,7 +161,7 @@ describe('montarEdicaoCliente', () => {
     expect(definir.cpf).toBe('sem CPF')
     expect(definir).not.toHaveProperty('telefoneDigits')
     expect(definir).not.toHaveProperty('cpfDigits')
-    expect(remover.sort()).toEqual(['cpfDigits', 'diasDeVisita', 'rotaDesde', 'telefoneDigits'])
+    expect(remover.sort()).toEqual(['bairro', 'cidade', 'cpfDigits', 'diasDeVisita', 'endereco', 'rotaDesde', 'telefoneDigits'])
   })
 
   it('nunca define o número, datas de cadastro e criação ou o arquivamento', () => {
@@ -172,18 +180,18 @@ describe('montarEdicaoCliente', () => {
   it('não monta alterações quando o conteúdo limpo continua igual ao da abertura', () => {
     const original = entrada({ nome: 'Ana Paula', telefone: '9999' })
     expect(montarEdicaoCliente(
-      { ...original, nome: ' Ana   Paula ', telefone: ' 9999 ', endereco: '  ' },
+      { ...original, nome: ' Ana   Paula ', telefone: ' 9999 ', rua: '  ' },
       contexto,
       original,
     )).toEqual({ definir: { atualizadoPor: 'abc' }, remover: [] })
   })
 
   it('envia só o endereço alterado, preservando dados atualizados em outro aparelho', () => {
-    const original = entrada({ telefone: '9999', endereco: 'Rua A', diasDeVisita: [5, 20] })
+    const original = entrada({ telefone: '9999', rua: 'Rua A', diasDeVisita: [5, 20] })
     const edicao = montarEdicaoCliente(
-      { ...original, endereco: 'Rua B', diasDeVisita: [20, 5] }, contexto, original,
+      { ...original, rua: 'Rua B', diasDeVisita: [20, 5] }, contexto, original,
     )
-    expect(edicao).toEqual({ definir: { endereco: 'Rua B', atualizadoPor: 'abc' }, remover: [] })
+    expect(edicao).toEqual({ definir: { rua: 'Rua B', atualizadoPor: 'abc' }, remover: ['bairro', 'cidade', 'endereco'] })
     const documentoAtual = { nome: 'Nome novo', telefone: '8888', telefoneDigits: '8888' }
     expect({ ...documentoAtual, ...edicao.definir }).toMatchObject(documentoAtual)
   })
@@ -383,12 +391,12 @@ describe('validarCliente', () => {
 
   it('recusa endereço e observação acima do limite da regra', () => {
     const erros = validarCliente(
-      entrada({ endereco: 'a'.repeat(201), observacao: 'a'.repeat(501) }),
+      entrada({ rua: 'a'.repeat(121), observacao: 'a'.repeat(501) }),
       lista,
       'confiavel',
     )
 
-    expect(erros.endereco).toBe('Endereço muito longo: máximo 200 caracteres.')
+    expect(erros.rua).toBe('Rua muito longa: máximo 120 caracteres.')
     expect(erros.observacao).toBe('Observação muito longa: máximo 500 caracteres.')
   })
 
@@ -414,8 +422,8 @@ describe('validarCliente', () => {
     expect(valido({ cpf: '   529.982.247-25     ' }).cpf).toBeUndefined()
     expect(valido({ cpf: '529 . 982 . 247 -  25' }).cpf).toBe('CPF muito longo: máximo 20 caracteres.')
 
-    expect(valido({ endereco: 'a'.repeat(200) }).endereco).toBeUndefined()
-    expect(valido({ endereco: `${'a'.repeat(200)}   ` }).endereco).toBeUndefined()
+    expect(valido({ rua: 'a'.repeat(120) }).rua).toBeUndefined()
+    expect(valido({ rua: `${'a'.repeat(120)}   ` }).rua).toBeUndefined()
     expect(valido({ observacao: 'a'.repeat(500) }).observacao).toBeUndefined()
   })
 
@@ -452,7 +460,7 @@ describe('montarCamposCliente', () => {
         nome: '  Maria   Aparecida  Santos ',
         telefone: '(62) 98114-2270',
         cpf: '529.982.247-25',
-        endereco: 'Rua das Acácias, 412',
+        rua: 'Rua das Acácias, 412',
         observacao: 'Paga sempre no dia 5',
       }),
       CONTEXTO,
@@ -466,7 +474,7 @@ describe('montarCamposCliente', () => {
       telefoneDigits: '62981142270',
       cpf: '529.982.247-25',
       cpfDigits: '52998224725',
-      endereco: 'Rua das Acácias, 412',
+      rua: 'Rua das Acácias, 412',
       observacao: 'Paga sempre no dia 5',
       arquivado: false,
       cadastradoEm: '2026-09-21',
@@ -515,14 +523,14 @@ describe('montarCamposCliente', () => {
   it('apara os opcionais antes de gravar', () => {
     const campos = montarCamposCliente(
       entrada({
-        telefone: '  (11) 3333-4444  ', cpf: ' 529.982.247-25 ', endereco: '  Rua A, 10 ', observacao: ' manhã ',
+        telefone: '  (11) 3333-4444  ', cpf: ' 529.982.247-25 ', rua: '  Rua A, 10 ', observacao: ' manhã ',
       }),
       CONTEXTO,
     )
 
     expect(campos).toMatchObject({
       telefone: '(11) 3333-4444', telefoneDigits: '1133334444', cpf: '529.982.247-25',
-      cpfDigits: '52998224725', endereco: 'Rua A, 10', observacao: 'manhã',
+      cpfDigits: '52998224725', rua: 'Rua A, 10', observacao: 'manhã',
     })
   })
 
@@ -533,5 +541,97 @@ describe('montarCamposCliente', () => {
     expect(campos.cpf).toBe('não informou')
     expect(campos).not.toHaveProperty('telefoneDigits')
     expect(campos).not.toHaveProperty('cpfDigits')
+  })
+})
+
+
+describe('proximoNumero', () => {
+  it('sugere 1 para lista vazia', () => {
+    expect(proximoNumero([])).toBe(1)
+  })
+
+  it('usa o maior número de todos os clientes, inclusive arquivados, sem depender da ordem', () => {
+    const clientes = [
+      { numero: 7, nome: 'B' },
+      { numero: 12, nome: 'C', arquivado: true },
+      { numero: 3, nome: 'A' },
+    ]
+    expect(proximoNumero(clientes)).toBe(13)
+    expect(proximoNumero([...clientes].reverse())).toBe(13)
+  })
+})
+
+describe('enderecoDoCliente', () => {
+  it('junta os três campos e prefere o endereço novo ao antigo', () => {
+    expect(enderecoDoCliente({
+      rua: 'Rua A, 10', bairro: 'Centro', cidade: 'João Pessoa', endereco: 'Antigo',
+    })).toBe('Rua A, 10 · Centro · João Pessoa')
+  })
+
+  it('omite partes vazias e apara espaços', () => {
+    expect(enderecoDoCliente({ rua: ' Rua A, 10 ', bairro: ' ', cidade: 'João Pessoa' }))
+      .toBe('Rua A, 10 · João Pessoa')
+    expect(enderecoDoCliente({ bairro: 'Centro' })).toBe('Centro')
+    expect(enderecoDoCliente({ cidade: 'João Pessoa' })).toBe('João Pessoa')
+  })
+
+  it('usa o endereço antigo quando não há partes novas e devolve vazio quando não há nada', () => {
+    expect(enderecoDoCliente({ endereco: 'Rua antiga' })).toBe('Rua antiga')
+    expect(enderecoDoCliente({})).toBe('')
+  })
+})
+
+describe('endereço em três campos', () => {
+  it.each([['rua', 120], ['bairro', 80], ['cidade', 80]] as const)(
+    'valida o limite exato de %s no cadastro e na edição, sem contar espaços externos',
+    (campo, limite) => {
+      for (const validar of [
+        (dados: EntradaCliente) => validarCliente(dados, lista, 'confiavel'), validarEdicaoCliente,
+      ]) {
+        expect(validar(entrada({ [campo]: 'a'.repeat(limite + 1) }))[campo]).toBeTypeOf('string')
+        expect(validar(entrada({ [campo]: `  ${'a'.repeat(limite)}  ` }))[campo]).toBeUndefined()
+        expect(validar(entrada({ [campo]: ' ' }))[campo]).toBeUndefined()
+      }
+    },
+  )
+
+  it('só grava as partes preenchidas e aparadas, sem endereco no cadastro', () => {
+    const campos = montarCamposCliente(entrada({ rua: ' Rua A, 10 ', bairro: ' Centro ', cidade: ' ' }), CONTEXTO)
+    expect(campos).toMatchObject({ rua: 'Rua A, 10', bairro: 'Centro' })
+    expect(campos).not.toHaveProperty('cidade')
+    expect(campos).not.toHaveProperty('endereco')
+  })
+
+  it('leva o endereço antigo para rua, sem substituir rua já existente', () => {
+    expect(entradaDoCliente({ numero: 1, nome: 'Ana', endereco: 'Antigo' }).rua).toBe('Antigo')
+    expect(entradaDoCliente({ numero: 1, nome: 'Ana', rua: 'Novo', endereco: 'Antigo' }).rua).toBe('Novo')
+  })
+
+  it('editar só o nome do cliente antigo preserva endereco e não grava rua', () => {
+    const original = entradaDoCliente({ numero: 1, nome: 'Ana', endereco: 'Rua antiga' })
+    expect(montarEdicaoCliente({ ...original, nome: 'Ana Maria' }, CONTEXTO, original)).toEqual({
+      definir: { nome: 'Ana Maria', nomeBusca: 'ana maria', atualizadoPor: CONTEXTO.dispositivo },
+      remover: [],
+    })
+  })
+
+  it('redistribuir o endereço antigo grava também rua e remove endereco', () => {
+    const original = entradaDoCliente({ numero: 1, nome: 'Ana', endereco: 'Rua antiga' })
+    expect(montarEdicaoCliente({ ...original, bairro: ' Centro ', cidade: ' João Pessoa ' }, CONTEXTO, original))
+      .toEqual({
+        definir: { rua: 'Rua antiga', bairro: 'Centro', cidade: 'João Pessoa', atualizadoPor: CONTEXTO.dispositivo },
+        remover: ['endereco'],
+      })
+  })
+
+  it.each(['rua', 'bairro', 'cidade'] as const)('remove %s ao apagar, preserva as outras partes e remove endereco', (campo) => {
+    const original = entrada({ rua: 'Rua A', bairro: 'Centro', cidade: 'João Pessoa' })
+    const edicao = montarEdicaoCliente({ ...original, [campo]: ' ' }, CONTEXTO, original)
+    expect(edicao.definir).not.toHaveProperty(campo)
+    expect(edicao.remover).toContain(campo)
+    expect(edicao.remover).toContain('endereco')
+    for (const outro of ['rua', 'bairro', 'cidade'] as const) {
+      if (outro !== campo) expect(edicao.definir[outro]).toBe(original[outro])
+    }
   })
 })

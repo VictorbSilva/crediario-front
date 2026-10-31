@@ -12,6 +12,10 @@ export type ClienteExportavel = {
   cpf?: string
   cpfDigits?: string
   endereco?: string
+  rua?: string
+  bairro?: string
+  cidade?: string
+  proximaCobranca?: string
   rotaId?: string | null
   diasDeVisita?: number[]
   rotaDesde?: string
@@ -49,6 +53,9 @@ const COLUNAS = [
   'telefone',
   'cpf',
   'endereco',
+  'rua',
+  'bairro',
+  'cidade',
   'observacao',
   'arquivado',
   'cadastradoEm',
@@ -133,6 +140,10 @@ export function paraJSON(
       cpf: cliente.cpf,
       cpfDigits: cliente.cpfDigits,
       endereco: cliente.endereco,
+      rua: cliente.rua,
+      bairro: cliente.bairro,
+      cidade: cliente.cidade,
+      proximaCobranca: cliente.proximaCobranca,
       rotaId: cliente.rotaId,
       diasDeVisita: cliente.diasDeVisita,
       rotaDesde: cliente.rotaDesde,

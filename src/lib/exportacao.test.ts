@@ -45,6 +45,15 @@ function parcelas(quantidade: number): DocumentoExportavel[] {
 }
 
 describe('paraCSV', () => {
+  it('leva o endereço antigo e as três partes nas colunas próprias, inclusive opcionais vazios', () => {
+    const linhas = paraCSV([
+      cliente({ endereco: 'Antigo', rua: 'Rua A, 10', bairro: 'Centro', cidade: 'João Pessoa' }),
+      cliente({ bairro: 'Bairro B' }),
+    ]).replace('﻿', '').split('\r\n')
+    expect(linhas[1].split(';').slice(4, 8)).toEqual(['Antigo', 'Rua A, 10', 'Centro', 'João Pessoa'])
+    expect(linhas[2].split(';').slice(4, 8)).toEqual(['', '', 'Bairro B', ''])
+  })
+
   it('começa com BOM, para o Excel não comer os acentos', () => {
     expect(paraCSV([cliente()]).startsWith('﻿')).toBe(true)
   })
@@ -53,7 +62,7 @@ describe('paraCSV', () => {
     const linhas = paraCSV([cliente()]).replace('﻿', '').split('\r\n')
 
     expect(linhas[0]).toBe(
-      'numero;nome;telefone;cpf;endereco;observacao;arquivado;cadastradoEm;criadoEm;atualizadoEm;atualizadoPor',
+      'numero;nome;telefone;cpf;endereco;rua;bairro;cidade;observacao;arquivado;cadastradoEm;criadoEm;atualizadoEm;atualizadoPor',
     )
     expect(linhas[1].startsWith('137;Maria Aparecida Santos;')).toBe(true)
   })
@@ -124,6 +133,14 @@ describe('serializar', () => {
 })
 
 describe('paraJSON', () => {
+  it('leva rua, bairro, cidade e proximaCobranca sem mudar a versão 2', () => {
+    const novos = { rua: 'Rua A, 10', bairro: 'Centro', cidade: 'João Pessoa', proximaCobranca: '2026-11-05' }
+    const conteudo = JSON.parse(paraJSON([cliente(novos), cliente()], SEM_CARNE, AGORA))
+    expect(conteudo.versao).toBe(2)
+    expect(conteudo.clientes[0]).toMatchObject(novos)
+    for (const campo of Object.keys(novos)) expect(conteudo.clientes[1]).not.toHaveProperty(campo)
+  })
+
   it('leva os oito campos de rota presentes no cliente', () => {
     const rota = {
       diasDeVisita: [5, 20],

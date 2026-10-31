@@ -8,6 +8,7 @@ import {
   ENTRADA_CLIENTE_VAZIA,
   LIMITES_CLIENTE,
   entradaDoCliente,
+  proximoNumero,
   validarCliente,
   validarEdicaoCliente,
 } from '@/lib/cliente'
@@ -24,13 +25,24 @@ export function FormularioCliente({
 
   const [clienteInicial] = useState(cliente)
   const [entrada, setEntrada] = useState<EntradaCliente>(() =>
-    cliente ? entradaDoCliente(cliente) : ENTRADA_CLIENTE_VAZIA,
+    cliente ? entradaDoCliente(cliente) : {
+      ...ENTRADA_CLIENTE_VAZIA,
+      numero: confianca === 'desconhecida' ? '' : String(proximoNumero(clientes)),
+    },
+  )
+  const [numeroPreenchido, setNumeroPreenchido] = useState(
+    cliente !== undefined || confianca !== 'desconhecida',
   )
   const [tocados, setTocados] = useState<Partial<Record<keyof EntradaCliente, boolean>>>({})
   const [tentouSalvar, setTentouSalvar] = useState(false)
   const [semEmpresa, setSemEmpresa] = useState(false)
 
   const base = useId()
+
+  if (!numeroPreenchido && confianca !== 'desconhecida') {
+    setNumeroPreenchido(true)
+    setEntrada({ ...entrada, numero: String(proximoNumero(clientes)) })
+  }
 
   const erros = cliente
     ? validarEdicaoCliente(entrada)
@@ -46,7 +58,10 @@ export function FormularioCliente({
   }
 
   function mudar(campo: keyof EntradaCliente) {
-    return (valor: string) => setEntrada((atual) => ({ ...atual, [campo]: valor }))
+    return (valor: string) => {
+      if (campo === 'numero') setNumeroPreenchido(true)
+      setEntrada((atual) => ({ ...atual, [campo]: valor }))
+    }
   }
 
   function sair(campo: keyof EntradaCliente) {
@@ -116,17 +131,6 @@ export function FormularioCliente({
       />
 
       <Campo
-        id={base + '-telefone'}
-        rotulo="Telefone"
-        valor={entrada.telefone}
-        maxLength={LIMITES_CLIENTE.telefone}
-        inputMode="tel"
-        erro={mostrar('telefone')}
-        aoMudar={mudar('telefone')}
-        aoSair={sair('telefone')}
-      />
-
-      <Campo
         id={base + '-cpf'}
         rotulo="CPF"
         valor={entrada.cpf}
@@ -139,13 +143,44 @@ export function FormularioCliente({
       />
 
       <Campo
-        id={base + '-endereco'}
-        rotulo="Endereço"
-        valor={entrada.endereco}
-        maxLength={LIMITES_CLIENTE.endereco}
-        erro={mostrar('endereco')}
-        aoMudar={mudar('endereco')}
-        aoSair={sair('endereco')}
+        id={base + '-telefone'}
+        rotulo="Contato"
+        valor={entrada.telefone}
+        maxLength={LIMITES_CLIENTE.telefone}
+        inputMode="tel"
+        erro={mostrar('telefone')}
+        aoMudar={mudar('telefone')}
+        aoSair={sair('telefone')}
+      />
+
+      <Campo
+        id={base + '-rua'}
+        rotulo="Rua e número"
+        valor={entrada.rua}
+        maxLength={LIMITES_CLIENTE.rua}
+        erro={mostrar('rua')}
+        aoMudar={mudar('rua')}
+        aoSair={sair('rua')}
+      />
+
+      <Campo
+        id={base + '-bairro'}
+        rotulo="Bairro"
+        valor={entrada.bairro}
+        maxLength={LIMITES_CLIENTE.bairro}
+        erro={mostrar('bairro')}
+        aoMudar={mudar('bairro')}
+        aoSair={sair('bairro')}
+      />
+
+      <Campo
+        id={base + '-cidade'}
+        rotulo="Cidade"
+        valor={entrada.cidade}
+        maxLength={LIMITES_CLIENTE.cidade}
+        erro={mostrar('cidade')}
+        aoMudar={mudar('cidade')}
+        aoSair={sair('cidade')}
       />
 
       <SeletorDeDias

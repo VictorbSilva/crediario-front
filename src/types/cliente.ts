@@ -10,6 +10,10 @@ export type Cliente = {
   cpf?: string
   cpfDigits?: string
   endereco?: string
+  rua?: string
+  bairro?: string
+  cidade?: string
+  proximaCobranca?: string
   rotaId?: string | null
   diasDeVisita?: number[]
   rotaDesde?: string

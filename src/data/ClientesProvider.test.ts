@@ -1,6 +1,6 @@
 import { createElement, useContext } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { FieldPath, doc } from 'firebase/firestore'
+import { FieldPath, doc, setDoc } from 'firebase/firestore'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import { entradaDoCliente } from '@/lib/cliente'
@@ -10,12 +10,25 @@ import { ClientesContext } from './clientes-context'
 import type { ClientesContextValue, FalhaDeEscrita } from './clientes-context'
 import { ClientesProvider } from './ClientesProvider'
 
+type Instantaneo = {
+  docs: {
+    id: string
+    data: () => Record<string, unknown>
+    metadata: { hasPendingWrites: boolean }
+  }[]
+  metadata: { fromCache: boolean }
+}
+
 const simulado = vi.hoisted(() => ({
   businessId: 'loja-treino' as string | null,
   updateDoc: vi.fn(() => Promise.resolve()),
   lote: { update: vi.fn(), commit: vi.fn(() => Promise.resolve()) },
   writeBatch: vi.fn(),
   setters: [] as Mock[],
+  efeitos: [] as (() => void | (() => void))[],
+  onSnapshot: vi.fn<(
+    consulta: unknown, opcoes: unknown, receber: (instantaneo: Instantaneo) => void,
+  ) => void>(),
 }))
 
 // renderToStaticMarkup não monta nada, então um setState real seria descartado e `falhas`
@@ -23,6 +36,9 @@ const simulado = vi.hoisted(() => ({
 // atualizações em função que o provider mandou para `setFalhas`.
 vi.mock('react', async (importOriginal) => ({
   ...await importOriginal<typeof import('react')>(),
+  useEffect: (efeito: () => void | (() => void)) => {
+    simulado.efeitos.push(efeito)
+  },
   useState: (inicial: unknown) => {
     const setter = vi.fn()
     simulado.setters.push(setter)
@@ -36,12 +52,12 @@ vi.mock('@/lib/dispositivo', () => ({ identificarDispositivo: () => 'aparelho' }
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   doc: vi.fn(() => 'referencia'),
-  onSnapshot: vi.fn(),
+  onSnapshot: simulado.onSnapshot,
   orderBy: vi.fn(),
   query: vi.fn(),
   serverTimestamp: () => 'carimbo-do-servidor',
   deleteField: () => 'remover-campo',
-  setDoc: vi.fn(),
+  setDoc: vi.fn(() => Promise.resolve()),
   updateDoc: simulado.updateDoc,
   writeBatch: simulado.writeBatch,
   FieldPath: class {
@@ -81,6 +97,7 @@ function falhasEmpilhadas(): FalhaDeEscrita[] {
 beforeEach(() => {
   simulado.businessId = 'loja-treino'
   simulado.setters.length = 0
+  simulado.efeitos.length = 0
   vi.clearAllMocks()
   simulado.writeBatch.mockReturnValue(simulado.lote)
 })
@@ -91,12 +108,13 @@ describe('editarCliente', () => {
     expect(simulado.updateDoc).not.toHaveBeenCalled()
   })
 
-  it('grava somente o campo alterado em relação à abertura', () => {
+  it('grava somente o endereço alterado em relação à abertura, em três campos', () => {
     expect(contexto().editarCliente(cliente, {
-      ...entradaDoCliente(cliente), endereco: 'Rua A',
+      ...entradaDoCliente(cliente), rua: 'Rua A, 10', bairro: 'Centro', cidade: 'João Pessoa',
     })).toBe(true)
     expect(simulado.updateDoc).toHaveBeenCalledWith('referencia', {
-      endereco: 'Rua A', atualizadoPor: 'aparelho', atualizadoEm: 'carimbo-do-servidor',
+      rua: 'Rua A, 10', bairro: 'Centro', cidade: 'João Pessoa', endereco: 'remover-campo',
+      atualizadoPor: 'aparelho', atualizadoEm: 'carimbo-do-servidor',
     })
   })
 
@@ -111,9 +129,50 @@ describe('editarCliente', () => {
   it('informa que a edição não foi enfileirada quando falta empresa', () => {
     simulado.businessId = null
     expect(contexto().editarCliente(cliente, {
-      ...entradaDoCliente(cliente), endereco: 'Rua A',
+      ...entradaDoCliente(cliente), rua: 'Rua A, 10', bairro: 'Centro', cidade: 'João Pessoa',
     })).toBe(false)
     expect(simulado.updateDoc).not.toHaveBeenCalled()
+  })
+})
+
+describe('criarCliente — endereço', () => {
+  it('grava as três partes preenchidas e nenhum endereco no cliente novo', () => {
+    contexto().criarCliente({
+      ...entradaDoCliente(cliente), rua: ' Rua A, 10 ', bairro: ' Centro ', cidade: ' João Pessoa ',
+    })
+    expect(setDoc).toHaveBeenCalledExactlyOnceWith('referencia', {
+      numero: 12, nome: 'Ana', nomeBusca: 'ana', telefone: '9999', telefoneDigits: '9999',
+      rua: 'Rua A, 10', bairro: 'Centro', cidade: 'João Pessoa', arquivado: false,
+      cadastradoEm: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), atualizadoPor: 'aparelho',
+      criadoEm: 'carimbo-do-servidor', atualizadoEm: 'carimbo-do-servidor',
+    })
+    expect(vi.mocked(setDoc).mock.calls[0][1]).not.toHaveProperty('endereco')
+  })
+})
+
+describe('mapeamento do documento para Cliente', () => {
+  it('preserva os quatro campos novos e o endereco dos clientes antigos sem inventar as três partes', () => {
+    contexto()
+    simulado.efeitos[0]()
+    const receber = simulado.onSnapshot.mock.calls[0][2]
+    const novos = {
+      rua: 'Rua A, 10', bairro: 'Centro', cidade: 'João Pessoa', proximaCobranca: '2026-11-05',
+    }
+    receber({
+      docs: [
+        { id: 'novo', data: () => ({ ...cliente, ...novos }), metadata: { hasPendingWrites: false } },
+        { id: 'antigo', data: () => ({ ...cliente, endereco: 'Rua antiga, 20' }), metadata: { hasPendingWrites: true } },
+      ],
+      metadata: { fromCache: true },
+    })
+    const [clientes] = simulado.setters[0].mock.calls[0] as [Cliente[]]
+    expect(clientes).toHaveLength(2)
+    expect(clientes[0]).toMatchObject({ id: 'novo', ...novos, pendente: false })
+    expect(clientes[0].endereco).toBeUndefined()
+    expect(clientes[1]).toMatchObject({ id: 'antigo', endereco: 'Rua antiga, 20', pendente: true })
+    for (const campo of ['rua', 'bairro', 'cidade', 'proximaCobranca'] as const) {
+      expect(clientes[1][campo]).toBeUndefined()
+    }
   })
 })
 

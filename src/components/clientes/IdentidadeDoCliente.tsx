@@ -1,6 +1,7 @@
 import { MapPin, Phone } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
+import { enderecoDoCliente } from '@/lib/cliente'
 import { dataBonita } from '@/lib/data'
 import { iniciaisDe } from '@/lib/texto'
 import type { Cliente } from '@/types/cliente'
@@ -30,6 +31,7 @@ export function CabecalhoDoCliente({ cliente }: Readonly<{ cliente: Cliente }>) 
 
 /** Contato, endereço, CPF e cadastro — o mesmo conteúdo no painel e na página. */
 export function DadosDoCliente({ cliente }: Readonly<{ cliente: Cliente }>) {
+  const endereco = enderecoDoCliente(cliente)
   return (
     <>
       {cliente.telefone ? (
@@ -41,11 +43,11 @@ export function DadosDoCliente({ cliente }: Readonly<{ cliente: Cliente }>) {
         </Linha>
       ) : null}
 
-      {cliente.endereco ? (
+      {endereco ? (
         <Linha rotulo="Endereço">
           <span className="flex items-start gap-2">
             <MapPin size={16} aria-hidden className="mt-0.5 shrink-0 text-slate-400" />
-            {cliente.endereco}
+            {endereco}
           </span>
         </Linha>
       ) : null}

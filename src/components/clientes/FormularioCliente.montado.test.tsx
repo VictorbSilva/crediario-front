@@ -62,16 +62,18 @@ afterEach(() => {
 })
 
 describe('FormularioCliente — cadastro', () => {
-  it('nasce vazio, com o foco no número e os limites da regra em cada campo', () => {
+  it('nasce com número sugerido, com o foco no número e os limites da regra em cada campo', () => {
     render(<FormularioCliente aoFechar={aoFechar} />)
 
     expect(screen.getByText('Novo cliente')).toBeTruthy()
     expect(document.activeElement).toBe(campo(/^Número/))
-    expect(campo(/^Número/).value).toBe('')
+    expect(campo(/^Número/).value).toBe('138')
     expect(campo(/^Nome/).maxLength).toBe(LIMITES_CLIENTE.nome)
-    expect(campo(/^Telefone/).maxLength).toBe(LIMITES_CLIENTE.telefone)
+    expect(campo(/^Contato/).maxLength).toBe(LIMITES_CLIENTE.telefone)
     expect(campo(/^CPF/).maxLength).toBe(LIMITES_CLIENTE.cpf)
-    expect(campo(/^Endereço/).maxLength).toBe(LIMITES_CLIENTE.endereco)
+    expect(campo(/^Rua e número/).maxLength).toBe(LIMITES_CLIENTE.rua)
+    expect(campo(/^Bairro/).maxLength).toBe(LIMITES_CLIENTE.bairro)
+    expect(campo(/^Cidade/).maxLength).toBe(LIMITES_CLIENTE.cidade)
     expect(campo(/^Observação/).maxLength).toBe(LIMITES_CLIENTE.observacao)
     // `type="number"` aceitaria "e", "+" e a roda do mouse.
     expect(campo(/^Número/).type).toBe('text')
@@ -128,12 +130,12 @@ describe('FormularioCliente — cadastro', () => {
     digitar(/^Número/, '41')
 
     digitar(/^CPF/, '529')
-    digitar(/^Telefone/, '1'.repeat(21))
+    digitar(/^Contato/, '1'.repeat(21))
     expect(erroDe(/^CPF/)).toBeNull()
-    expect(erroDe(/^Telefone/)).toBeNull()
+    expect(erroDe(/^Contato/)).toBeNull()
 
-    fireEvent.blur(campo(/^Telefone/))
-    expect(erroDe(/^Telefone/)).toBe('Telefone com dígitos demais: máximo 20.')
+    fireEvent.blur(campo(/^Contato/))
+    expect(erroDe(/^Contato/)).toBe('Telefone com dígitos demais: máximo 20.')
   })
 
   it('número só de espaços não acusa enquanto se digita', () => {
@@ -148,19 +150,21 @@ describe('FormularioCliente — cadastro', () => {
     render(<FormularioCliente aoFechar={aoFechar} />)
     expect(screen.getByText('O número é o mesmo da lista de papel.')).toBeTruthy()
 
-    digitar(/^Endereço/, 'a'.repeat(201))
-    fireEvent.blur(campo(/^Endereço/))
+    digitar(/^Rua e número/, 'a'.repeat(121))
+    fireEvent.blur(campo(/^Rua e número/))
     digitar(/^Observação/, 'a'.repeat(501))
     fireEvent.blur(campo(/^Observação/))
-    expect(erroDe(/^Endereço/)).toBe('Endereço muito longo: máximo 200 caracteres.')
+    expect(erroDe(/^Rua e número/)).toBe('Rua muito longa: máximo 120 caracteres.')
     expect(erroDe(/^Observação/)).toBe('Observação muito longa: máximo 500 caracteres.')
 
     digitar(/^Número/, '41')
     digitar(/^Nome/, 'Carla')
-    digitar(/^Endereço/, 'Rua B, 7')
+    digitar(/^Rua e número/, 'Rua B, 7')
+    digitar(/^Bairro/, 'Centro')
+    digitar(/^Cidade/, 'João Pessoa')
     digitar(/^Observação/, 'Portão azul')
     salvar()
-    expect(simulado.criarCliente).toHaveBeenCalledWith(expect.objectContaining({ endereco: 'Rua B, 7', observacao: 'Portão azul' }))
+    expect(simulado.criarCliente).toHaveBeenCalledWith(expect.objectContaining({ rua: 'Rua B, 7', bairro: 'Centro', cidade: 'João Pessoa', observacao: 'Portão azul' }))
   })
 
   it('nome só acusa depois de sair do campo ou de tentar salvar', () => {
@@ -175,13 +179,14 @@ describe('FormularioCliente — cadastro', () => {
 
   it('salvar com erro mostra todos os erros e não grava nem fecha', () => {
     render(<FormularioCliente aoFechar={aoFechar} />)
+    digitar(/^Número/, '')
 
-    digitar(/^Telefone/, '1'.repeat(21))
+    digitar(/^Contato/, '1'.repeat(21))
     salvar()
 
     expect(erroDe(/^Número/)).toBe('Digite o número do cliente.')
     expect(erroDe(/^Nome/)).toBe('Digite o nome do cliente.')
-    expect(erroDe(/^Telefone/)).toBe('Telefone com dígitos demais: máximo 20.')
+    expect(erroDe(/^Contato/)).toBe('Telefone com dígitos demais: máximo 20.')
     expect(simulado.criarCliente).not.toHaveBeenCalled()
     expect(aoFechar).not.toHaveBeenCalled()
   })
@@ -191,7 +196,7 @@ describe('FormularioCliente — cadastro', () => {
 
     digitar(/^Número/, '41')
     digitar(/^Nome/, 'Carla Souza')
-    digitar(/^Telefone/, '(11) 3333-4444')
+    digitar(/^Contato/, '(11) 3333-4444')
     fireEvent.click(screen.getByRole('button', { name: '20' }))
     fireEvent.click(screen.getByRole('button', { name: '5' }))
     salvar()
@@ -240,7 +245,8 @@ describe('FormularioCliente — edição', () => {
     expect(screen.getByText('#137 — o número não muda depois do cadastro.')).toBeTruthy()
     expect(screen.queryByLabelText(/^Número/)).toBeNull()
     expect(campo(/^Nome/).value).toBe('João da Silva')
-    expect(campo(/^Telefone/).value).toBe('(11) 98888-7777')
+    expect(campo(/^Contato/).value).toBe('(11) 98888-7777')
+    expect(campo(/^Rua e número/).value).toBe('Rua A, 10')
     expect(document.activeElement).toBe(campo(/^Nome/))
     expect(screen.getByRole('button', { name: '5' }).getAttribute('aria-pressed')).toBe('true')
   })
@@ -313,4 +319,65 @@ describe('SeletorDeDias', () => {
     expect(within(grupo).getByText('Dias 2 e 31')).toBeTruthy()
     expect(within(grupo).getByText('Dia 31 cai no último dia dos meses mais curtos.')).toBeTruthy()
   })
+})
+
+
+describe('FormularioCliente — ordem e sugestão', () => {
+  it('apresenta os campos na ordem do dono', () => {
+    render(<FormularioCliente aoFechar={aoFechar} />)
+    const form = screen.getByRole('button', { name: 'Salvar cliente' }).closest('form')!
+    const rotulos = Array.from(form.querySelectorAll('label, legend'))
+      .map((item) => item.firstChild?.textContent?.trim())
+    expect(rotulos).toEqual([
+      'Número', 'Nome', 'CPF', 'Contato', 'Rua e número', 'Bairro', 'Cidade',
+      'Dias de visita no mês', 'Observação',
+    ])
+  })
+
+  it.each(['confiavel', 'parcial'] as const)('sugere após carregar lista %s, incluindo arquivado, e só uma vez', (confianca) => {
+    simulado.confianca = 'desconhecida'
+    const { rerender } = render(<FormularioCliente aoFechar={aoFechar} />)
+    expect(campo(/^Número/).value).toBe('')
+    expect(screen.getByText(/Esperando a lista de clientes carregar/)).toBeTruthy()
+    simulado.confianca = confianca
+    simulado.clientes = [cliente({ numero: 12, arquivado: true }), cliente({ numero: 3 }), cliente({ numero: 7 })]
+    rerender(<FormularioCliente aoFechar={aoFechar} />)
+    expect(campo(/^Número/).value).toBe('13')
+    simulado.clientes = [cliente({ numero: 20 })]
+    rerender(<FormularioCliente aoFechar={aoFechar} />)
+    expect(campo(/^Número/).value).toBe('13')
+    digitar(/^Número/, '')
+    simulado.clientes = [cliente({ numero: 30 })]
+    rerender(<FormularioCliente aoFechar={aoFechar} />)
+    expect(campo(/^Número/).value).toBe('')
+  })
+
+  it('sugere 1 para lista vazia conferida', () => {
+    simulado.clientes = []
+    render(<FormularioCliente aoFechar={aoFechar} />)
+    expect(campo(/^Número/).value).toBe('1')
+  })
+
+  it.each([false, true])('preserva número digitado antes de carregar, mesmo apagado: %s', (apagar) => {
+    simulado.confianca = 'desconhecida'
+    const { rerender } = render(<FormularioCliente aoFechar={aoFechar} />)
+    digitar(/^Número/, '80')
+    if (apagar) digitar(/^Número/, '')
+    simulado.confianca = 'confiavel'
+    rerender(<FormularioCliente aoFechar={aoFechar} />)
+    expect(campo(/^Número/).value).toBe(apagar ? '' : '80')
+  })
+
+  it.each([['Bairro', 80, 'Bairro muito longo'], ['Cidade', 80, 'Cidade muito longa']] as const)(
+    'recusa %s acima do limite antes de gravar', (rotulo, limite, mensagem) => {
+      render(<FormularioCliente aoFechar={aoFechar} />)
+      const label = new RegExp(`^${rotulo}`)
+      digitar(/^Nome/, 'Ana')
+      digitar(label, 'a'.repeat(limite + 1))
+      fireEvent.blur(campo(label))
+      expect(erroDe(label)).toBe(`${mensagem}: máximo ${limite} caracteres.`)
+      salvar()
+      expect(simulado.criarCliente).not.toHaveBeenCalled()
+    },
+  )
 })
