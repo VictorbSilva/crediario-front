@@ -894,9 +894,11 @@ describe('CarneDoCliente — nova venda', () => {
     abrirFormulario()
     const adicionar = within(dialogoAberto()).getByRole('button', { name: 'Adicionar item' }) as HTMLButtonElement
 
-    for (let i = 0; i < 28; i++) adicionarItem()
+    // O botão guardado, não uma consulta por papel a cada volta: o `getByRole`
+    // recalcula a acessibilidade do formulário inteiro, que cresce uma linha por clique.
+    for (let i = 0; i < 28; i++) fireEvent.click(adicionar)
     expect(adicionar.disabled).toBe(false)
-    adicionarItem()
+    fireEvent.click(adicionar)
 
     expect(within(dialogoAberto()).getAllByRole('group', { name: /^Item \d+$/ })).toHaveLength(30)
     expect(adicionar.disabled).toBe(true)
