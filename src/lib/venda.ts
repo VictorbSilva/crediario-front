@@ -1,6 +1,7 @@
-import { dataLocalISO, ehDataCivil, vencimentoDaParcela } from './data'
+import { dataLocalISO, diaDaSemanaISO, ehDataCivil, vencimentoDaParcela, vencimentoSemanal } from './data'
 import { parseReaisParaCentavos } from './dinheiro'
-import { VERSAO_CALCULO, gerarParcelas } from './parcelas'
+import { VERSAO_CALCULO, VERSAO_CALCULO_SEMANAL, gerarParcelas } from './parcelas'
+import type { Periodicidade } from './parcelas'
 import type { FormaDePagamento, ItemDaVenda, TipoDeMulta } from '@/types/venda'
 
 export const LIMITES_VENDA = {
@@ -37,6 +38,8 @@ export type EntradaVenda = {
   dataVenda: string
   itens: EntradaItem[]
   numeroParcelas: string
+  periodicidade: Periodicidade
+  /** Só a mensal usa: na semanal, o vencimento é o dia da semana da venda. */
   diaVencimento: string
   cobrarTaxas: boolean
   multaTipo: TipoDeMulta
@@ -61,6 +64,8 @@ export type CamposVenda = {
   jurosPercentualDia?: number
   observacao?: string
   itens: ItemDaVenda[]
+  /** Só a semanal grava: ausente é mensal, como em toda venda anterior a ela. */
+  periodicidade?: 'semanal'
   versaoCalculo: number
   atualizadoPor: string
 }
@@ -86,6 +91,7 @@ export function entradaVendaVazia(agora: Date): EntradaVenda {
     dataVenda: hoje,
     itens: [entradaItemVazia()],
     numeroParcelas: '',
+    periodicidade: 'mensal',
     // O dia do vencimento nasce igual ao dia da venda; a primeira parcela cai
     // no mês seguinte. É sugestão de valor padrão, não regra — o dono troca.
     diaVencimento: String(Number(hoje.slice(8, 10))),
@@ -121,17 +127,23 @@ export function parseTaxa(entrada: string): number | null {
   return Number.isFinite(valor) ? valor : null
 }
 
+/** `null` quando o dia da mensal não passa: aí quem acusa é o próprio campo. */
+function ultimoVencimento(entrada: EntradaVenda, numero: number): string | null {
+  if (entrada.periodicidade === 'semanal') return vencimentoSemanal(entrada.dataVenda, numero)
+
+  const dia = parseInteiro(entrada.diaVencimento)
+  if (dia === null || dia < 1 || dia > 31) return null
+
+  return vencimentoDaParcela(entrada.dataVenda, numero, dia)
+}
+
 function erroDaDataVenda(entrada: EntradaVenda): string | undefined {
   if (!ehDataCivil(entrada.dataVenda)) return 'Data inválida'
 
   const numero = parseInteiro(entrada.numeroParcelas)
-  const dia = parseInteiro(entrada.diaVencimento)
-  if (
-    numero !== null && numero >= 1 && numero <= LIMITES_VENDA.numeroParcelas &&
-    dia !== null && dia >= 1 && dia <= 31
-  ) {
-    const ultimo = vencimentoDaParcela(entrada.dataVenda, numero, dia)
-    if (!ehDataCivil(ultimo)) {
+  if (numero !== null && numero >= 1 && numero <= LIMITES_VENDA.numeroParcelas) {
+    const ultimo = ultimoVencimento(entrada, numero)
+    if (ultimo !== null && !ehDataCivil(ultimo)) {
       return 'Confira o ano: a última parcela passaria do ano 9999.'
     }
   }
@@ -302,7 +314,9 @@ export function validarVenda(entrada: EntradaVenda): ErrosVenda {
     dataVenda: erroDaDataVenda(entrada),
     itens: erroDosItens(entrada.itens),
     numeroParcelas: erroDasParcelas(entrada.numeroParcelas, totalDosItens(entrada.itens)),
-    diaVencimento: erroDoDia(entrada.diaVencimento),
+    periodicidade: undefined,
+    diaVencimento:
+      entrada.periodicidade === 'semanal' ? undefined : erroDoDia(entrada.diaVencimento),
     cobrarTaxas: undefined,
     multaTipo: undefined,
     multaPercentual:
@@ -332,6 +346,10 @@ export function validarVenda(entrada: EntradaVenda): ErrosVenda {
  * mudança futura na regra gera vendas novas em vez de migrar as antigas, que é
  * o comportamento correto de qualquer forma — carnê já entregue não se reescreve.
  *
+ * A mensal sai como antes da semanal: sem `periodicidade` e na `VERSAO_CALCULO`.
+ * A semanal grava `periodicidade`, a `VERSAO_CALCULO_SEMANAL` e, em
+ * `diaVencimento`, o dia da semana ISO da venda, que é o de todo vencimento.
+ *
  * `valorTotalCentavos` é sempre a soma exata dos `itens` gravados junto: o
  * total não se digita, sai deles.
  */
@@ -343,7 +361,10 @@ export function montarCamposVenda(
   const itens = lerItens(entrada.itens)
   const valorTotalCentavos = itens ? somar(itens) : null
   const numeroParcelas = parseInteiro(entrada.numeroParcelas)
-  const diaVencimento = parseInteiro(entrada.diaVencimento)
+  const semanal = entrada.periodicidade === 'semanal'
+  const diaVencimento = semanal
+    ? diaDaSemanaISO(entrada.dataVenda)
+    : parseInteiro(entrada.diaVencimento)
 
   // Item nenhum inválido chega ao lote: a regra só confere o tamanho da lista.
   if (itens === null || valorTotalCentavos === null) {
@@ -361,6 +382,7 @@ export function montarCamposVenda(
     numeroParcelas,
     valorTotalCentavos,
     diaVencimento,
+    periodicidade: entrada.periodicidade,
   })
 
   const venda: CamposVenda = {
@@ -373,9 +395,11 @@ export function montarCamposVenda(
     valorParcelaCentavos: geradas[0].valorCentavos,
     diaVencimento,
     itens,
-    versaoCalculo: VERSAO_CALCULO,
+    versaoCalculo: semanal ? VERSAO_CALCULO_SEMANAL : VERSAO_CALCULO,
     atualizadoPor: dispositivo,
   }
+
+  if (semanal) venda.periodicidade = 'semanal'
 
   if (entrada.cobrarTaxas) {
     venda.multaTipo = entrada.multaTipo

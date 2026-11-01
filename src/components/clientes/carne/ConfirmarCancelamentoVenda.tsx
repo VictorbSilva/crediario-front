@@ -46,7 +46,7 @@ export function ConfirmarCancelamentoVenda({
       </h2>
       <p id={base + '-descricao'} className="mt-1 text-sm text-slate-600">
         {formatarCentavos(venda.valorTotalCentavos)} —{' '}
-        {textoDoPlano(venda.numeroParcelas, venda.valorParcelaCentavos)}. A venda sai do saldo e
+        {textoDoPlano(venda.numeroParcelas, venda.valorParcelaCentavos, venda.periodicidade)}. A venda sai do saldo e
         das parcelas vencidas. Não dá para desfazer.
       </p>
 

@@ -100,6 +100,7 @@ function paraVenda(documento: Documento): Venda {
     jurosPercentualDia: dados.jurosPercentualDia,
     observacao: dados.observacao,
     itens: dados.itens,
+    periodicidade: dados.periodicidade,
     cancelada: dados.cancelada,
     canceladaEm: dados.canceladaEm,
     versaoCalculo: dados.versaoCalculo,

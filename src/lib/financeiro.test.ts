@@ -35,6 +35,19 @@ function venda(partes: Partial<VendaParaFinanceiro> = {}): VendaParaFinanceiro {
   }
 }
 
+// 6 × R$ 50,00 semanais de uma venda numa quinta, 01/10: vencem de 08/10 a
+// 12/11, sempre às quintas. Em HOJE, só a primeira venceu (6 dias).
+function semanal(partes: Partial<VendaParaFinanceiro> = {}): VendaParaFinanceiro {
+  return venda({
+    dataVenda: '2026-10-01',
+    numeroParcelas: 6,
+    diaVencimento: 4,
+    versaoCalculo: 2,
+    periodicidade: 'semanal',
+    ...partes,
+  })
+}
+
 function pagamento(partes: Partial<PagamentoParaFinanceiro> = {}): PagamentoParaFinanceiro {
   return {
     id: 'g1',
@@ -63,6 +76,16 @@ describe('documentosParaFinanceiro', () => {
       [{ id: vendaId, dados: { ...dadosVenda, observacao: 'ignorada' } }],
       [{ id: pagamentoId, dados: { ...dadosPagamento, observacao: 'ignorada' } }],
     )).toEqual({ vendas: [{ id: vendaId, ...dadosVenda }], pagamentos: [{ id: pagamentoId, ...dadosPagamento }] })
+  })
+
+  it('leva a periodicidade da venda; ausente continua ausente', () => {
+    const { id, ...dados } = semanal()
+    const { id: idMensal, ...dadosMensal } = venda({ id: 'v2' })
+
+    const { vendas } = documentosParaFinanceiro([{ id, dados }, { id: idMensal, dados: dadosMensal }], [])
+
+    expect(vendas.map((v) => v.periodicidade)).toEqual(['semanal', undefined])
+    expect(vendas[0].versaoCalculo).toBe(2)
   })
 
   it('normaliza cancelamentos ausentes e preserva encargo ausente', () => {
@@ -181,6 +204,99 @@ describe('parcelasRegeneradas', () => {
   it('não adivinha: versão de cálculo desconhecida devolve null', () => {
     expect(parcelasRegeneradas(venda({ versaoCalculo: 2 }))).toBeNull()
   })
+
+  it('regenera a semanal da versão 2 de 7 em 7 dias a partir da venda', () => {
+    expect(parcelasRegeneradas(semanal())).toStrictEqual([
+      { numero: 1, total: 6, vencimento: '2026-10-08', valorCentavos: 5_000, id: 'v1#1' },
+      { numero: 2, total: 6, vencimento: '2026-10-15', valorCentavos: 5_000, id: 'v1#2' },
+      { numero: 3, total: 6, vencimento: '2026-10-22', valorCentavos: 5_000, id: 'v1#3' },
+      { numero: 4, total: 6, vencimento: '2026-10-29', valorCentavos: 5_000, id: 'v1#4' },
+      { numero: 5, total: 6, vencimento: '2026-11-05', valorCentavos: 5_000, id: 'v1#5' },
+      { numero: 6, total: 6, vencimento: '2026-11-12', valorCentavos: 5_000, id: 'v1#6' },
+    ])
+  })
+
+  it('semanal com versão que não é a 2 devolve null', () => {
+    expect(parcelasRegeneradas(semanal({ versaoCalculo: 1 }))).toBeNull()
+    expect(parcelasRegeneradas(semanal({ versaoCalculo: 3 }))).toBeNull()
+  })
+})
+
+describe('venda semanal no Financeiro', () => {
+  it('entra no a receber e no vencido pelas datas semanais', () => {
+    const situacao = situacaoFinanceira([semanal()], [], HOJE)
+
+    // Em 14/10, só a de 08/10 venceu; a de 15/10 ainda não.
+    expect(situacao.aReceberCentavos).toBe(30_000)
+    expect(situacao.vencidoCentavos).toBe(5_000)
+    expect(situacao.vendasNaoCalculadas).toBe(0)
+    expect(situacao.porCliente.get('c1')).toEqual({
+      clientId: 'c1',
+      abertoCentavos: 30_000,
+      vencidoCentavos: 5_000,
+      parcelasVencidas: 1,
+      atrasoDesde: '2026-10-08',
+      diasDeAtraso: 6,
+    })
+  })
+
+  it('cai no mês de cada vencimento semanal', () => {
+    const outubro = aReceberNoMes([semanal()], [], [], 2026, 10, HOJE)
+    const novembro = aReceberNoMes([semanal()], [], [], 2026, 11, HOJE)
+
+    expect(outubro.totalCentavos).toBe(20_000)
+    expect(outubro.parcelas.map((p) => [p.numero, p.vencimento, p.situacao])).toEqual([
+      [1, '2026-10-08', 'vencida'],
+      [2, '2026-10-15', 'a-vencer'],
+      [3, '2026-10-22', 'a-vencer'],
+      [4, '2026-10-29', 'a-vencer'],
+    ])
+    expect(novembro.totalCentavos).toBe(10_000)
+    expect(novembro.parcelas.map((p) => p.vencimento)).toEqual(['2026-11-05', '2026-11-12'])
+  })
+
+  it('o seletor de meses vai até o mês do último vencimento semanal', () => {
+    expect(mesesDeRecebimento([semanal()], HOJE)).toEqual([
+      { ano: 2026, mes: 10 },
+      { ano: 2026, mes: 11 },
+    ])
+  })
+
+  it('semanal de versão desconhecida fica fora das somas e é avisada', () => {
+    const situacao = situacaoFinanceira([semanal({ versaoCalculo: 1 })], [], HOJE)
+
+    expect(situacao.aReceberCentavos).toBe(0)
+    expect(situacao.vendasNaoCalculadas).toBe(1)
+    expect(aReceberNoMes([semanal({ versaoCalculo: 1 })], [], [], 2026, 10, HOJE).parcelas).toEqual([])
+    expect(mesesDeRecebimento([semanal({ versaoCalculo: 3 })], HOJE)).toEqual([{ ano: 2026, mes: 10 }])
+  })
+})
+
+describe('venda mensal depois da semanal', () => {
+  // Os números de `venda()` contados à mão: 3 × R$ 100,00 em 10/09, 10/10 e
+  // 10/11. Sem o campo e com 'mensal' explícito, tem que dar o mesmo.
+  for (const [nome, mensal] of [
+    ['sem periodicidade', venda()],
+    ["com periodicidade 'mensal'", venda({ periodicidade: 'mensal' })],
+  ] as const) {
+    it(`${nome}: mesmos números de antes`, () => {
+      const situacao = situacaoFinanceira([mensal], [pagamento({ valorCentavos: 15_000 })], HOJE)
+
+      expect(situacao.aReceberCentavos).toBe(15_000)
+      expect(situacao.vencidoCentavos).toBe(5_000)
+      expect(situacao.vendasNaoCalculadas).toBe(0)
+      expect(situacao.porCliente.get('c1')?.atrasoDesde).toBe('2026-10-10')
+
+      const novembro = aReceberNoMes([mensal], [], [], 2026, 11, HOJE)
+      expect(novembro.totalCentavos).toBe(10_000)
+      expect(novembro.parcelas.map((p) => p.vencimento)).toEqual(['2026-11-10'])
+
+      expect(mesesDeRecebimento([mensal], HOJE)).toEqual([
+        { ano: 2026, mes: 10 },
+        { ano: 2026, mes: 11 },
+      ])
+    })
+  }
 })
 
 describe('situacaoFinanceira', () => {

@@ -1,7 +1,15 @@
 import { arredondarCentavos } from './dinheiro'
-import { diferencaEmDias, vencimentoDaParcela } from './data'
+import { diferencaEmDias, vencimentoDaParcela, vencimentoSemanal } from './data'
 
 export const VERSAO_CALCULO = 1
+
+/**
+ * A semanal nasceu na versão 2 para o app de antes dela não a calcular como
+ * mensal: lá, versão 2 é desconhecida e a venda fica fora das somas, avisada.
+ */
+export const VERSAO_CALCULO_SEMANAL = 2
+
+export type Periodicidade = 'mensal' | 'semanal'
 
 export type TaxasDeSimulacao = {
   multaTipo?: 'percentual' | 'fixo'
@@ -15,6 +23,8 @@ export type PlanoDaVenda = {
   numeroParcelas: number
   valorTotalCentavos: number
   diaVencimento: number
+  /** Ausente é mensal, como em toda venda gravada antes da semanal. */
+  periodicidade?: Periodicidade
 }
 
 export type ParcelaGerada = {
@@ -65,8 +75,15 @@ export type ResumoDaVenda = {
   quitada: boolean
 }
 
+/** A versão que este app sabe calcular para a periodicidade da venda. */
+export function versaoConhecida(versaoCalculo: number, periodicidade?: Periodicidade): boolean {
+  return periodicidade === 'semanal'
+    ? versaoCalculo === VERSAO_CALCULO_SEMANAL
+    : versaoCalculo === VERSAO_CALCULO
+}
+
 export function gerarParcelas(plano: PlanoDaVenda): ParcelaGerada[] {
-  const { dataVenda, numeroParcelas, valorTotalCentavos, diaVencimento } = plano
+  const { dataVenda, numeroParcelas, valorTotalCentavos, diaVencimento, periodicidade } = plano
 
   if (!Number.isSafeInteger(numeroParcelas) || numeroParcelas < 1) {
     throw new TypeError('gerarParcelas exige pelo menos uma parcela')
@@ -83,7 +100,10 @@ export function gerarParcelas(plano: PlanoDaVenda): ParcelaGerada[] {
     parcelas.push({
       numero,
       total: numeroParcelas,
-      vencimento: vencimentoDaParcela(dataVenda, numero, diaVencimento),
+      vencimento:
+        periodicidade === 'semanal'
+          ? vencimentoSemanal(dataVenda, numero)
+          : vencimentoDaParcela(dataVenda, numero, diaVencimento),
       valorCentavos: numero === numeroParcelas ? base + sobra : base,
     })
   }

@@ -1,7 +1,7 @@
 import type { DocumentoExportavel } from './exportacao'
 import { subtrairMeses } from './data'
-import { VERSAO_CALCULO, alocarPagamentos, gerarParcelas, situacaoDaParcela } from './parcelas'
-import type { ParcelaGerada } from './parcelas'
+import { alocarPagamentos, gerarParcelas, situacaoDaParcela, versaoConhecida } from './parcelas'
+import type { ParcelaGerada, Periodicidade } from './parcelas'
 import type { FormaDePagamento } from '@/types/venda'
 
 export type VendaParaFinanceiro = {
@@ -12,6 +12,7 @@ export type VendaParaFinanceiro = {
   numeroParcelas: number
   diaVencimento: number
   versaoCalculo: number
+  periodicidade?: Periodicidade
   cancelada?: boolean
 }
 
@@ -29,7 +30,7 @@ export type PagamentoParaFinanceiro = {
 export type ParcelaRegenerada = ParcelaGerada & { id: string }
 
 export function parcelasRegeneradas(venda: VendaParaFinanceiro): ParcelaRegenerada[] | null {
-  if (venda.versaoCalculo !== VERSAO_CALCULO) return null
+  if (!versaoConhecida(venda.versaoCalculo, venda.periodicidade)) return null
 
   return gerarParcelas(venda).map((parcela) => ({ ...parcela, id: `${venda.id}#${parcela.numero}` }))
 }
@@ -323,6 +324,7 @@ export function documentosParaFinanceiro(
       numeroParcelas: dados.numeroParcelas as number,
       diaVencimento: dados.diaVencimento as number,
       versaoCalculo: dados.versaoCalculo as number,
+      periodicidade: dados.periodicidade as Periodicidade | undefined,
       cancelada: dados.cancelada === true,
     })),
     pagamentos: pagamentos.map(({ id, dados }): PagamentoParaFinanceiro => ({

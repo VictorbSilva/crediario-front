@@ -74,3 +74,17 @@ export function vencimentoDaParcela(dataVenda: string, ordem: number, diaDesejad
 
   return comoISO(new Date(Date.UTC(ano, mes, dia)))
 }
+
+/**
+ * A parcela N da venda semanal vence 7 × N dias depois da venda (decisão de
+ * 30/10/2026). A conta é em data civil, por UTC: dia a dia, sem fuso nem
+ * horário de verão.
+ */
+export function vencimentoSemanal(dataVenda: string, ordem: number): string {
+  return comoISO(new Date(comoUTC(dataVenda).getTime() + ordem * 7 * 86400000))
+}
+
+/** 1 = segunda … 7 = domingo. O `getUTCDay` dá 0 para domingo. */
+export function diaDaSemanaISO(data: string): number {
+  return comoUTC(data).getUTCDay() || 7
+}

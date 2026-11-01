@@ -555,6 +555,23 @@ describe('CarneDoCliente — livro de pagamentos', () => {
   })
 })
 
+describe('CarneDoCliente — venda semanal', () => {
+  it('o cabeçalho da venda e o diálogo de cancelamento dizem "semanais"; a mensal, não', () => {
+    const semanal = venda('v1', { periodicidade: 'semanal', versaoCalculo: 2, diaVencimento: 4 })
+    const carne = dados([semanal], parcelasDe(semanal), [])
+    render(<CarneDoCliente dados={carne} permiteEscrita />)
+
+    const cabecalho = screen.getByRole('button', { name: /Venda de 20\/08\/2026/ })
+    expect(cabecalho.textContent).toMatch(/3 parcelas semanais de R\$\s100,00/)
+
+    abrirVenda()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar venda' }))
+    const dialogo = dialogoAberto()
+    expect(document.getElementById(dialogo.getAttribute('aria-describedby') ?? '')?.textContent)
+      .toMatch(/^R\$\s300,00 — 3 parcelas semanais de R\$\s100,00/)
+  })
+})
+
 describe('CarneDoCliente — cancelar venda', () => {
   it('confirma antes, avisando que o pagamento recebido não é devolvido', () => {
     const carne = PADRAO()
@@ -652,6 +669,56 @@ describe('CarneDoCliente — nova venda', () => {
     digitar('Dia do vencimento', '10')
 
     expect(dialogoAberto().textContent).not.toContain('com a sobra da divisão')
+  })
+
+  it('nasce mensal; na semanal o dia do vencimento some e a dica diz o dia da semana e a primeira data', () => {
+    const carne = abrirFormulario()
+    const dialogo = dialogoAberto()
+    const dicaDaData = () => {
+      const id = within(dialogo).getByLabelText('Data da venda').getAttribute('aria-describedby')?.split(' ').find((p) => p.endsWith('-dica'))
+      return id ? document.getElementById(id)?.textContent : undefined
+    }
+
+    expect((within(dialogo).getByLabelText('Mensal') as HTMLInputElement).checked).toBe(true)
+    expect((within(dialogo).getByLabelText('Semanal') as HTMLInputElement).checked).toBe(false)
+    expect(dicaDaData()).toBe('A primeira parcela cai no mês seguinte.')
+
+    preencherItem(1, 'Panela', '100,01')
+    digitar('Parcelas', '4')
+    digitar('Dia do vencimento', '32')
+    fireEvent.click(within(dialogo).getByLabelText('Semanal'))
+
+    // 15/10/2026 é quinta. O dia 32 digitado na mensal não trava a semanal.
+    expect(within(dialogo).queryByLabelText('Dia do vencimento')).toBeNull()
+    expect(dicaDaData()).toBe('Vence toda quinta-feira, a primeira em 22/10/2026.')
+    expect(within(dialogo).getByText('Primeira em 22/10/2026 · última em 12/11/2026')).toBeTruthy()
+    expect(dialogo.textContent).toContain(`4× ${formatarCentavos(2500)} (a última fica ${formatarCentavos(2501)}, com a sobra da divisão)`)
+
+    digitar('Data da venda', '2026-10-31')
+    expect(dicaDaData()).toBe('Vence todo sábado, a primeira em 07/11/2026.')
+    digitar('Data da venda', '2026-11-01')
+    expect(dicaDaData()).toBe('Vence todo domingo, a primeira em 08/11/2026.')
+    digitar('Data da venda', '')
+    expect(dicaDaData()).toBeUndefined()
+    digitar('Data da venda', '2026-11-02')
+    expect(dicaDaData()).toBe('Vence toda segunda-feira, a primeira em 09/11/2026.')
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Lançar venda' }))
+    expect(carne.registrarVenda).toHaveBeenCalledWith(
+      expect.objectContaining({ periodicidade: 'semanal', numeroParcelas: '4', dataVenda: '2026-11-02' }),
+    )
+  })
+
+  it('voltar para mensal traz de volta o dia do vencimento, com o que já estava nele', () => {
+    abrirFormulario()
+    const dialogo = dialogoAberto()
+    digitar('Dia do vencimento', '20')
+
+    fireEvent.click(within(dialogo).getByLabelText('Semanal'))
+    fireEvent.click(within(dialogo).getByLabelText('Mensal'))
+
+    expect((within(dialogo).getByLabelText('Dia do vencimento') as HTMLInputElement).value).toBe('20')
+    expect((within(dialogo).getByLabelText('Semanal') as HTMLInputElement).checked).toBe(false)
   })
 
   it('abre sem erro nenhum na tela, mesmo com os campos obrigatórios vazios', () => {
