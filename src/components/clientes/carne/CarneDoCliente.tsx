@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
+import { DocumentoDaVenda } from '@/components/clientes/carne/DocumentoDaVenda'
 import { FormularioPagamento } from '@/components/clientes/carne/FormularioPagamento'
 import { FormularioVenda } from '@/components/clientes/carne/FormularioVenda'
 import { ReciboDoPagamento } from '@/components/clientes/carne/ReciboDoPagamento'
@@ -53,6 +54,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProxima
   const [lancandoVenda, setLancandoVenda] = useState(false)
   const [cobranca, setCobranca] = useState<Cobranca | null>(null)
   const [recibo, setRecibo] = useState<Omit<EntradaRecibo, 'loja'> | null>(null)
+  const [documentoId, setDocumentoId] = useState<string | null>(null)
 
   if (erro) {
     return (
@@ -65,6 +67,8 @@ export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProxima
   const emAberto = carnes.filter((carne) => !carne.cancelada && !carne.resumo.quitada).length
   const naoBaixado = carnes.length === 0 && confianca === 'parcial'
   const incompleto = carnes.some((carne) => !carne.completa && !carne.cancelada)
+  const carneDoDocumento = carnes.find((carne) => carne.venda.id === documentoId)
+  const clienteDoDocumento = clientes.find((cliente) => cliente.id === carneDoDocumento?.venda.clientId)
 
   const avisos = falhas.length > 0 && (
     <div className="flex flex-col gap-2">
@@ -98,7 +102,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProxima
     <>
       {lancandoVenda ? (
         <FormularioVenda
-          aoSalvar={registrarVenda}
+          aoSalvar={(entrada) => setDocumentoId(registrarVenda(entrada))}
           aoFechar={() => setLancandoVenda(false)}
           aviso={naoBaixado ? AVISO_NAO_BAIXADO : undefined}
         />
@@ -129,6 +133,17 @@ export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProxima
       ) : null}
 
       {recibo ? <ReciboDoPagamento dados={recibo} aoFechar={() => setRecibo(null)} /> : null}
+      {documentoId ? (
+        <DocumentoDaVenda
+          key={documentoId}
+          dados={carneDoDocumento && clienteDoDocumento ? {
+            cliente: clienteDoDocumento,
+            venda: carneDoDocumento.venda,
+            parcelas: carneDoDocumento.parcelas,
+          } : null}
+          aoFechar={() => setDocumentoId(null)}
+        />
+      ) : null}
     </>
   )
 
@@ -232,6 +247,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProxima
             }
             aoCancelarPagamento={permiteEscrita ? cancelarPagamento : undefined}
             aoCancelarVenda={permiteEscrita ? cancelarVenda : undefined}
+            aoAbrirDocumento={() => setDocumentoId(carne.venda.id)}
           />
         ))}
       </div>

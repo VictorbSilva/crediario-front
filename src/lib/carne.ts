@@ -1,9 +1,46 @@
 import type { DadosDaLoja } from './ambiente'
+import { enderecoDoCliente } from './cliente'
 import { dataBonita, diferencaEmDias } from './data'
 import { formatarCentavos } from './dinheiro'
 import type { ParcelaComEstado, Periodicidade, ResumoDaVenda, TaxasDeSimulacao } from './parcelas'
 import type { Cliente } from '@/types/cliente'
 import type { Pagamento, Venda } from '@/types/venda'
+
+export type EntradaDocumentoDaVenda = {
+  loja: DadosDaLoja
+  cliente: Pick<Cliente, 'numero' | 'nome' | 'cpf' | 'telefone' | 'rua' | 'bairro' | 'cidade' | 'endereco'>
+  venda: Pick<Venda, 'dataVenda' | 'valorTotalCentavos' | 'itens' | 'numeroParcelas' | 'valorParcelaCentavos' | 'periodicidade'>
+  parcelas: readonly ParcelaComEstado[]
+}
+
+export function montarDocumentoDaVenda({ loja, cliente, venda, parcelas }: EntradaDocumentoDaVenda) {
+  return {
+    titulo: 'Comprovante de venda',
+    nomeDaLoja: loja.nome,
+    cnpj: loja.cnpj ? `CNPJ: ${loja.cnpj}` : undefined,
+    telefone: loja.telefone ? `Telefone: ${loja.telefone}` : undefined,
+    cliente: `#${cliente.numero} · ${cliente.nome}`,
+    cpf: cliente.cpf ? `CPF: ${cliente.cpf}` : undefined,
+    contato: cliente.telefone ? `Contato: ${cliente.telefone}` : undefined,
+    endereco: enderecoDoCliente(cliente),
+    dataVenda: dataBonita(venda.dataVenda),
+    itens: venda.itens?.map((item) => ({
+      quantidade: item.quantidade,
+      descricao: item.descricao,
+      unitario: formatarCentavos(item.valorUnitarioCentavos),
+      subtotal: formatarCentavos(item.quantidade * item.valorUnitarioCentavos),
+    })),
+    total: formatarCentavos(venda.valorTotalCentavos),
+    plano: textoDoPlano(venda.numeroParcelas, venda.valorParcelaCentavos, venda.periodicidade),
+    vencimentos: parcelas.length < venda.numeroParcelas ? null : [...parcelas]
+      .sort((a, b) => a.parcela.numero - b.parcela.numero)
+      .map(({ parcela }) => ({
+        parcela: `${parcela.numero}/${venda.numeroParcelas}`,
+        data: dataBonita(parcela.vencimento),
+        valor: formatarCentavos(parcela.valorCentavos),
+      })),
+  }
+}
 
 export type EntradaRecibo = {
   loja: DadosDaLoja

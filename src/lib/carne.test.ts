@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  montarDocumentoDaVenda,
   montarRecibo,
   pagamentosAtivos,
   janelaDeParcelas,
@@ -15,6 +16,60 @@ import {
 import type { ParcelaComEstado } from './parcelas'
 
 const semNbsp = (texto: string) => texto.replace(/\u00a0/g, ' ')
+
+describe('montarDocumentoDaVenda', () => {
+  const base = {
+    loja: { nome: 'Loja X', cnpj: '12.345.678/0001-90', telefone: '11999999999' },
+    cliente: { numero: 12, nome: 'Ana', cpf: '123.456.789-00', telefone: '11988888888', rua: 'Rua A', bairro: 'Centro', cidade: 'São Paulo' },
+    venda: { dataVenda: '2026-09-01', valorTotalCentavos: 30001, numeroParcelas: 3, valorParcelaCentavos: 10000,
+      itens: [{ quantidade: 2, descricao: 'Panela', valorUnitarioCentavos: 15000 }, { quantidade: 1, descricao: 'Copo', valorUnitarioCentavos: 1 }] },
+    parcelas: [parcela(3, 10001), parcela(1, 0), parcela(2, 5000)].map((item) => ({
+      ...item, parcela: { ...item.parcela, vencimento: `2026-${String(9 + item.parcela.numero).padStart(2, '0')}-10`, valorCentavos: item.parcela.numero === 3 ? 10001 : 10000 },
+    })),
+  }
+
+  it('monta loja, cliente, itens e total; vencimentos usam os valores integrais do carnê em ordem', () => {
+    const documento = montarDocumentoDaVenda(base)
+    expect(documento).toMatchObject({ titulo: 'Comprovante de venda', nomeDaLoja: 'Loja X',
+      cnpj: 'CNPJ: 12.345.678/0001-90', telefone: 'Telefone: 11999999999', cliente: '#12 · Ana',
+      cpf: 'CPF: 123.456.789-00', contato: 'Contato: 11988888888', endereco: 'Rua A · Centro · São Paulo', dataVenda: '01/09/2026' })
+    expect(documento.itens?.map((item) => ({ ...item, unitario: semNbsp(item.unitario), subtotal: semNbsp(item.subtotal) }))).toEqual([
+      { quantidade: 2, descricao: 'Panela', unitario: 'R$ 150,00', subtotal: 'R$ 300,00' },
+      { quantidade: 1, descricao: 'Copo', unitario: 'R$ 0,01', subtotal: 'R$ 0,01' },
+    ])
+    expect(semNbsp(documento.total)).toBe('R$ 300,01')
+    expect(semNbsp(documento.plano)).toBe('3 parcelas de R$ 100,00')
+    expect(documento.vencimentos?.map((linha) => ({ ...linha, valor: semNbsp(linha.valor) }))).toEqual([
+      { parcela: '1/3', data: '10/10/2026', valor: 'R$ 100,00' },
+      { parcela: '2/3', data: '10/11/2026', valor: 'R$ 100,00' },
+      { parcela: '3/3', data: '10/12/2026', valor: 'R$ 100,01' },
+    ])
+    expect(base.parcelas[0].parcela.numero).toBe(3)
+  })
+
+  it('venda antiga sem itens apresenta só o total e preserva endereço antigo', () => {
+    const documento = montarDocumentoDaVenda({ ...base, venda: { ...base.venda, itens: undefined }, cliente: { numero: 12, nome: 'Ana', endereco: 'Endereço antigo' } })
+    expect(documento.itens).toBeUndefined()
+    expect(semNbsp(documento.total)).toBe('R$ 300,01')
+    expect(documento.endereco).toBe('Endereço antigo')
+    expect(documento.cpf).toBeUndefined()
+    expect(documento.contato).toBeUndefined()
+  })
+
+  it('plano semanal usa textoDoPlano', () => {
+    expect(semNbsp(montarDocumentoDaVenda({ ...base, venda: { ...base.venda, periodicidade: 'semanal' } }).plano)).toBe('3 parcelas semanais de R$ 100,00')
+  })
+
+  it.each([0, 2])('com %i parcelas de 3 não apresenta tabela parcial', (quantas) => {
+    expect(montarDocumentoDaVenda({ ...base, parcelas: base.parcelas.slice(0, quantas) }).vencimentos).toBeNull()
+  })
+
+  it('omite linhas da loja ausentes', () => {
+    const documento = montarDocumentoDaVenda({ ...base, loja: { nome: 'Loja X' } })
+    expect(documento.cnpj).toBeUndefined()
+    expect(documento.telefone).toBeUndefined()
+  })
+})
 
 describe('montarRecibo', () => {
   const base = {

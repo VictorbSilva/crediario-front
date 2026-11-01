@@ -168,7 +168,7 @@ export type CarneDoCliente = {
   pendentes: number
   falhas: FalhaDeEscrita[]
   descartarFalha: (id: string) => void
-  registrarVenda: (entrada: EntradaVenda) => void
+  registrarVenda: (entrada: EntradaVenda) => string | null
   registrarPagamento: (saleId: string, entrada: EntradaPagamento) => void
   cancelarPagamento: (pagamento: Pagamento, quando: string) => void
   cancelarVenda: (venda: Venda) => void
@@ -259,8 +259,8 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
    * olhando. Offline o lote fica na fila e sobe inteiro quando a rede volta.
    */
   const registrarVenda = useCallback(
-    (entrada: EntradaVenda) => {
-      if (!businessId || !clienteId) return
+    (entrada: EntradaVenda): string | null => {
+      if (!businessId || !clienteId) return null
 
       const dispositivo = identificarDispositivo()
       const { venda, parcelas } = montarCamposVenda(clienteId, entrada, {
@@ -293,6 +293,7 @@ export function useCarne(clienteId: string | null): CarneDoCliente {
           causa,
         )
       })
+      return referenciaDaVenda.id
     },
     [businessId, clienteId, registrarFalha],
   )
