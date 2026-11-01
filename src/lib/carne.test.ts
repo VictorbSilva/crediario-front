@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  montarRecibo,
   pagamentosAtivos,
   janelaDeParcelas,
   situacaoDaVenda,
@@ -14,6 +15,60 @@ import {
 import type { ParcelaComEstado } from './parcelas'
 
 const semNbsp = (texto: string) => texto.replace(/\u00a0/g, ' ')
+
+describe('montarRecibo', () => {
+  const base = {
+    loja: { nome: 'Loja X' }, cliente: { numero: 12, nome: 'Ana' },
+    venda: { dataVenda: '2026-09-01', valorTotalCentavos: 30000 },
+    entrada: { data: '2026-11-01', valorCentavos: 5000, forma: 'pix' as const },
+    abertoAntesCentavos: 15000,
+  }
+
+  it.each(['pix', 'dinheiro', 'cartao'] as const)('monta os textos com a forma %s', (forma) => {
+    const recibo = montarRecibo({ ...base, entrada: { ...base.entrada, forma } })
+    expect(recibo.titulo).toBe('Recibo de pagamento')
+    expect(recibo.nomeDaLoja).toBe('Loja X')
+    expect(recibo.cliente).toBe('#12 · Ana')
+    expect(semNbsp(recibo.recebimento)).toBe(`Recebemos R$ 50,00 em 01/11/2026 · ${{ pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão' }[forma]}`)
+    expect(semNbsp(recibo.venda)).toBe('Venda de 01/09/2026 · R$ 300,00')
+    expect(semNbsp(recibo.restante)).toBe('Restante desta venda: R$ 100,00')
+    expect(recibo.proximaCobranca).toBeUndefined()
+    expect(recibo.cnpj).toBeUndefined()
+    expect(recibo.telefone).toBeUndefined()
+    expect(recibo.itens).toBeUndefined()
+  })
+
+  it('desconta só o que o pagamento abate, sem o encargo', () => {
+    expect(semNbsp(montarRecibo({ ...base, entrada: { ...base.entrada, encargoCentavos: 500 } }).restante))
+      .toBe('Restante desta venda: R$ 105,00')
+  })
+
+  it('restante nunca fica negativo', () => {
+    expect(semNbsp(montarRecibo({ ...base, abertoAntesCentavos: 1000 }).restante))
+      .toBe('Restante desta venda: R$ 0,00')
+  })
+
+  it('encargo maior que o recebido não aumenta a dívida, como na alocação do carnê', () => {
+    expect(semNbsp(montarRecibo({ ...base, entrada: { ...base.entrada, encargoCentavos: 6000 } }).restante))
+      .toBe('Restante desta venda: R$ 150,00')
+  })
+
+  it('inclui a cobrança escolhida, os dados informados da loja e as descrições dos itens', () => {
+    const recibo = montarRecibo({ ...base,
+      loja: { cnpj: 'CNPJ de teste', telefone: 'telefone de teste' },
+      proximaCobranca: '2026-11-06',
+      venda: { ...base.venda, itens: [
+        { quantidade: 1, descricao: 'Panela', valorUnitarioCentavos: 20000 },
+        { quantidade: 2, descricao: 'Copo', valorUnitarioCentavos: 5000 },
+      ] },
+    })
+    expect(recibo.nomeDaLoja).toBeUndefined()
+    expect(recibo.cnpj).toBe('CNPJ: CNPJ de teste')
+    expect(recibo.telefone).toBe('Telefone: telefone de teste')
+    expect(recibo.proximaCobranca).toBe('Próxima cobrança: 06/11/2026')
+    expect(recibo.itens).toBe('Panela · Copo')
+  })
+})
 
 function parcela(numero: number, restanteCentavos: number, extras: Partial<ParcelaComEstado> = {}) {
   const vencida = restanteCentavos > 0 && (extras.estado?.diasDeAtraso ?? 0) > 0

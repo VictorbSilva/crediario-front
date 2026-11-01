@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { FormularioPagamento } from '@/components/clientes/carne/FormularioPagamento'
 import { FormularioVenda } from '@/components/clientes/carne/FormularioVenda'
+import { ReciboDoPagamento } from '@/components/clientes/carne/ReciboDoPagamento'
 import { VendaExpansivel } from '@/components/clientes/carne/VendaExpansivel'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Kpi } from '@/components/ui/Kpi'
 import { Nota } from '@/components/ui/Nota'
 import type { CarneDoCliente as DadosDoCarne } from '@/data/useCarne'
-import { formatarCentavos } from '@/lib/dinheiro'
+import { useClientes } from '@/data/useClientes'
+import type { EntradaRecibo } from '@/lib/carne'
+import { formatarCentavos, parseReaisParaCentavos } from '@/lib/dinheiro'
 import type { ParcelaComEstado } from '@/lib/parcelas'
 import type { Venda } from '@/types/venda'
 
@@ -28,6 +31,7 @@ type CarneDoClienteProps = Readonly<{
 }>
 
 export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProximaCobranca }: CarneDoClienteProps) {
+  const { clientes } = useClientes()
   const {
     carnes,
     pagamentos,
@@ -48,6 +52,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProxima
   const [simulando, setSimulando] = useState(false)
   const [lancandoVenda, setLancandoVenda] = useState(false)
   const [cobranca, setCobranca] = useState<Cobranca | null>(null)
+  const [recibo, setRecibo] = useState<Omit<EntradaRecibo, 'loja'> | null>(null)
 
   if (erro) {
     return (
@@ -104,11 +109,26 @@ export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProxima
           item={cobranca.item}
           totalDeParcelas={cobranca.venda.numeroParcelas}
           abertoDaVendaCentavos={cobranca.abertoDaVendaCentavos}
-          aoSalvar={(entrada) => registrarPagamento(cobranca.venda.id, entrada)}
+          aoSalvar={(entrada) => {
+            registrarPagamento(cobranca.venda.id, entrada)
+            const cliente = clientes.find((item) => item.id === cobranca.venda.clientId)
+            const valorCentavos = parseReaisParaCentavos(entrada.valor)
+            if (cliente && valorCentavos !== null) {
+              setRecibo({
+                cliente: { numero: cliente.numero, nome: cliente.nome },
+                venda: cobranca.venda,
+                entrada: { data: entrada.data, valorCentavos, forma: entrada.forma },
+                abertoAntesCentavos: cobranca.abertoDaVendaCentavos,
+                proximaCobranca: entrada.proximaCobranca,
+              })
+            }
+          }}
           aoDefinirProximaCobranca={aoDefinirProximaCobranca}
           aoFechar={() => setCobranca(null)}
         />
       ) : null}
+
+      {recibo ? <ReciboDoPagamento dados={recibo} aoFechar={() => setRecibo(null)} /> : null}
     </>
   )
 

@@ -1,6 +1,37 @@
-import { diferencaEmDias } from './data'
+import type { DadosDaLoja } from './ambiente'
+import { dataBonita, diferencaEmDias } from './data'
 import { formatarCentavos } from './dinheiro'
 import type { ParcelaComEstado, Periodicidade, ResumoDaVenda, TaxasDeSimulacao } from './parcelas'
+import type { Cliente } from '@/types/cliente'
+import type { Pagamento, Venda } from '@/types/venda'
+
+export type EntradaRecibo = {
+  loja: DadosDaLoja
+  cliente: Pick<Cliente, 'numero' | 'nome'>
+  venda: Pick<Venda, 'dataVenda' | 'valorTotalCentavos' | 'itens'>
+  entrada: Pick<Pagamento, 'data' | 'valorCentavos' | 'encargoCentavos' | 'forma'>
+  abertoAntesCentavos: number
+  proximaCobranca?: string
+}
+
+export function montarRecibo({ loja, cliente, venda, entrada, abertoAntesCentavos, proximaCobranca }: EntradaRecibo) {
+  const abatimento = Math.max(0, entrada.valorCentavos - (entrada.encargoCentavos ?? 0))
+  const restante = Math.max(0, abertoAntesCentavos - abatimento)
+  const formas = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão' }
+
+  return {
+    titulo: 'Recibo de pagamento',
+    nomeDaLoja: loja.nome,
+    cnpj: loja.cnpj ? `CNPJ: ${loja.cnpj}` : undefined,
+    telefone: loja.telefone ? `Telefone: ${loja.telefone}` : undefined,
+    cliente: `#${cliente.numero} · ${cliente.nome}`,
+    recebimento: `Recebemos ${formatarCentavos(entrada.valorCentavos)} em ${dataBonita(entrada.data)} · ${formas[entrada.forma]}`,
+    venda: `Venda de ${dataBonita(venda.dataVenda)} · ${formatarCentavos(venda.valorTotalCentavos)}`,
+    itens: venda.itens?.map((item) => item.descricao).join(' · '),
+    restante: `Restante desta venda: ${formatarCentavos(restante)}`,
+    proximaCobranca: proximaCobranca ? `Próxima cobrança: ${dataBonita(proximaCobranca)}` : undefined,
+  }
+}
 
 export type SituacaoVenda = 'quitada' | 'atrasada' | 'em-dia' | 'cancelada' | 'incompleta'
 
