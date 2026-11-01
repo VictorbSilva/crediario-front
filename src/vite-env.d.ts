@@ -7,6 +7,9 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_APP_ID: string
   readonly VITE_BUSINESS_ID?: string
   readonly VITE_USE_FIREBASE_EMULATORS?: string
+  readonly VITE_LOJA_NOME?: string
+  readonly VITE_LOJA_CNPJ?: string
+  readonly VITE_LOJA_TELEFONE?: string
 }
 
 interface ImportMeta {

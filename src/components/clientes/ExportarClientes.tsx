@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { FileJson, FileSpreadsheet, X } from 'lucide-react'
+import { entregarArquivo } from '@/components/entregarArquivo'
 import { Nota } from '@/components/ui/Nota'
 import { CARNE_COMPLETO, useCarneDaEmpresa } from '@/data/useCarneDaEmpresa'
 import { useClientes } from '@/data/useClientes'
@@ -12,36 +13,6 @@ import {
   situacaoDoBackup,
   situacaoExportacao,
 } from '@/lib/exportacao'
-
-function entregarArquivo(conteudo: string, nome: string, tipo: string): Promise<void> {
-  const arquivo = new File([conteudo], nome, { type: tipo })
-  const noIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-
-  if (noIOS && typeof navigator.canShare === 'function' && navigator.canShare({ files: [arquivo] })) {
-    return navigator.share({ files: [arquivo], title: nome }).catch((erro) => {
-      if (erro?.name !== 'AbortError' && erro?.name !== 'InvalidStateError') {
-        baixarComLink(arquivo, nome)
-      }
-    })
-  }
-
-  baixarComLink(arquivo, nome)
-  return Promise.resolve()
-}
-
-function baixarComLink(arquivo: File, nome: string): void {
-  const endereco = URL.createObjectURL(arquivo)
-  const link = document.createElement('a')
-
-  link.href = endereco
-  link.download = nome
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-
-  setTimeout(() => URL.revokeObjectURL(endereco), 60_000)
-}
 
 export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }>) {
   const { clientes, arquivados, confianca, pendentes } = useClientes()
@@ -86,12 +57,11 @@ export function ExportarClientes({ aoFechar }: Readonly<{ aoFechar: () => void }
 
     if (extensao === 'json') {
       entregarArquivo(
-        paraJSON(clientes, { vendas, parcelas, pagamentos }, agora),
-        nomeDoArquivo('json', agora),
-        'application/json',
+        new File([paraJSON(clientes, { vendas, parcelas, pagamentos }, agora)],
+          nomeDoArquivo('json', agora), { type: 'application/json' }),
       ).finally(concluirEntrega)
     } else {
-      entregarArquivo(paraCSV(clientes), nomeDoArquivo('csv', agora), 'text/csv;charset=utf-8')
+      entregarArquivo(new File([paraCSV(clientes)], nomeDoArquivo('csv', agora), { type: 'text/csv;charset=utf-8' }))
         .finally(concluirEntrega)
     }
   }

@@ -9,6 +9,11 @@ import type { Pagamento, Parcela, Venda } from '@/types/venda'
 import { CarneDoCliente } from './CarneDoCliente'
 import { ListaDeParcelas } from './ListaDeParcelas'
 
+vi.mock('html-to-image', () => ({ toBlob: vi.fn(() => new Promise(() => {})) }))
+vi.mock('@/data/useClientes', () => ({
+  useClientes: () => ({ clientes: [{ id: 'ana', numero: 12, nome: 'Ana' }] }),
+}))
+
 const HOJE = '2026-10-15'
 
 // O `getByText` normaliza o espaço não separável que o Intl põe em "R$ 1,00" no texto da
@@ -408,6 +413,21 @@ describe('CarneDoCliente — a venda aberta', () => {
 })
 
 describe('CarneDoCliente — registrar pagamento', () => {
+  it('o recibo conserva o saldo anterior e a entrada mesmo depois que o carnê muda', () => {
+    const carne = PADRAO()
+    const tela = render(<CarneDoCliente dados={carne} permiteEscrita />)
+    abrirVenda()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Registrar pagamento' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Lançar pagamento' }))
+    expect(within(dialogoAberto()).getByText('Restante desta venda: R$ 100,00')).toBeTruthy()
+    tela.rerender(<CarneDoCliente dados={dados([V1], parcelasDe(V1), [
+      pagamento('pg1', 'v1'), pagamento('pg2', 'v1', { valorCentavos: 5000 }),
+    ])} permiteEscrita />)
+    expect(within(dialogoAberto()).getByText('Restante desta venda: R$ 100,00')).toBeTruthy()
+    expect(within(dialogoAberto()).getByText('Recebemos R$ 50,00 em 15/10/2026 · Dinheiro')).toBeTruthy()
+    expect(carne.registrarPagamento).toHaveBeenCalledTimes(1)
+  })
+
   it('envia a próxima cobrança separadamente e fecha sem esperar confirmação do pagamento', () => {
     const carne = PADRAO()
     const aoDefinirProximaCobranca = vi.fn()
@@ -426,7 +446,11 @@ describe('CarneDoCliente — registrar pagamento', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lançar pagamento' }))
     expect(carne.registrarPagamento).toHaveBeenCalledWith('v1', expect.objectContaining({ data: '2026-10-31' }))
     expect(aoDefinirProximaCobranca).toHaveBeenCalledExactlyOnceWith('2026-11-06')
-    expect(document.querySelector('dialog')).toBeNull()
+    expect(dialogoAberto().textContent).toContain('Recibo de pagamento')
+    expect(document.querySelectorAll('dialog[open]')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Lançar pagamento' })).toBeNull()
+    fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Fechar' }))
+    expect(document.querySelector('dialog[open]')).toBeNull()
   })
 
   it('vazia não chama o callback que altera a próxima cobrança do cliente', () => {
@@ -477,6 +501,10 @@ describe('CarneDoCliente — registrar pagamento', () => {
     expect(carne.registrarPagamento).toHaveBeenCalledWith('v1', {
       data: '2026-10-15', valor: '50,00', forma: 'pix', observacao: 'pagou na porta',
     })
+    expect(dialogoAberto().textContent).toContain('Recibo de pagamento')
+    expect(document.querySelectorAll('dialog[open]')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Lançar pagamento' })).toBeNull()
+    fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Fechar' }))
     expect(document.querySelector('dialog[open]')).toBeNull()
   })
 
