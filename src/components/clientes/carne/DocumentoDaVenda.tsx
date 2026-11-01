@@ -61,7 +61,7 @@ export function DocumentoDaVenda({ dados, aoFechar }: DocumentoDaVendaProps) {
 
   return createPortal(
     <div role="dialog" aria-modal="true" aria-labelledby={tituloId}
-      className="fixed inset-0 z-50 overflow-y-auto bg-slate-100 p-4 font-sans text-slate-900 print:static print:overflow-visible print:bg-white print:p-0">
+      className="fixed inset-0 z-50 overflow-y-auto bg-slate-100 p-4 font-sans text-slate-900 print:static print:overflow-visible print:bg-white print:p-0 print:[body:has(&)>#root]:hidden">
       <div className="mx-auto mb-4 flex max-w-[210mm] flex-wrap gap-3 print:hidden">
         <button type="button" onClick={() => window.print()} disabled={!completo}
           className="min-h-11 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50">Imprimir</button>
