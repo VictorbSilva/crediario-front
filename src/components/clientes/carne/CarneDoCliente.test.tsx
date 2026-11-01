@@ -61,7 +61,7 @@ function dados(
   return {
     carnes, pagamentos, saldo: saldoDoCliente(carnes), hoje: HOJE, carregando: false,
     confianca: 'confiavel', erro: null, estadoSync: 'sincronizado', pendentes: 0, falhas: [],
-    descartarFalha: vi.fn(), registrarVenda: vi.fn(), registrarPagamento: vi.fn(),
+    descartarFalha: vi.fn(), registrarVenda: vi.fn(() => 'nova-venda'), registrarPagamento: vi.fn(),
     cancelarPagamento: vi.fn(), cancelarVenda: vi.fn(), ...extras,
   }
 }
@@ -719,6 +719,52 @@ describe('CarneDoCliente — nova venda', () => {
 
   const totalNaTela = () => within(dialogoAberto()).getByRole('status', { name: 'Total' }).textContent
 
+  it('fecha o formulário na hora e abre o documento pelo id local, acompanhando os snapshots', () => {
+    const carne = dados([], [], [])
+    const { rerender } = render(<CarneDoCliente dados={carne} permiteEscrita />)
+    fireEvent.click(screen.getByRole('button', { name: 'Nova venda' }))
+    preencherItem(1, 'Panela', '300,00')
+    digitar('Parcelas', '3')
+    digitar('Dia do vencimento', '10')
+    fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Lançar venda' }))
+
+    expect(document.querySelector('dialog')).toBeNull()
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    expect(screen.getByRole('dialog', { name: 'Comprovante de venda' })).toBeTruthy()
+    expect(screen.getByText('Carregando os vencimentos…')).toBeTruthy()
+    const nova = venda('nova-venda', { itens: [{ quantidade: 1, descricao: 'Panela', valorUnitarioCentavos: 30000 }] })
+    rerender(<CarneDoCliente dados={dados([V1, nova], [...parcelasDe(V1), ...parcelasDe(nova, 2)], [])} permiteEscrita />)
+    expect(screen.getByText('Carregando os vencimentos…')).toBeTruthy()
+    expect(screen.queryByRole('table', { name: 'Vencimentos' })).toBeNull()
+    rerender(<CarneDoCliente dados={dados([V1, nova], [...parcelasDe(V1), ...parcelasDe(nova)], [])} permiteEscrita />)
+    const documento = screen.getByRole('dialog', { name: 'Comprovante de venda' })
+    expect(within(documento).getByRole('table', { name: 'Vencimentos' })).toBeTruthy()
+    expect(within(documento).getByText('Panela')).toBeTruthy()
+    fireEvent.click(within(documento).getByRole('button', { name: 'Fechar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('sem id de venda não abre documento', () => {
+    const carne = abrirFormulario(dados([], [], [], { registrarVenda: vi.fn(() => null) }))
+    preencherItem(1, 'Panela', '300,00')
+    digitar('Parcelas', '3')
+    digitar('Dia do vencimento', '10')
+    fireEvent.click(within(dialogoAberto()).getByRole('button', { name: 'Lançar venda' }))
+    expect(carne.registrarVenda).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('Documento reabre a venda existente inclusive no painel de leitura', () => {
+    render(<CarneDoCliente dados={PADRAO()} />)
+    abrirVenda()
+    fireEvent.click(screen.getByRole('button', { name: 'Documento' }))
+    const documento = screen.getByRole('dialog', { name: 'Comprovante de venda' })
+    expect(within(documento).getByText('Data da venda: 20/08/2026')).toBeTruthy()
+    expect(within(documento).getByRole('table', { name: 'Vencimentos' })).toBeTruthy()
+    fireEvent.click(within(documento).getByRole('button', { name: 'Fechar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('a prévia do carnê é a mesma conta que vai ser gravada, com a sobra na última', () => {
     abrirFormulario()
 
@@ -930,6 +976,10 @@ describe('CarneDoCliente — nova venda', () => {
       }),
     )
     expect(document.querySelector('dialog')).toBeNull()
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    const documento = screen.getByRole('dialog', { name: 'Comprovante de venda' })
+    fireEvent.click(within(documento).getByRole('button', { name: 'Fechar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('o formulário nasce com um item de quantidade 1, e não tem mais campo de valor da venda', () => {

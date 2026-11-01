@@ -7,7 +7,7 @@ import { TopBar } from './TopBar'
 export function AppShell() {
   return (
     <ClientesProvider>
-      <div className="min-h-dvh md:flex">
+      <div className="min-h-dvh md:flex print:hidden">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar />

@@ -43,6 +43,7 @@ type VendaExpansivelProps = Readonly<{
   simulando: boolean
   aberta: boolean
   aoAlternar: () => void
+  aoAbrirDocumento: () => void
   /** Ausentes no painel lateral, que é só leitura. */
   aoRegistrarPagamento?: (venda: Venda, item: ParcelaComEstado) => void
   aoCancelarPagamento?: (pagamento: Pagamento, quando: string) => void
@@ -56,6 +57,7 @@ export function VendaExpansivel({
   simulando,
   aberta,
   aoAlternar,
+  aoAbrirDocumento,
   aoRegistrarPagamento,
   aoCancelarPagamento,
   aoCancelarVenda,
@@ -111,6 +113,12 @@ export function VendaExpansivel({
 
       {aberta ? (
         <div id={painelId} className="flex flex-col gap-2 pl-0 sm:pl-8">
+          <div className="flex">
+            <button type="button" onClick={aoAbrirDocumento}
+              className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-brand-700 hover:bg-brand-50">
+              Documento
+            </button>
+          </div>
           {venda.itens && venda.itens.length > 0 ? (
             <ul
               aria-label="Itens da venda"

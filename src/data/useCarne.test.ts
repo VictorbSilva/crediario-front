@@ -407,11 +407,12 @@ describe('useCarne — escritas', () => {
   }
 
   it('grava a venda e as parcelas num lote só, sem esperar o servidor', () => {
+    simulado.lote.commit.mockReturnValueOnce(new Promise(() => {}))
     const { result } = renderHook(() => useCarne('ana'))
 
     const retorno = result.current.registrarVenda(entradaVenda())
 
-    expect(retorno).toBeUndefined()
+    expect(retorno).toBe('novo-1')
     expect(simulado.lote.set).toHaveBeenCalledTimes(4)
     const [[refVenda, camposVenda], ...parcelas] = simulado.lote.set.mock.calls
     expect(refVenda.colecao).toEqual({ caminho: ['businesses', 'loja-treino', 'sales'] })
@@ -566,7 +567,7 @@ describe('useCarne — escritas', () => {
     simulado.businessId = null
     const { result } = renderHook(() => useCarne('ana'))
 
-    result.current.registrarVenda(entradaVenda())
+    expect(result.current.registrarVenda(entradaVenda())).toBeNull()
     result.current.registrarPagamento('v1', {
       data: '2026-10-15', valor: '50,00', forma: 'dinheiro', observacao: '',
     })
@@ -581,7 +582,7 @@ describe('useCarne — escritas', () => {
   it('sem cliente aberto, venda e pagamento não saem', () => {
     const { result } = renderHook(() => useCarne(null))
 
-    result.current.registrarVenda(entradaVenda())
+    expect(result.current.registrarVenda(entradaVenda())).toBeNull()
     result.current.registrarPagamento('v1', {
       data: '2026-10-15', valor: '50,00', forma: 'dinheiro', observacao: '',
     })
