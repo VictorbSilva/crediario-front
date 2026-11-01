@@ -2,7 +2,7 @@ import { MapPin, Phone } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { enderecoDoCliente } from '@/lib/cliente'
-import { dataBonita } from '@/lib/data'
+import { dataBonita, dataLocalISO } from '@/lib/data'
 import { iniciaisDe } from '@/lib/texto'
 import type { Cliente } from '@/types/cliente'
 
@@ -30,8 +30,12 @@ export function CabecalhoDoCliente({ cliente }: Readonly<{ cliente: Cliente }>) 
 }
 
 /** Contato, endereço, CPF e cadastro — o mesmo conteúdo no painel e na página. */
-export function DadosDoCliente({ cliente }: Readonly<{ cliente: Cliente }>) {
+export function DadosDoCliente({ cliente, aoRemoverProximaCobranca }: Readonly<{
+  cliente: Cliente
+  aoRemoverProximaCobranca?: () => void
+}>) {
   const endereco = enderecoDoCliente(cliente)
+  const hoje = dataLocalISO(new Date())
   return (
     <>
       {cliente.telefone ? (
@@ -55,6 +59,21 @@ export function DadosDoCliente({ cliente }: Readonly<{ cliente: Cliente }>) {
       {cliente.cpf ? <Linha rotulo="CPF">{cliente.cpf}</Linha> : null}
 
       <Linha rotulo="Cadastrado em">{dataBonita(cliente.cadastradoEm)}</Linha>
+
+      {cliente.proximaCobranca && cliente.proximaCobranca >= hoje ? (
+        <Linha rotulo="Próxima cobrança:">
+          <span>{dataBonita(cliente.proximaCobranca)}</span>
+          {aoRemoverProximaCobranca ? (
+            <button
+              type="button"
+              onClick={aoRemoverProximaCobranca}
+              className="ml-2 min-h-11 px-2 font-semibold text-brand-700 underline underline-offset-2"
+            >
+              Remover
+            </button>
+          ) : null}
+        </Linha>
+      ) : null}
 
       {cliente.observacao ? <Linha rotulo="Observação">{cliente.observacao}</Linha> : null}
     </>

@@ -706,6 +706,26 @@ describe('cancelamento da venda', () => {
 })
 
 describe('pagamento', () => {
+  it('próxima cobrança vazia é opcional e uma data posterior passa', () => {
+    expect(validarPagamento(pagamento({ proximaCobranca: '' }))).toEqual({})
+    expect(validarPagamento(pagamento({ proximaCobranca: '2026-09-23' }))).toEqual({})
+  })
+
+  it.each(['2026-13-01', '2026-02-30'])('recusa próxima cobrança inválida: %s', (proximaCobranca) => {
+    expect(validarPagamento(pagamento({ proximaCobranca })).proximaCobranca).toBe('Data inválida')
+  })
+
+  it.each(['2026-09-22', '2026-09-21'])('recusa próxima cobrança igual ou anterior: %s', (proximaCobranca) => {
+    expect(validarPagamento(pagamento({ proximaCobranca })).proximaCobranca)
+      .toBe('A próxima cobrança precisa ser depois do pagamento')
+  })
+
+  it('próxima cobrança não muda nenhum campo do documento do pagamento', () => {
+    const campos = montarCamposPagamento('c1', 'v1', pagamento({ proximaCobranca: '2026-11-06' }), CONTEXTO)
+    expect(campos).toEqual(montarCamposPagamento('c1', 'v1', pagamento(), CONTEXTO))
+    expect(campos).not.toHaveProperty('proximaCobranca')
+  })
+
   it('pré-preenche o que falta na parcela, com hoje, dinheiro e sem observação', () => {
     expect(entradaPagamentoVazia(new Date(2026, 8, 22), 8_750)).toEqual({
       data: '2026-09-22', valor: '87,50', forma: 'dinheiro', observacao: '',

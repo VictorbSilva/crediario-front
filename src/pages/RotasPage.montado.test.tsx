@@ -60,7 +60,8 @@ function estado(clientes: Cliente[], extras: Partial<ClientesContextValue> = {})
     clientes, ativos: clientes, arquivados: [], carregando: false, erro: null, pendentes: 0,
     doCache: false, estadoSync: 'sincronizado', confianca: 'confiavel', falhas: [],
     descartarFalha: vi.fn(), criarCliente: vi.fn(), editarCliente: vi.fn(() => true),
-    alternarArquivo: vi.fn(), marcarNaRota: vi.fn(), reordenarRota: vi.fn(), ...extras,
+    alternarArquivo: vi.fn(), marcarNaRota: vi.fn(), reordenarRota: vi.fn(),
+    definirProximaCobranca: vi.fn(), removerProximaCobranca: vi.fn(), ...extras,
   }
 }
 

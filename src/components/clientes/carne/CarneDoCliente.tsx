@@ -24,9 +24,10 @@ type CarneDoClienteProps = Readonly<{
   dados: DadosDoCarne
   /** Só a página escreve; o painel lateral é leitura. */
   permiteEscrita?: boolean
+  aoDefinirProximaCobranca?: (data: string) => void
 }>
 
-export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoClienteProps) {
+export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProximaCobranca }: CarneDoClienteProps) {
   const {
     carnes,
     pagamentos,
@@ -104,6 +105,7 @@ export function CarneDoCliente({ dados, permiteEscrita = false }: CarneDoCliente
           totalDeParcelas={cobranca.venda.numeroParcelas}
           abertoDaVendaCentavos={cobranca.abertoDaVendaCentavos}
           aoSalvar={(entrada) => registrarPagamento(cobranca.venda.id, entrada)}
+          aoDefinirProximaCobranca={aoDefinirProximaCobranca}
           aoFechar={() => setCobranca(null)}
         />
       ) : null}

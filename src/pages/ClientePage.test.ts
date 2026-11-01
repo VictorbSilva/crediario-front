@@ -14,6 +14,7 @@ vi.mock('@/data/useCarne', () => ({ useCarne: () => ({}) }))
 vi.mock('@/data/useClientes', () => ({
   useClientes: () => ({
     clientes: [{ id: 'A' }, { id: 'B' }], carregando: false, alternarArquivo: vi.fn(),
+    falhas: [],
   }),
 }))
 

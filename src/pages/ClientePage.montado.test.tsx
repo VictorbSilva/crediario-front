@@ -14,6 +14,10 @@ const simulado = vi.hoisted(() => ({
   clientes: [] as Cliente[],
   carregando: false,
   alternarArquivo: vi.fn(),
+  definirProximaCobranca: vi.fn(),
+  removerProximaCobranca: vi.fn(),
+  falhas: [] as { id: string; mensagem: string; quando: Date }[],
+  descartarFalha: vi.fn(),
   useCarne: vi.fn(),
 }))
 
@@ -21,6 +25,9 @@ vi.mock('@/data/useClientes', () => ({
   useClientes: () => ({
     clientes: simulado.clientes, carregando: simulado.carregando, alternarArquivo: simulado.alternarArquivo,
     confianca: 'confiavel', criarCliente: vi.fn(), editarCliente: vi.fn(() => true),
+    definirProximaCobranca: simulado.definirProximaCobranca,
+    removerProximaCobranca: simulado.removerProximaCobranca,
+    falhas: simulado.falhas, descartarFalha: simulado.descartarFalha,
   }),
 }))
 vi.mock('@/data/useCarne', () => ({ useCarne: simulado.useCarne }))
@@ -63,6 +70,8 @@ beforeEach(() => {
   simulado.clientes = [ANA, BIA]
   simulado.carregando = false
   simulado.alternarArquivo.mockReset()
+  simulado.removerProximaCobranca.mockReset()
+  simulado.falhas = []
   simulado.useCarne.mockReset().mockReturnValue(CARNE_VAZIO)
 })
 
@@ -71,6 +80,37 @@ afterEach(() => {
 })
 
 describe('ClientePage montada', () => {
+  it.each(['2026-11-01', '2026-11-06'])('mostra próxima cobrança atual ou futura e permite remover: %s', (data) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 1, 12))
+    const ana = { ...ANA, proximaCobranca: data }
+    simulado.clientes = [ana]
+    montar('/clientes/ana')
+    expect(screen.getByText('Próxima cobrança:')).toBeTruthy()
+    expect(screen.getByText(data === '2026-11-01' ? '01/11/2026' : '06/11/2026')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Remover' }))
+    expect(simulado.removerProximaCobranca).toHaveBeenCalledExactlyOnceWith(ana)
+    vi.useRealTimers()
+  })
+
+  it('não mostra próxima cobrança passada nem o botão para removê-la', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 1, 12))
+    simulado.clientes = [{ ...ANA, proximaCobranca: '2026-10-31' }]
+    montar('/clientes/ana')
+    expect(screen.queryByText('Próxima cobrança:')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Remover' })).toBeNull()
+    vi.useRealTimers()
+  })
+
+  it('exibe a falha da escrita no cliente e permite dispensá-la', () => {
+    simulado.falhas = [{ id: 'falha-1', mensagem: 'Não foi possível salvar a próxima cobrança de Ana.', quando: new Date() }]
+    montar('/clientes/ana')
+    expect(screen.getByText(simulado.falhas[0].mensagem)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Entendi' }))
+    expect(simulado.descartarFalha).toHaveBeenCalledWith('falha-1')
+  })
+
   it('cliente que ainda não chegou ao aparelho: espera, sem abrir o carnê de ninguém', () => {
     simulado.clientes = []
     simulado.carregando = true

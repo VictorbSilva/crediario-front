@@ -28,6 +28,8 @@ export type ClientesContextValue = {
   editarCliente: (cliente: Cliente, entrada: EntradaCliente) => boolean
   alternarArquivo: (cliente: Cliente) => void
   marcarNaRota: (cliente: Cliente, acao: AcaoNaRota) => void
+  definirProximaCobranca: (cliente: Cliente, data: string) => void
+  removerProximaCobranca: (cliente: Cliente) => void
   reordenarRota: (reordenacoes: Reordenacao[]) => void
 }
 
