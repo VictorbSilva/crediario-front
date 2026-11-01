@@ -197,6 +197,21 @@ describe('textos do carnê', () => {
     )
   })
 
+  it('plano semanal diz "semanais"; a mensal, com ou sem o campo, continua igual', () => {
+    expect(semNbsp(textoDoPlano(10, 5_000, 'semanal'))).toBe('10 parcelas semanais de R$ 50,00')
+    expect(semNbsp(textoDoPlano(1, 5_000, 'semanal'))).toBe('1 parcela semanal de R$ 50,00')
+    expect(semNbsp(textoDoPlano(10, 5_000, 'mensal'))).toBe('10 parcelas de R$ 50,00')
+    expect(semNbsp(textoDoPlano(10, 5_000, undefined))).toBe('10 parcelas de R$ 50,00')
+  })
+
+  it('a frase curta da semanal também diz "semanais"', () => {
+    const tres = [parcela(1, 0), parcela(2, 0), parcela(3, 0), parcela(4, 10_000)]
+
+    expect(textoDoPlanoCurto(10, tres, 'semanal')).toBe('10 parcelas semanais · 3 pagas')
+    expect(textoDoPlanoCurto(1, [parcela(1, 10_000)], 'semanal')).toBe('1 parcela semanal · 0 pagas')
+    expect(textoDoPlanoCurto(10, tres, 'mensal')).toBe('10 parcelas · 3 pagas')
+  })
+
   it('conta as pagas sobre o total', () => {
     expect(textoDasPagas([parcela(1, 0), parcela(2, 0), parcela(3, 10_000)], 3)).toBe('2/3 pagas')
   })

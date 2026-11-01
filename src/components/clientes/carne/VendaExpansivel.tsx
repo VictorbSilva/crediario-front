@@ -90,7 +90,7 @@ export function VendaExpansivel({
             Venda de {dataBonita(venda.dataVenda)}
           </span>
           <span className="mt-0.5 block text-sm text-slate-600">
-            {textoDoPlano(venda.numeroParcelas, venda.valorParcelaCentavos)}
+            {textoDoPlano(venda.numeroParcelas, venda.valorParcelaCentavos, venda.periodicidade)}
           </span>
         </span>
 

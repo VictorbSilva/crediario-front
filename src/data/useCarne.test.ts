@@ -231,6 +231,20 @@ describe('useCarne — carregamento', () => {
     expect(vendas.get('v2')?.itens).toBeUndefined()
   })
 
+  it('venda semanal chega com a periodicidade; venda mensal antiga, sem o campo', () => {
+    const { result } = renderHook(() => useCarne('ana'))
+    emitir('sales', [
+      { ...VENDA, dados: { ...VENDA.dados, periodicidade: 'semanal', versaoCalculo: 2 } },
+      { ...VENDA, id: 'v2' },
+    ])
+    emitir('installments', [])
+    emitir('payments', [])
+
+    const vendas = new Map(result.current.carnes.map((c) => [c.venda.id, c.venda]))
+    expect(vendas.get('v1')?.periodicidade).toBe('semanal')
+    expect(vendas.get('v2')?.periodicidade).toBeUndefined()
+  })
+
   it('venda cancelada fica no carnê mas sai do saldo', () => {
     const { result } = renderHook(() => useCarne('ana'))
     emitir('sales', [{ ...VENDA, dados: { ...VENDA.dados, cancelada: true, canceladaEm: '2026-10-01' } }])
@@ -416,6 +430,22 @@ describe('useCarne — escritas', () => {
       })
     }
     expect(simulado.lote.commit).toHaveBeenCalledTimes(1)
+  })
+
+  it('venda semanal vai no lote com a periodicidade e a versão 2; a mensal, sem o campo e na 1', () => {
+    const { result } = renderHook(() => useCarne('ana'))
+
+    // 15/10/2026 é quinta: dia 4 da semana ISO, e vencimentos de 7 em 7 dias.
+    result.current.registrarVenda({ ...entradaVenda(), periodicidade: 'semanal' })
+    const [[, semanal], ...parcelas] = simulado.lote.set.mock.calls
+    expect(semanal).toMatchObject({ periodicidade: 'semanal', versaoCalculo: 2, diaVencimento: 4 })
+    expect(parcelas.map(([, campos]) => campos.vencimento)).toEqual(['2026-10-22', '2026-10-29', '2026-11-05'])
+
+    simulado.lote.set.mockClear()
+    result.current.registrarVenda(entradaVenda())
+    const [[, mensal]] = simulado.lote.set.mock.calls
+    expect(mensal).toMatchObject({ versaoCalculo: 1, diaVencimento: 10 })
+    expect('periodicidade' in mensal).toBe(false)
   })
 
   it('lote recusado vira falha visível, que o usuário pode dispensar', async () => {

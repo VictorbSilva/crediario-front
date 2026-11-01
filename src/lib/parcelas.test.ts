@@ -9,6 +9,7 @@ import {
   situacaoDaParcela,
   taxasEfetivas,
   temTaxaPropria,
+  versaoConhecida,
 } from './parcelas'
 import type { PagamentoConhecido, ParcelaConhecida } from './parcelas'
 
@@ -65,6 +66,62 @@ describe('gerarParcelas', () => {
     const base = { dataVenda: '2026-04-19', diaVencimento: 19 }
     expect(() => gerarParcelas({ ...base, numeroParcelas: 0, valorTotalCentavos: 100 })).toThrow()
     expect(() => gerarParcelas({ ...base, numeroParcelas: 3, valorTotalCentavos: 0 })).toThrow()
+  })
+
+  it('sem periodicidade, e com "mensal", a venda mensal sai igual à de antes da semanal', () => {
+    const mensal = {
+      dataVenda: '2026-10-30',
+      numeroParcelas: 4,
+      valorTotalCentavos: 10_000,
+      diaVencimento: 30,
+    }
+    const esperado = [
+      { numero: 1, total: 4, vencimento: '2026-11-30', valorCentavos: 2_500 },
+      { numero: 2, total: 4, vencimento: '2026-12-30', valorCentavos: 2_500 },
+      { numero: 3, total: 4, vencimento: '2027-01-30', valorCentavos: 2_500 },
+      { numero: 4, total: 4, vencimento: '2027-02-28', valorCentavos: 2_500 },
+    ]
+
+    expect(gerarParcelas(mensal)).toStrictEqual(esperado)
+    expect(gerarParcelas({ ...mensal, periodicidade: 'mensal' })).toStrictEqual(esperado)
+  })
+
+  it('semanal: a primeira vence 7 dias depois da venda, as seguintes de 7 em 7, com a sobra na última', () => {
+    // Venda numa sexta, 30/10: todas vencem às sextas. O `diaVencimento` não
+    // entra na conta — 30 aqui faria a mensal vencer no dia 30.
+    const parcelas = gerarParcelas({
+      dataVenda: '2026-10-30',
+      numeroParcelas: 4,
+      valorTotalCentavos: 10_001,
+      diaVencimento: 30,
+      periodicidade: 'semanal',
+    })
+
+    expect(parcelas).toStrictEqual([
+      { numero: 1, total: 4, vencimento: '2026-11-06', valorCentavos: 2_500 },
+      { numero: 2, total: 4, vencimento: '2026-11-13', valorCentavos: 2_500 },
+      { numero: 3, total: 4, vencimento: '2026-11-20', valorCentavos: 2_500 },
+      { numero: 4, total: 4, vencimento: '2026-11-27', valorCentavos: 2_501 },
+    ])
+  })
+})
+
+describe('versaoConhecida', () => {
+  it('a mensal é a versão 1, com ou sem o campo', () => {
+    expect(versaoConhecida(1, undefined)).toBe(true)
+    expect(versaoConhecida(1, 'mensal')).toBe(true)
+  })
+
+  it('a semanal é a versão 2', () => {
+    expect(versaoConhecida(2, 'semanal')).toBe(true)
+  })
+
+  it('o que não bate não é adivinhado', () => {
+    expect(versaoConhecida(1, 'semanal')).toBe(false)
+    expect(versaoConhecida(2, undefined)).toBe(false)
+    expect(versaoConhecida(2, 'mensal')).toBe(false)
+    expect(versaoConhecida(3, 'semanal')).toBe(false)
+    expect(versaoConhecida(3, undefined)).toBe(false)
   })
 })
 

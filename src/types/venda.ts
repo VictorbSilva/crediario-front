@@ -1,4 +1,5 @@
 import type { Timestamp } from 'firebase/firestore'
+import type { Periodicidade } from '@/lib/parcelas'
 
 export type TipoDeMulta = 'percentual' | 'fixo'
 
@@ -25,6 +26,8 @@ export type Venda = {
   observacao?: string
   /** Ausente nas vendas lançadas antes dos itens (30/10/2026). */
   itens?: ItemDaVenda[]
+  /** Ausente é mensal: toda venda lançada antes da semanal (31/10/2026). */
+  periodicidade?: Periodicidade
   cancelada?: boolean
   canceladaEm?: string
   versaoCalculo: number

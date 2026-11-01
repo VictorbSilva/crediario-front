@@ -60,6 +60,13 @@ describe('ResumoDeVendas', () => {
     expect(saida).toContain(formatarCentavos(10000))
   })
 
+  it('a venda semanal diz "semanais" na frase curta', () => {
+    const semanal = venda('v1', { periodicidade: 'semanal', versaoCalculo: 2, diaVencimento: 4 })
+    const saida = html({}, [semanal], [parcela('v1', 1, '2026-09-10'), parcela('v1', 2, '2026-10-10')], [pago])
+
+    expect(saida).toContain('2 parcelas semanais · 1 pagas')
+  })
+
   it('sem venda em aberto, diz isso', () => {
     expect(html({})).toContain('Nenhuma venda em aberto.')
   })

@@ -4,8 +4,9 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Campo } from '@/components/ui/Campo'
 import { ModalDeFormulario } from '@/components/ui/ModalDeFormulario'
 import { Nota } from '@/components/ui/Nota'
-import { dataBonita } from '@/lib/data'
+import { dataBonita, diaDaSemanaISO, ehDataCivil, vencimentoSemanal } from '@/lib/data'
 import { formatarCentavos } from '@/lib/dinheiro'
+import type { Periodicidade } from '@/lib/parcelas'
 import {
   LIMITES_VENDA,
   entradaItemVazia,
@@ -16,6 +17,31 @@ import {
   validarVenda,
 } from '@/lib/venda'
 import type { EntradaItem, EntradaVenda } from '@/lib/venda'
+
+const PERIODICIDADES: { valor: Periodicidade; rotulo: string }[] = [
+  { valor: 'mensal', rotulo: 'Mensal' },
+  { valor: 'semanal', rotulo: 'Semanal' },
+]
+
+// Pelo dia da semana ISO, 1 = segunda … 7 = domingo. Sábado e domingo pedem "todo".
+const TODO_DIA = [
+  '',
+  'toda segunda-feira',
+  'toda terça-feira',
+  'toda quarta-feira',
+  'toda quinta-feira',
+  'toda sexta-feira',
+  'todo sábado',
+  'todo domingo',
+]
+
+function dicaDaDataVenda(entrada: EntradaVenda): string | undefined {
+  if (entrada.periodicidade === 'mensal') return 'A primeira parcela cai no mês seguinte.'
+  if (!ehDataCivil(entrada.dataVenda)) return undefined
+
+  const primeira = dataBonita(vencimentoSemanal(entrada.dataVenda, 1))
+  return `Vence ${TODO_DIA[diaDaSemanaISO(entrada.dataVenda)]}, a primeira em ${primeira}.`
+}
 
 type FormuladorVendaProps = Readonly<{
   aoSalvar: (entrada: EntradaVenda) => void
@@ -240,6 +266,26 @@ export function FormularioVenda({ aoSalvar, aoFechar, aviso }: FormuladorVendaPr
         </div>
       </fieldset>
 
+      <fieldset>
+        <legend className="mb-1.5 text-sm font-medium text-slate-700">Vencimento</legend>
+        <div className="flex flex-wrap gap-4">
+          {PERIODICIDADES.map((periodicidade) => (
+            <label key={periodicidade.valor} className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name={base + '-periodicidade'}
+                checked={entrada.periodicidade === periodicidade.valor}
+                onChange={() =>
+                  setEntrada((atual) => ({ ...atual, periodicidade: periodicidade.valor }))
+                }
+                className="h-4 w-4 border-slate-300 text-brand-600 focus:ring-brand-600"
+              />
+              {periodicidade.rotulo}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
       <div className="grid grid-cols-2 gap-3">
         <Campo
           id={base + '-parcelas'}
@@ -253,17 +299,19 @@ export function FormularioVenda({ aoSalvar, aoFechar, aviso }: FormuladorVendaPr
           aoSair={sair('numeroParcelas')}
         />
 
-        <Campo
-          id={base + '-dia'}
-          rotulo="Dia do vencimento"
-          valor={entrada.diaVencimento}
-          maxLength={2}
-          inputMode="numeric"
-          obrigatorio
-          erro={mostrar('diaVencimento')}
-          aoMudar={mudar('diaVencimento')}
-          aoSair={sair('diaVencimento')}
-        />
+        {entrada.periodicidade === 'mensal' ? (
+          <Campo
+            id={base + '-dia'}
+            rotulo="Dia do vencimento"
+            valor={entrada.diaVencimento}
+            maxLength={2}
+            inputMode="numeric"
+            obrigatorio
+            erro={mostrar('diaVencimento')}
+            aoMudar={mudar('diaVencimento')}
+            aoSair={sair('diaVencimento')}
+          />
+        ) : null}
       </div>
 
       <Campo
@@ -273,7 +321,7 @@ export function FormularioVenda({ aoSalvar, aoFechar, aviso }: FormuladorVendaPr
         tipo="date"
         obrigatorio
         erro={mostrar('dataVenda')}
-        dica="A primeira parcela cai no mês seguinte."
+        dica={dicaDaDataVenda(entrada)}
         aoMudar={mudar('dataVenda')}
         aoSair={sair('dataVenda')}
       />

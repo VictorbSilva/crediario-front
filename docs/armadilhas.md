@@ -1165,6 +1165,47 @@ Dia 31 encolhe para o último dia do mês curto (`vencimentoDaParcela` em `src/l
 Sem isso, `new Date(2026, 1, 31)` viraria 3 de março em silêncio, e o carnê nasceria com
 vencimento fora do mês.
 
+### Duas versões de cálculo: mensal na 1, semanal na 2 (31/10/2026)
+
+O dono pediu em 30/10/2026 *"vencimento semanal, porque tem cliente que paga por semana"*.
+Decisão do mesmo dia: a parcela N da semanal vence na **data da venda + 7 × N dias**
+(`vencimentoSemanal` em `src/lib/data.ts`). Venda numa sexta, 30/10, vence às sextas: 06/11,
+13/11, 20/11… A sobra da divisão vai para a última, como na mensal.
+
+| | `periodicidade` | `versaoCalculo` | `diaVencimento` |
+|---|---|---|---|
+| Mensal | **ausente** | `1` (`VERSAO_CALCULO`) | 1 a 31, digitado |
+| Semanal | `'semanal'` | `2` (`VERSAO_CALCULO_SEMANAL`) | 1 a 7, o dia da semana ISO da venda (`diaDaSemanaISO`) |
+
+**A mensal não muda em nada**: `montarCamposVenda` grava o mesmo documento de antes da
+semanal — nem `periodicidade: 'mensal'` explícito —, e `gerarParcelas` sem `periodicidade`
+devolve as mesmas parcelas. Há teste com o documento inteiro (`toStrictEqual`) para travar
+isso. Na semanal, `diaVencimento` não se digita (o formulário esconde o campo e
+`validarVenda` não o confere); ele é gravado porque a regra o exige e porque diz o dia da
+semana de todo vencimento, mas `gerarParcelas` não o usa.
+
+> **AVISO — por que a semanal não podia ficar na versão 1**
+> Um aparelho do dono com o app de antes da semanal não conhece `periodicidade`. Se a
+> semanal fosse gravada com `versaoCalculo: 1`, o `parcelasRegeneradas` antigo a
+> regeneraria **como mensal**, com o `diaVencimento` de 1 a 7 como dia do mês, e o
+> Financeiro daquele aparelho mostraria a receber, vencido e atrasados errados, sem aviso.
+> Com a versão 2, o app antigo devolve `null` e a venda entra em `vendasNaoCalculadas`, que a
+> tela já avisa. O carnê do cliente não tem esse problema: ele lê `installments`, gravadas
+> com as datas certas no mesmo lote da venda. É a regra *reversible by construction* do
+> `CLAUDE.md` funcionando: a versão diz qual cálculo gerou a venda.
+>
+> No app novo, quem decide se sabe recalcular é `versaoConhecida(versaoCalculo,
+> periodicidade)`: mensal (campo ausente ou `'mensal'`) só na 1, semanal só na 2. Qualquer
+> outra combinação — semanal na 1, mensal na 2, versão 3 — é desconhecida e **não é
+> adivinhada**. A regra do Firestore recusa semanal sem `versaoCalculo == 2` (seção de
+> `firestore.rules`, acima), então a combinação perigosa nem chega ao servidor.
+
+O teto do ano 9999 (`erroDaDataVenda` em `src/lib/venda.ts`) conta pela periodicidade
+escolhida: na semanal, de 7 em 7 dias, sem depender do dia do vencimento escondido.
+
+Multa e juros não mudam: contam dias desde o vencimento da parcela, qualquer que seja a
+periodicidade.
+
 > ⚠️ **Terceira suposição, e é a mais discutível:** multa e juros incidem sobre o que **falta**
 > da parcela, não sobre o valor cheio. Quem pagou metade de uma parcela vencida simula
 > encargo sobre a metade. É a leitura mais defensável — *"você ainda me deve 50, e é sobre
@@ -1191,7 +1232,8 @@ leituras** por abertura; sem as parcelas, 300 + 1.500 = **1.800**. Numa tela abe
 vezes por dia, a diferença é a cota.
 
 Recalcular só é seguro porque a venda guarda **todas** as entradas do cálculo (`dataVenda`,
-`valorTotalCentavos`, `numeroParcelas`, `diaVencimento`) e o `versaoCalculo` — é a regra de
+`valorTotalCentavos`, `numeroParcelas`, `diaVencimento`, `periodicidade` na semanal) e o
+`versaoCalculo` — é a regra de
 reversibilidade do `CLAUDE.md` sendo usada para o que ela existe. `montarCamposVenda` grava a
 venda e as parcelas do mesmo `gerarParcelas`, num lote só, e a regra torna imutáveis tanto as
 entradas da venda quanto o `vencimento` e o `valorCentavos` de cada parcela. Por isso a parcela
@@ -1203,13 +1245,15 @@ de `alocarPagamentos` e **não é** o id do documento em `installments` — nunc
 nem para apontar uma parcela.
 
 > **AVISO — versão de cálculo desconhecida**
-> Venda com `versaoCalculo` diferente de `VERSAO_CALCULO` **não é recalculada**:
+> Venda cuja versão `versaoConhecida` não reconhece (mensal fora da 1, semanal fora da 2)
+> **não é recalculada**:
 > `parcelasRegeneradas` devolve `null`, a venda fica fora do a receber, do vencido e dos
 > atrasados, e entra em `vendasNaoCalculadas`, para a tela avisar que os números estão abaixo
 > do real. **Nunca adivinhar.** Gerar com a regra da versão 1 uma venda feita pela versão 2
 > daria vencimentos e valores errados sem ninguém perceber. Isso acontece, por exemplo, quando
-> um aparelho com o app antigo recebe uma venda gravada por um app mais novo. Quando a versão 2
-> existir, ela é um ramo em `parcelasRegeneradas`, não uma migração.
+> um aparelho com o app antigo recebe uma venda gravada por um app mais novo. A versão 2 (a
+> semanal, 31/10/2026) entrou assim: um ramo em `gerarParcelas` e `versaoConhecida`, sem
+> migração — ver a seção de `src/lib/parcelas.ts`.
 >
 > Venda cancelada de versão desconhecida **não** entra na contagem: cancelada, ela ficaria fora
 > das somas de qualquer jeito, então não falta nada na conta e não há o que avisar.

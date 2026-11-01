@@ -1,6 +1,6 @@
 import { diferencaEmDias } from './data'
 import { formatarCentavos } from './dinheiro'
-import type { ParcelaComEstado, ResumoDaVenda, TaxasDeSimulacao } from './parcelas'
+import type { ParcelaComEstado, Periodicidade, ResumoDaVenda, TaxasDeSimulacao } from './parcelas'
 
 export type SituacaoVenda = 'quitada' | 'atrasada' | 'em-dia' | 'cancelada' | 'incompleta'
 
@@ -86,8 +86,19 @@ export function textoDaSituacao(item: ParcelaComEstado, hoje: string): string {
   return estado.situacao === 'parcial' ? `Parcial · ${quando.toLowerCase()}` : quando
 }
 
-export function textoDoPlano(numeroParcelas: number, valorParcelaCentavos: number): string {
-  return `${plural(numeroParcelas, 'parcela', 'parcelas')} de ${formatarCentavos(valorParcelaCentavos)}`
+/** "10 parcelas" na mensal, que é o padrão; "10 parcelas semanais" na semanal. */
+function quantasParcelas(numeroParcelas: number, periodicidade?: Periodicidade): string {
+  return periodicidade === 'semanal'
+    ? plural(numeroParcelas, 'parcela semanal', 'parcelas semanais')
+    : plural(numeroParcelas, 'parcela', 'parcelas')
+}
+
+export function textoDoPlano(
+  numeroParcelas: number,
+  valorParcelaCentavos: number,
+  periodicidade?: Periodicidade,
+): string {
+  return `${quantasParcelas(numeroParcelas, periodicidade)} de ${formatarCentavos(valorParcelaCentavos)}`
 }
 
 /**
@@ -104,10 +115,11 @@ export function textoDasPagas(parcelas: readonly ParcelaComEstado[], total: numb
 export function textoDoPlanoCurto(
   numeroParcelas: number,
   parcelas: readonly ParcelaComEstado[],
+  periodicidade?: Periodicidade,
 ): string {
   const pagas = parcelas.filter((item) => item.estado.situacao === 'paga').length
 
-  return `${plural(numeroParcelas, 'parcela', 'parcelas')} · ${pagas} pagas`
+  return `${quantasParcelas(numeroParcelas, periodicidade)} · ${pagas} pagas`
 }
 
 export function textoDoResto(resto: NonNullable<Janela['resto']>, total: number): string {

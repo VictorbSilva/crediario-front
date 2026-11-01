@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   dataBonita,
   dataLocalISO,
+  diaDaSemanaISO,
   diferencaEmDias,
   ehDataCivil,
   subtrairMeses,
   vencimentoDaParcela,
+  vencimentoSemanal,
 } from './data'
 
 describe('subtrairMeses', () => {
@@ -130,5 +132,54 @@ describe('vencimentoDaParcela', () => {
 
   it('mantém o ano com quatro dígitos', () => {
     expect(vencimentoDaParcela('0999-01-15', 1, 15)).toBe('0999-02-15')
+  })
+})
+
+describe('vencimentoSemanal', () => {
+  it('a primeira parcela vence sete dias depois da venda', () => {
+    expect(vencimentoSemanal('2026-10-30', 1)).toBe('2026-11-06')
+  })
+
+  it('a parcela N vence 7 × N dias depois da venda', () => {
+    expect(vencimentoSemanal('2026-10-30', 2)).toBe('2026-11-13')
+    expect(vencimentoSemanal('2026-10-30', 4)).toBe('2026-11-27')
+    expect(vencimentoSemanal('2026-10-30', 120)).toBe('2029-02-16')
+  })
+
+  it('atravessa a virada de ano', () => {
+    expect(vencimentoSemanal('2026-12-28', 1)).toBe('2027-01-04')
+  })
+
+  it('fevereiro de 28 dias passa direto para março', () => {
+    expect(vencimentoSemanal('2027-02-22', 1)).toBe('2027-03-01')
+  })
+
+  it('fevereiro de ano bissexto tem o dia 29', () => {
+    expect(vencimentoSemanal('2028-02-22', 1)).toBe('2028-02-29')
+    expect(vencimentoSemanal('2028-02-23', 1)).toBe('2028-03-01')
+  })
+
+  it('não muda de dia na troca de horário de verão: a conta é em data civil', () => {
+    // 2018 ainda tinha horário de verão; ele começou em 04/11.
+    expect(vencimentoSemanal('2018-11-01', 1)).toBe('2018-11-08')
+  })
+
+  it('cai sempre no mesmo dia da semana da venda', () => {
+    for (let ordem = 1; ordem <= 10; ordem += 1) {
+      expect(diaDaSemanaISO(vencimentoSemanal('2026-11-01', ordem))).toBe(7)
+    }
+  })
+})
+
+describe('diaDaSemanaISO', () => {
+  it('segunda é 1 e domingo é 7, não 0', () => {
+    expect(diaDaSemanaISO('2026-11-02')).toBe(1)
+    expect(diaDaSemanaISO('2026-11-01')).toBe(7)
+  })
+
+  it('numera a semana inteira de 1 a 7', () => {
+    const semana = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08']
+
+    expect(semana.map(diaDaSemanaISO)).toEqual([1, 2, 3, 4, 5, 6, 7])
   })
 })

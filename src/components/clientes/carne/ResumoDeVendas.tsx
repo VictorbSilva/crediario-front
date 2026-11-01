@@ -36,7 +36,7 @@ export function ResumoDeVendas({ dados }: ResumoDeVendasProps) {
               Venda de {dataBonita(venda.dataVenda)}
             </div>
             <div className="mt-0.5 text-sm text-slate-600">
-              {textoDoPlanoCurto(venda.numeroParcelas, parcelas)}
+              {textoDoPlanoCurto(venda.numeroParcelas, parcelas, venda.periodicidade)}
             </div>
           </div>
           <div className="shrink-0 text-right">
