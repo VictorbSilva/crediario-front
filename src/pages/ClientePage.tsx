@@ -25,7 +25,10 @@ function Voltar() {
 
 export function ClientePage() {
   const { id } = useParams<{ id: string }>()
-  const { clientes, carregando, alternarArquivo } = useClientes()
+  const {
+    clientes, carregando, alternarArquivo, definirProximaCobranca, removerProximaCobranca,
+    falhas, descartarFalha,
+  } = useClientes()
   const [editando, setEditando] = useState(false)
 
   const cliente = clientes.find((item) => item.id === id)
@@ -62,9 +65,19 @@ export function ClientePage() {
             </div>
 
             <dl className="flex flex-col gap-4 p-4">
-              <DadosDoCliente cliente={cliente} />
+              <DadosDoCliente cliente={cliente} aoRemoverProximaCobranca={() => removerProximaCobranca(cliente)} />
             </dl>
           </div>
+
+          {falhas.map((falha) => (
+            <Nota key={falha.id} tom="alerta" titulo="Uma escrita foi recusada">
+              <span>{falha.mensagem}</span>
+              <button type="button" onClick={() => descartarFalha(falha.id)}
+                className="ml-2 font-semibold underline underline-offset-2">
+                Entendi
+              </button>
+            </Nota>
+          ))}
 
           <button
             type="button"
@@ -79,7 +92,7 @@ export function ClientePage() {
 
         <div className="flex flex-col gap-3.5">
           <h1 className="text-base font-bold text-slate-900">Vendas</h1>
-          <CarneDoCliente dados={dados} permiteEscrita />
+          <CarneDoCliente dados={dados} permiteEscrita aoDefinirProximaCobranca={(data) => definirProximaCobranca(cliente, data)} />
         </div>
       </div>
       {editando ? (

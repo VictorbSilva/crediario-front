@@ -109,6 +109,7 @@ export type CampoRemovivel =
   | 'observacao'
   | 'diasDeVisita'
   | 'rotaDesde'
+  | 'proximaCobranca'
 
 export type EdicaoCliente = {
   definir: {
@@ -124,9 +125,21 @@ export type EdicaoCliente = {
     observacao?: string
     diasDeVisita?: number[]
     rotaDesde?: string
+    proximaCobranca?: string
     atualizadoPor: string
   }
   remover: CampoRemovivel[]
+}
+
+export function montarProximaCobranca(
+  data: string,
+  { dispositivo }: ContextoEscrita,
+): EdicaoCliente {
+  return { definir: { proximaCobranca: data, atualizadoPor: dispositivo }, remover: [] }
+}
+
+export function montarRemocaoDaProximaCobranca({ dispositivo }: ContextoEscrita): EdicaoCliente {
+  return { definir: { atualizadoPor: dispositivo }, remover: ['proximaCobranca'] }
 }
 
 export function parseNumeroCadastro(entrada: string): number | null {

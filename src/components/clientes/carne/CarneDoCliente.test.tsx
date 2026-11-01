@@ -408,6 +408,53 @@ describe('CarneDoCliente — a venda aberta', () => {
 })
 
 describe('CarneDoCliente — registrar pagamento', () => {
+  it('envia a próxima cobrança separadamente e fecha sem esperar confirmação do pagamento', () => {
+    const carne = PADRAO()
+    const aoDefinirProximaCobranca = vi.fn()
+    vi.mocked(carne.registrarPagamento).mockReturnValue(new Promise(() => {}) as never)
+    render(<CarneDoCliente dados={carne} permiteEscrita aoDefinirProximaCobranca={aoDefinirProximaCobranca} />)
+    abrirVenda()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Registrar pagamento' })[0])
+    const campo = screen.getByLabelText('Próxima cobrança (opcional)') as HTMLInputElement
+    expect(campo.type).toBe('date')
+    expect(campo.min).toBe('2026-10-16')
+    expect(campo.value).toBe('')
+    expect(screen.getByText('O cliente entra na rota desse dia')).toBeTruthy()
+    digitar('Data do recebimento', '2026-10-31')
+    expect(campo.min).toBe('2026-11-01')
+    digitar('Próxima cobrança (opcional)', '2026-11-06')
+    fireEvent.click(screen.getByRole('button', { name: 'Lançar pagamento' }))
+    expect(carne.registrarPagamento).toHaveBeenCalledWith('v1', expect.objectContaining({ data: '2026-10-31' }))
+    expect(aoDefinirProximaCobranca).toHaveBeenCalledExactlyOnceWith('2026-11-06')
+    expect(document.querySelector('dialog')).toBeNull()
+  })
+
+  it('vazia não chama o callback que altera a próxima cobrança do cliente', () => {
+    const aoDefinirProximaCobranca = vi.fn()
+    const carne = PADRAO()
+    render(<CarneDoCliente dados={carne} permiteEscrita aoDefinirProximaCobranca={aoDefinirProximaCobranca} />)
+    abrirVenda()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Registrar pagamento' })[0])
+    digitar('Próxima cobrança (opcional)', '2026-11-06')
+    digitar('Próxima cobrança (opcional)', '')
+    fireEvent.click(screen.getByRole('button', { name: 'Lançar pagamento' }))
+    expect(carne.registrarPagamento).toHaveBeenCalledTimes(1)
+    expect(aoDefinirProximaCobranca).not.toHaveBeenCalled()
+  })
+
+  it('data igual ao pagamento bloqueia as duas escritas', () => {
+    const aoDefinirProximaCobranca = vi.fn()
+    const carne = PADRAO()
+    render(<CarneDoCliente dados={carne} permiteEscrita aoDefinirProximaCobranca={aoDefinirProximaCobranca} />)
+    abrirVenda()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Registrar pagamento' })[0])
+    digitar('Próxima cobrança (opcional)', HOJE)
+    fireEvent.click(screen.getByRole('button', { name: 'Lançar pagamento' }))
+    expect(screen.getByRole('alert').textContent).toBe('A próxima cobrança precisa ser depois do pagamento')
+    expect(carne.registrarPagamento).not.toHaveBeenCalled()
+    expect(aoDefinirProximaCobranca).not.toHaveBeenCalled()
+  })
+
   it('o botão fica na parcela e pré-preenche o que falta nela, mas o pagamento vai contra a venda', () => {
     const carne = PADRAO()
     render(<CarneDoCliente dados={carne} permiteEscrita />)

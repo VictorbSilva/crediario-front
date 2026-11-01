@@ -15,7 +15,13 @@ import {
 } from 'firebase/firestore'
 import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'
 import { useAuth } from '@/auth/useAuth'
-import { entradaDoCliente, montarCamposCliente, montarEdicaoCliente } from '@/lib/cliente'
+import {
+  entradaDoCliente,
+  montarCamposCliente,
+  montarEdicaoCliente,
+  montarProximaCobranca,
+  montarRemocaoDaProximaCobranca,
+} from '@/lib/cliente'
 import type { EntradaCliente } from '@/lib/cliente'
 import { dataLocalISO } from '@/lib/data'
 import { identificarDispositivo } from '@/lib/dispositivo'
@@ -254,6 +260,43 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
     [businessId, registrarFalha],
   )
 
+  const definirProximaCobranca = useCallback(
+    (cliente: Cliente, data: string) => {
+      if (!businessId) return
+
+      const { definir } = montarProximaCobranca(data, {
+        agora: new Date(), dispositivo: identificarDispositivo(),
+      })
+      const referencia = doc(db, 'businesses', businessId, 'clients', cliente.id)
+      updateDoc(referencia, {
+        ...definir,
+        atualizadoEm: serverTimestamp(),
+      }).catch((causa: unknown) => {
+        registrarFalha(`Não foi possível salvar a próxima cobrança de ${cliente.nome}.`, causa)
+      })
+    },
+    [businessId, registrarFalha],
+  )
+
+  const removerProximaCobranca = useCallback(
+    (cliente: Cliente) => {
+      if (!businessId) return
+
+      const { definir, remover } = montarRemocaoDaProximaCobranca({
+        agora: new Date(), dispositivo: identificarDispositivo(),
+      })
+      const referencia = doc(db, 'businesses', businessId, 'clients', cliente.id)
+      updateDoc(referencia, {
+        ...definir,
+        ...Object.fromEntries(remover.map((campo) => [campo, deleteField()])),
+        atualizadoEm: serverTimestamp(),
+      }).catch((causa: unknown) => {
+        registrarFalha(`Não foi possível remover a próxima cobrança de ${cliente.nome}.`, causa)
+      })
+    },
+    [businessId, registrarFalha],
+  )
+
   const reordenarRota = useCallback(
     (reordenacoes: Reordenacao[]) => {
       if (!businessId || reordenacoes.length === 0) return
@@ -325,6 +368,8 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
       editarCliente,
       alternarArquivo,
       marcarNaRota,
+      definirProximaCobranca,
+      removerProximaCobranca,
       reordenarRota,
     }
   }, [
@@ -339,6 +384,8 @@ export function ClientesProvider({ children }: Readonly<{ children: ReactNode }>
     editarCliente,
     alternarArquivo,
     marcarNaRota,
+    definirProximaCobranca,
+    removerProximaCobranca,
     reordenarRota,
   ])
 

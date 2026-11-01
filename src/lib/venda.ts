@@ -445,6 +445,7 @@ export function montarCancelamentoVenda({
 
 export type EntradaPagamento = {
   data: string
+  proximaCobranca?: string
   valor: string
   forma: FormaDePagamento
   observacao: string
@@ -488,6 +489,7 @@ export function formatarParaCampo(centavos: number): string {
 export function validarPagamento(entrada: EntradaPagamento): ErrosPagamento {
   return compactar<keyof EntradaPagamento>({
     data: ehDataCivil(entrada.data) ? undefined : 'Data inválida',
+    proximaCobranca: erroDaProximaCobranca(entrada),
     valor: erroDoValorPago(entrada.valor),
     forma: undefined,
     observacao: erroDeTamanho(
@@ -496,6 +498,15 @@ export function validarPagamento(entrada: EntradaPagamento): ErrosPagamento {
       'Observação muito longa',
     ),
   })
+}
+
+function erroDaProximaCobranca(entrada: EntradaPagamento): string | undefined {
+  if (!entrada.proximaCobranca) return undefined
+  if (!ehDataCivil(entrada.proximaCobranca)) return 'Data inválida'
+  if (entrada.proximaCobranca <= entrada.data) {
+    return 'A próxima cobrança precisa ser depois do pagamento'
+  }
+  return undefined
 }
 
 function erroDoValorPago(valor: string): string | undefined {

@@ -176,6 +176,46 @@ describe('mapeamento do documento para Cliente', () => {
   })
 })
 
+describe('próxima cobrança', () => {
+  it('define a data no cliente com carimbo e autoria, sem esperar o servidor', () => {
+    simulado.updateDoc.mockReturnValueOnce(new Promise(() => {}))
+    expect(contexto().definirProximaCobranca(cliente, '2026-11-06')).toBeUndefined()
+    expect(doc).toHaveBeenCalledWith({}, 'businesses', 'loja-treino', 'clients', 'ana')
+    expect(simulado.updateDoc).toHaveBeenCalledExactlyOnceWith('referencia', {
+      proximaCobranca: '2026-11-06', atualizadoPor: 'aparelho', atualizadoEm: 'carimbo-do-servidor',
+    })
+  })
+
+  it('remove a data usando deleteField sem tocar nos outros campos', () => {
+    contexto().removerProximaCobranca(cliente)
+    expect(simulado.updateDoc).toHaveBeenCalledExactlyOnceWith('referencia', {
+      proximaCobranca: 'remover-campo', atualizadoPor: 'aparelho', atualizadoEm: 'carimbo-do-servidor',
+    })
+  })
+
+  it('não escreve sem empresa', () => {
+    simulado.businessId = null
+    contexto().definirProximaCobranca(cliente, '2026-11-06')
+    contexto().removerProximaCobranca(cliente)
+    expect(simulado.updateDoc).not.toHaveBeenCalled()
+  })
+
+  it.each(['definir', 'remover'])('empilha a falha de %s no provider de clientes', async (acao) => {
+    const causa = new Error('permission-denied')
+    simulado.updateDoc.mockRejectedValueOnce(causa)
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const valor = contexto()
+    if (acao === 'definir') valor.definirProximaCobranca(cliente, '2026-11-06')
+    else valor.removerProximaCobranca(cliente)
+    await Promise.resolve()
+    expect(falhasEmpilhadas()).toEqual([{
+      id: expect.any(String), quando: expect.any(Date),
+      mensagem: `Não foi possível ${acao === 'definir' ? 'salvar' : 'remover'} a próxima cobrança de Ana.`,
+    }])
+    erro.mockRestore()
+  })
+})
+
 describe('marcarNaRota', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })

@@ -4,6 +4,7 @@ import { BotaoArquivar } from '@/components/clientes/BotaoArquivar'
 import { CabecalhoDoCliente, DadosDoCliente, Linha } from '@/components/clientes/IdentidadeDoCliente'
 import { ResumoDeVendas } from '@/components/clientes/carne/ResumoDeVendas'
 import { useCarne } from '@/data/useCarne'
+import { useClientes } from '@/data/useClientes'
 import type { Cliente } from '@/types/cliente'
 
 type PainelDoClienteProps = Readonly<{
@@ -13,6 +14,7 @@ type PainelDoClienteProps = Readonly<{
 
 export function PainelDoCliente({ cliente, aoAlternarArquivo }: PainelDoClienteProps) {
   const dados = useCarne(cliente.id)
+  const { removerProximaCobranca } = useClientes()
 
   return (
     <aside className="overflow-hidden rounded-xl border border-slate-200 bg-white lg:sticky lg:top-6">
@@ -21,7 +23,7 @@ export function PainelDoCliente({ cliente, aoAlternarArquivo }: PainelDoClienteP
       </div>
 
       <dl className="flex flex-col gap-4 p-4">
-        <DadosDoCliente cliente={cliente} />
+        <DadosDoCliente cliente={cliente} aoRemoverProximaCobranca={() => removerProximaCobranca(cliente)} />
 
         <Linha rotulo="Vendas em aberto">
           <ResumoDeVendas dados={dados} />

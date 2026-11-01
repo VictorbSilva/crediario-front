@@ -6,6 +6,8 @@ import {
   enderecoDoCliente,
   montarCamposCliente,
   montarEdicaoCliente,
+  montarProximaCobranca,
+  montarRemocaoDaProximaCobranca,
   parseNumeroCadastro,
   validarCliente,
   validarEdicaoCliente,
@@ -14,6 +16,20 @@ import type { ClienteConhecido, EntradaCliente } from './cliente'
 import { normalizar } from './texto'
 
 const CONTEXTO = { agora: new Date(2026, 8, 21, 15, 30), dispositivo: 'a1b2c3d4' }
+
+describe('próxima cobrança', () => {
+  it('define só a data e a autoria', () => {
+    expect(montarProximaCobranca('2026-11-06', CONTEXTO)).toEqual({
+      definir: { proximaCobranca: '2026-11-06', atualizadoPor: CONTEXTO.dispositivo }, remover: [],
+    })
+  })
+
+  it('remove só a data, preservando a autoria da alteração', () => {
+    expect(montarRemocaoDaProximaCobranca(CONTEXTO)).toEqual({
+      definir: { atualizadoPor: CONTEXTO.dispositivo }, remover: ['proximaCobranca'],
+    })
+  })
+})
 
 const lista: ClienteConhecido[] = [
   { numero: 137, nome: 'Maria Aparecida Santos' },

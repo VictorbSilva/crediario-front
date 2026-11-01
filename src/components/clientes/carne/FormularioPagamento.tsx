@@ -3,7 +3,7 @@ import type { SubmitEvent } from 'react'
 import { Campo } from '@/components/ui/Campo'
 import { ModalDeFormulario } from '@/components/ui/ModalDeFormulario'
 import { Nota } from '@/components/ui/Nota'
-import { dataBonita } from '@/lib/data'
+import { dataBonita, dataLocalISO, ehDataCivil } from '@/lib/data'
 import { formatarCentavos } from '@/lib/dinheiro'
 import type { ParcelaComEstado } from '@/lib/parcelas'
 import {
@@ -27,6 +27,7 @@ type FormularioPagamentoProps = Readonly<{
   totalDeParcelas: number
   abertoDaVendaCentavos: number
   aoSalvar: (entrada: EntradaPagamento) => void
+  aoDefinirProximaCobranca?: (data: string) => void
   aoFechar: () => void
 }>
 
@@ -35,6 +36,7 @@ export function FormularioPagamento({
   totalDeParcelas,
   abertoDaVendaCentavos,
   aoSalvar,
+  aoDefinirProximaCobranca,
   aoFechar,
 }: FormularioPagamentoProps) {
   const [entrada, setEntrada] = useState<EntradaPagamento>(() =>
@@ -46,6 +48,10 @@ export function FormularioPagamento({
   const base = useId()
   const erros = validarPagamento(entrada)
   const aviso = avisoDeValorAlto(entrada.valor, abertoDaVendaCentavos)
+  const diaSeguinte = ehDataCivil(entrada.data) ? new Date(entrada.data + 'T12:00:00') : null
+  if (diaSeguinte) diaSeguinte.setDate(diaSeguinte.getDate() + 1)
+  const minimoDaCobranca = diaSeguinte ? dataLocalISO(diaSeguinte) : undefined
+  const erroDaCobranca = mostrar('proximaCobranca')
 
   function mostrar(campo: keyof EntradaPagamento): string | undefined {
     const erro = erros[campo]
@@ -68,6 +74,7 @@ export function FormularioPagamento({
     if (Object.keys(erros).length > 0) return
 
     aoSalvar(entrada)
+    if (entrada.proximaCobranca) aoDefinirProximaCobranca?.(entrada.proximaCobranca)
     aoFechar()
   }
 
@@ -113,6 +120,32 @@ export function FormularioPagamento({
         aoMudar={mudar('data')}
         aoSair={sair('data')}
       />
+
+      <div>
+        <label htmlFor={base + '-proxima-cobranca'} className="mb-1.5 block text-sm font-medium text-slate-700">
+          Próxima cobrança (opcional)
+        </label>
+        <input
+          id={base + '-proxima-cobranca'}
+          type="date"
+          value={entrada.proximaCobranca ?? ''}
+          min={minimoDaCobranca}
+          autoComplete="off"
+          aria-invalid={erroDaCobranca ? true : undefined}
+          aria-describedby={`${base}-cobranca-dica${erroDaCobranca ? ` ${base}-cobranca-erro` : ''}`}
+          onChange={(evento) => mudar('proximaCobranca')(evento.target.value)}
+          onBlur={sair('proximaCobranca')}
+          className={`h-11 w-full rounded-lg border bg-white px-3 text-sm text-slate-900 outline-none transition-colors focus:ring-1 ${erroDaCobranca ? 'border-danger focus:border-danger focus:ring-danger' : 'border-slate-200 focus:border-brand-600 focus:ring-brand-600'}`}
+        />
+        <p id={base + '-cobranca-dica'} className="mt-1 text-xs text-slate-500">
+          O cliente entra na rota desse dia
+        </p>
+        {erroDaCobranca ? (
+          <p id={base + '-cobranca-erro'} role="alert" className="mt-1 text-xs font-medium text-danger">
+            {erroDaCobranca}
+          </p>
+        ) : null}
+      </div>
 
       <fieldset>
         <legend className="mb-1.5 text-sm font-medium text-slate-700">Forma</legend>
