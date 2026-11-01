@@ -1273,6 +1273,12 @@ registrada). Escolher os mesmos dias em outra ordem preserva os dois campos; esv
 lista que tinha dias remove `diasDeVisita` e `rotaDesde`. Sem entrada original, a edição
 envia os dias e o início da rota, ou remove os dois se a lista estiver vazia.
 
+Endereços legados podem ter até 200 caracteres. Na edição, validar contra a entrada da
+abertura permite preservar esse texto ao alterar só nome ou telefone. Alterar qualquer
+parte do endereço regrava o grupo completo e exige os limites novos (120/80/80).
+Apagar todas as partes também remove `endereco`, senão o fallback ressuscita o texto antigo.
+Lista, ficha, Rotas, busca e exportação usam `enderecoDoCliente` para exibir ambos os formatos.
+
 — referente a src/lib/cliente.ts, arquivo inteiro
 
 ## src/lib/sync.ts

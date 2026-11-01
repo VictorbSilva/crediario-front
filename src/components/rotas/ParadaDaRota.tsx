@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { StatusPill } from '@/components/ui/StatusPill'
 import type { AcaoNaRota } from '@/data/clientes-context'
 import { dataBonita } from '@/lib/data'
+import { enderecoDoCliente } from '@/lib/cliente'
 import type { EstadoNaRota } from '@/lib/rotas'
 import type { Cliente } from '@/types/cliente'
 
@@ -61,7 +62,7 @@ export function ParadaDaRota({ cliente, estado, aoMarcar }: ParadaDaRotaProps) {
             <span className="text-brand-700">#{cliente.numero}</span> · {cliente.nome}
           </div>
           <div className="mt-0.5 truncate text-xs text-slate-500">
-            {cliente.endereco ?? 'Sem endereço'}
+            {enderecoDoCliente(cliente) || 'Sem endereço'}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5 empty:hidden">
             {estado?.atrasado && estado.agendadoPara ? (

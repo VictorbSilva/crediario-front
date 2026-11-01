@@ -146,10 +146,6 @@ export function clienteComNumero(
   return clientes.find((cliente) => cliente.numero === numero && cliente.arquivado !== true)
 }
 
-export function proximoNumero(clientes: readonly ClienteConhecido[]): number {
-  return clientes.reduce((maior, cliente) => Math.max(maior, cliente.numero), 0) + 1
-}
-
 export function enderecoDoCliente(cliente: {
   rua?: string
   bairro?: string
@@ -259,8 +255,17 @@ export function validarCliente(
   return numero ? { numero, ...erros } : erros
 }
 
-export function validarEdicaoCliente(entrada: EntradaCliente): ErrosCliente {
-  return errosDosDadosCliente(entrada)
+export function validarEdicaoCliente(entrada: EntradaCliente, original?: EntradaCliente): ErrosCliente {
+  const erros = errosDosDadosCliente(entrada)
+  // Endereço antigo pode ter 200 caracteres. Só exige o limite novo ao regravá-lo.
+  if (original && !enderecoAlterado(entrada, original)) delete erros.rua
+  return erros
+}
+
+function enderecoAlterado(entrada: EntradaCliente, original: EntradaCliente): boolean {
+  return (['rua', 'bairro', 'cidade'] as const).some(
+    (campo) => entrada[campo].trim() !== original[campo].trim(),
+  )
 }
 
 export function montarCamposCliente(
@@ -350,16 +355,14 @@ export function montarEdicaoCliente(
   else remover.push('cpfDigits')
 
   const camposDoEndereco = ['rua', 'bairro', 'cidade'] as const
-  const mudouEndereco = !original || camposDoEndereco.some(
-    (campo) => entrada[campo].trim() !== original[campo].trim(),
-  )
+  const mudouEndereco = !original || enderecoAlterado(entrada, original)
   if (mudouEndereco) {
     for (const campo of camposDoEndereco) {
       const valor = entrada[campo].trim()
       if (valor) definir[campo] = valor
       else remover.push(campo)
     }
-    if (camposDoEndereco.some((campo) => entrada[campo].trim())) remover.push('endereco')
+    remover.push('endereco')
   }
 
   const observacao = entrada.observacao.trim()

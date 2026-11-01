@@ -62,12 +62,12 @@ afterEach(() => {
 })
 
 describe('FormularioCliente — cadastro', () => {
-  it('nasce com número sugerido, com o foco no número e os limites da regra em cada campo', () => {
+  it('nasce vazio, com o foco no número e os limites da regra em cada campo', () => {
     render(<FormularioCliente aoFechar={aoFechar} />)
 
     expect(screen.getByText('Novo cliente')).toBeTruthy()
     expect(document.activeElement).toBe(campo(/^Número/))
-    expect(campo(/^Número/).value).toBe('138')
+    expect(campo(/^Número/).value).toBe('')
     expect(campo(/^Nome/).maxLength).toBe(LIMITES_CLIENTE.nome)
     expect(campo(/^Contato/).maxLength).toBe(LIMITES_CLIENTE.telefone)
     expect(campo(/^CPF/).maxLength).toBe(LIMITES_CLIENTE.cpf)
@@ -237,6 +237,17 @@ describe('FormularioCliente — cadastro', () => {
 })
 
 describe('FormularioCliente — edição', () => {
+  it('permite trocar telefone sem cortar endereço antigo de 200 caracteres', () => {
+    const original = cliente({ endereco: 'a'.repeat(200) })
+    render(<FormularioCliente cliente={original} aoFechar={aoFechar} />)
+    digitar(/^Contato/, '9999')
+    salvar()
+    expect(erroDe(/^Rua e número/)).toBeNull()
+    expect(simulado.editarCliente).toHaveBeenCalledWith(original,
+      expect.objectContaining({ telefone: '9999', rua: original.endereco }))
+    expect(aoFechar).toHaveBeenCalledTimes(1)
+  })
+
   it('nasce preenchido, sem campo de número, com o foco no nome', () => {
     const joao = cliente()
     render(<FormularioCliente cliente={joao} aoFechar={aoFechar} />)
@@ -322,7 +333,7 @@ describe('SeletorDeDias', () => {
 })
 
 
-describe('FormularioCliente — ordem e sugestão', () => {
+describe('FormularioCliente — ordem e número manual', () => {
   it('apresenta os campos na ordem do dono', () => {
     render(<FormularioCliente aoFechar={aoFechar} />)
     const form = screen.getByRole('button', { name: 'Salvar cliente' }).closest('form')!
@@ -334,7 +345,7 @@ describe('FormularioCliente — ordem e sugestão', () => {
     ])
   })
 
-  it.each(['confiavel', 'parcial'] as const)('sugere após carregar lista %s, incluindo arquivado, e só uma vez', (confianca) => {
+  it.each(['confiavel', 'parcial'] as const)('mantém número vazio ao carregar e atualizar lista %s', (confianca) => {
     simulado.confianca = 'desconhecida'
     const { rerender } = render(<FormularioCliente aoFechar={aoFechar} />)
     expect(campo(/^Número/).value).toBe('')
@@ -342,20 +353,20 @@ describe('FormularioCliente — ordem e sugestão', () => {
     simulado.confianca = confianca
     simulado.clientes = [cliente({ numero: 12, arquivado: true }), cliente({ numero: 3 }), cliente({ numero: 7 })]
     rerender(<FormularioCliente aoFechar={aoFechar} />)
-    expect(campo(/^Número/).value).toBe('13')
+    expect(campo(/^Número/).value).toBe('')
     simulado.clientes = [cliente({ numero: 20 })]
     rerender(<FormularioCliente aoFechar={aoFechar} />)
-    expect(campo(/^Número/).value).toBe('13')
+    expect(campo(/^Número/).value).toBe('')
     digitar(/^Número/, '')
     simulado.clientes = [cliente({ numero: 30 })]
     rerender(<FormularioCliente aoFechar={aoFechar} />)
     expect(campo(/^Número/).value).toBe('')
   })
 
-  it('sugere 1 para lista vazia conferida', () => {
+  it('mantém número vazio para lista vazia conferida', () => {
     simulado.clientes = []
     render(<FormularioCliente aoFechar={aoFechar} />)
-    expect(campo(/^Número/).value).toBe('1')
+    expect(campo(/^Número/).value).toBe('')
   })
 
   it.each([false, true])('preserva número digitado antes de carregar, mesmo apagado: %s', (apagar) => {

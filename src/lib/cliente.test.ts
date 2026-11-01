@@ -4,7 +4,6 @@ import {
   clienteComNumero,
   entradaDoCliente,
   enderecoDoCliente,
-  proximoNumero,
   montarCamposCliente,
   montarEdicaoCliente,
   parseNumeroCadastro,
@@ -68,6 +67,19 @@ describe('entradaDoCliente', () => {
 })
 
 describe('validarEdicaoCliente', () => {
+  it('preserva endereço longo inalterado, mas exige o limite novo ao alterar o grupo', () => {
+    const original = entradaDoCliente({ numero: 1, nome: 'Ana', endereco: 'a'.repeat(200) })
+    const telefoneNovo = { ...original, telefone: '9999' }
+    expect(validarEdicaoCliente(telefoneNovo, original)).toEqual({})
+    expect(montarEdicaoCliente(telefoneNovo, CONTEXTO, original)).toEqual({
+      definir: { telefone: '9999', telefoneDigits: '9999', atualizadoPor: CONTEXTO.dispositivo },
+      remover: [],
+    })
+    expect(validarEdicaoCliente({ ...original, bairro: 'Centro' }, original).rua).toBeDefined()
+    expect(validarEdicaoCliente({ ...original, rua: 'b'.repeat(121) }, original).rua).toBeDefined()
+    expect(validarEdicaoCliente({ ...original, rua: 'Rua curta' }, original)).toEqual({})
+  })
+
   it.each(['', 'abc', '137'])('ignora o número %j, sem devolver a chave numero', (numero) => {
     expect(validarEdicaoCliente(entrada({ numero }))).toEqual({})
   })
@@ -139,6 +151,7 @@ describe('montarEdicaoCliente', () => {
       'cpf',
       'cpfDigits',
       'diasDeVisita',
+      'endereco',
       'observacao',
       'rotaDesde',
       'rua',
@@ -186,7 +199,7 @@ describe('montarEdicaoCliente', () => {
     )).toEqual({ definir: { atualizadoPor: 'abc' }, remover: [] })
   })
 
-  it('envia só o endereço alterado, preservando dados atualizados em outro aparelho', () => {
+  it('reescreve o grupo de endereço e preserva nome e telefone de outro aparelho', () => {
     const original = entrada({ telefone: '9999', rua: 'Rua A', diasDeVisita: [5, 20] })
     const edicao = montarEdicaoCliente(
       { ...original, rua: 'Rua B', diasDeVisita: [20, 5] }, contexto, original,
@@ -545,22 +558,6 @@ describe('montarCamposCliente', () => {
 })
 
 
-describe('proximoNumero', () => {
-  it('sugere 1 para lista vazia', () => {
-    expect(proximoNumero([])).toBe(1)
-  })
-
-  it('usa o maior número de todos os clientes, inclusive arquivados, sem depender da ordem', () => {
-    const clientes = [
-      { numero: 7, nome: 'B' },
-      { numero: 12, nome: 'C', arquivado: true },
-      { numero: 3, nome: 'A' },
-    ]
-    expect(proximoNumero(clientes)).toBe(13)
-    expect(proximoNumero([...clientes].reverse())).toBe(13)
-  })
-})
-
 describe('enderecoDoCliente', () => {
   it('junta os três campos e prefere o endereço novo ao antigo', () => {
     expect(enderecoDoCliente({
@@ -582,6 +579,15 @@ describe('enderecoDoCliente', () => {
 })
 
 describe('endereço em três campos', () => {
+  it('apagar endereço antigo remove também o campo de compatibilidade', () => {
+    const original = entradaDoCliente({ numero: 1, nome: 'Ana', endereco: 'Rua antiga' })
+    const edicao = montarEdicaoCliente({ ...original, rua: '' }, CONTEXTO, original)
+    expect(edicao.remover).toContain('endereco')
+    const documento: Record<string, unknown> = { endereco: 'Rua antiga', ...edicao.definir }
+    for (const campo of edicao.remover) delete documento[campo]
+    expect(enderecoDoCliente(documento)).toBe('')
+  })
+
   it.each([['rua', 120], ['bairro', 80], ['cidade', 80]] as const)(
     'valida o limite exato de %s no cadastro e na edição, sem contar espaços externos',
     (campo, limite) => {
