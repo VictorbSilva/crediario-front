@@ -1,7 +1,7 @@
 import { dataLocalISO, ehDataCivil, vencimentoDaParcela } from './data'
 import { parseReaisParaCentavos } from './dinheiro'
 import { VERSAO_CALCULO, gerarParcelas } from './parcelas'
-import type { FormaDePagamento, TipoDeMulta } from '@/types/venda'
+import type { FormaDePagamento, ItemDaVenda, TipoDeMulta } from '@/types/venda'
 
 export const LIMITES_VENDA = {
   /** O teto vem da regra do Firestore, que recusa acima disso. */
@@ -9,6 +9,10 @@ export const LIMITES_VENDA = {
   diaVencimento: 31,
   taxa: 100,
   observacao: 500,
+  /** Teto da regra. Quantidade e descrição a regra não confere: o teto é só daqui. */
+  itens: 30,
+  quantidadeItem: 999,
+  descricaoItem: 120,
 } as const
 
 export type ContextoEscrita = {
@@ -16,9 +20,22 @@ export type ContextoEscrita = {
   dispositivo: string
 }
 
+export type EntradaItem = {
+  quantidade: string
+  descricao: string
+  valorUnitario: string
+}
+
+export type ErrosItem = Partial<Record<keyof EntradaItem, string>>
+
+export type ErrosItens = {
+  porItem: ErrosItem[]
+  geral?: string
+}
+
 export type EntradaVenda = {
   dataVenda: string
-  valor: string
+  itens: EntradaItem[]
   numeroParcelas: string
   diaVencimento: string
   cobrarTaxas: boolean
@@ -43,6 +60,7 @@ export type CamposVenda = {
   multaFixaCentavos?: number
   jurosPercentualDia?: number
   observacao?: string
+  itens: ItemDaVenda[]
   versaoCalculo: number
   atualizadoPor: string
 }
@@ -57,12 +75,16 @@ export type CamposParcela = {
   atualizadoPor: string
 }
 
+export function entradaItemVazia(): EntradaItem {
+  return { quantidade: '1', descricao: '', valorUnitario: '' }
+}
+
 export function entradaVendaVazia(agora: Date): EntradaVenda {
   const hoje = dataLocalISO(agora)
 
   return {
     dataVenda: hoje,
-    valor: '',
+    itens: [entradaItemVazia()],
     numeroParcelas: '',
     // O dia do vencimento nasce igual ao dia da venda; a primeira parcela cai
     // no mês seguinte. É sugestão de valor padrão, não regra — o dono troca.
@@ -117,15 +139,110 @@ function erroDaDataVenda(entrada: EntradaVenda): string | undefined {
   return undefined
 }
 
-function erroDoValor(valor: string): string | undefined {
-  const centavos = parseReaisParaCentavos(valor)
-  if (centavos === null) return 'Informe o valor da venda'
+function erroDaQuantidade(entrada: string): string | undefined {
+  if (entrada.trim() === '') return 'Informe a quantidade'
+
+  const quantidade = parseInteiro(entrada)
+  if (quantidade === null) return 'Só número inteiro'
+  if (quantidade < 1) return 'Pelo menos 1'
+  if (quantidade > LIMITES_VENDA.quantidadeItem) return `No máximo ${LIMITES_VENDA.quantidadeItem}`
+
+  return undefined
+}
+
+function erroDaDescricao(entrada: string): string | undefined {
+  const descricao = entrada.trim()
+  if (descricao === '') return 'Informe a descrição'
+  if (descricao.length > LIMITES_VENDA.descricaoItem) {
+    return `No máximo ${LIMITES_VENDA.descricaoItem} caracteres`
+  }
+
+  return undefined
+}
+
+function erroDoValorUnitario(entrada: string): string | undefined {
+  const centavos = parseReaisParaCentavos(entrada)
+  if (centavos === null) return 'Informe o valor'
   if (centavos <= 0) return 'O valor precisa ser maior que zero'
 
   return undefined
 }
 
-function erroDasParcelas(entrada: string, valor: string): string | undefined {
+function errosDoItem(item: EntradaItem): ErrosItem {
+  return compactar<keyof EntradaItem>({
+    quantidade: erroDaQuantidade(item.quantidade),
+    descricao: erroDaDescricao(item.descricao),
+    valorUnitario: erroDoValorUnitario(item.valorUnitario),
+  })
+}
+
+/** O item como vai para o documento, ou `null` se algum campo não passa. */
+function lerItem(item: EntradaItem): ItemDaVenda | null {
+  const quantidade = parseInteiro(item.quantidade)
+  const valorUnitarioCentavos = parseReaisParaCentavos(item.valorUnitario)
+  if (quantidade === null || valorUnitarioCentavos === null) return null
+  if (Object.keys(errosDoItem(item)).length > 0) return null
+
+  return { quantidade, descricao: item.descricao.trim(), valorUnitarioCentavos }
+}
+
+/** Os itens como vão para o documento, ou `null` se a lista não passa inteira. */
+function lerItens(itens: readonly EntradaItem[]): ItemDaVenda[] | null {
+  if (itens.length < 1 || itens.length > LIMITES_VENDA.itens) return null
+
+  const lidos: ItemDaVenda[] = []
+  for (const item of itens) {
+    const lido = lerItem(item)
+    if (!lido) return null
+    lidos.push(lido)
+  }
+
+  return lidos
+}
+
+function somar(itens: readonly ItemDaVenda[]): number | null {
+  const total = itens.reduce(
+    (soma, item) => soma + item.quantidade * item.valorUnitarioCentavos,
+    0,
+  )
+
+  // A regra não confere a soma; o que garante que ela seja exata é isto.
+  return Number.isSafeInteger(total) ? total : null
+}
+
+/**
+ * O total da venda, em centavos: a soma de `quantidade × valor unitário`.
+ * `null` quando algum item não passa, a lista está vazia ou acima do teto, ou
+ * a soma não é um inteiro exato.
+ */
+export function totalDosItens(itens: readonly EntradaItem[]): number | null {
+  const lidos = lerItens(itens)
+  return lidos ? somar(lidos) : null
+}
+
+export function validarItens(itens: readonly EntradaItem[]): ErrosItens {
+  const porItem = itens.map(errosDoItem)
+
+  if (itens.length < 1) return { porItem, geral: 'Inclua pelo menos um item' }
+  if (itens.length > LIMITES_VENDA.itens) {
+    return { porItem, geral: `No máximo ${LIMITES_VENDA.itens} itens` }
+  }
+  if (porItem.every((erros) => Object.keys(erros).length === 0) && totalDosItens(itens) === null) {
+    return { porItem, geral: 'Total grande demais' }
+  }
+
+  return { porItem }
+}
+
+function erroDosItens(itens: readonly EntradaItem[]): string | undefined {
+  const { porItem, geral } = validarItens(itens)
+  if (geral) return geral
+  if (porItem.some((erros) => Object.keys(erros).length > 0)) return 'Confira os itens'
+
+  return undefined
+}
+
+function erroDasParcelas(entrada: string, centavos: number | null): string | undefined {
   const numero = parseInteiro(entrada)
   if (numero === null) return 'Informe em quantas parcelas'
   if (numero < 1) return 'Pelo menos uma parcela'
@@ -137,8 +254,7 @@ function erroDasParcelas(entrada: string, valor: string): string | undefined {
   // `valorCentavos > 0`. Sem esta checagem, R$ 0,03 em 12 parcelas geraria onze
   // parcelas de zero — aceitas no cache, **recusadas em silêncio** na hora de
   // sincronizar, que é quando ninguém está olhando.
-  const centavos = parseReaisParaCentavos(valor)
-  if (centavos !== null && centavos > 0 && numero > centavos) {
+  if (centavos !== null && numero > centavos) {
     return 'Parcelas demais para este valor — cada uma ficaria em zero'
   }
 
@@ -184,8 +300,8 @@ function compactar<T extends string>(candidatos: Record<T, string | undefined>) 
 export function validarVenda(entrada: EntradaVenda): ErrosVenda {
   return compactar<keyof EntradaVenda>({
     dataVenda: erroDaDataVenda(entrada),
-    valor: erroDoValor(entrada.valor),
-    numeroParcelas: erroDasParcelas(entrada.numeroParcelas, entrada.valor),
+    itens: erroDosItens(entrada.itens),
+    numeroParcelas: erroDasParcelas(entrada.numeroParcelas, totalDosItens(entrada.itens)),
     diaVencimento: erroDoDia(entrada.diaVencimento),
     cobrarTaxas: undefined,
     multaTipo: undefined,
@@ -215,18 +331,23 @@ export function validarVenda(entrada: EntradaVenda): ErrosVenda {
  * saídas (cada parcela) são gravadas as duas, mais o `versaoCalculo`: uma
  * mudança futura na regra gera vendas novas em vez de migrar as antigas, que é
  * o comportamento correto de qualquer forma — carnê já entregue não se reescreve.
+ *
+ * `valorTotalCentavos` é sempre a soma exata dos `itens` gravados junto: o
+ * total não se digita, sai deles.
  */
 export function montarCamposVenda(
   clientId: string,
   entrada: EntradaVenda,
   { dispositivo }: ContextoEscrita,
 ): { venda: CamposVenda; parcelas: Omit<CamposParcela, 'saleId'>[] } {
-  const valorTotalCentavos = parseReaisParaCentavos(entrada.valor)
+  const itens = lerItens(entrada.itens)
+  const valorTotalCentavos = itens ? somar(itens) : null
   const numeroParcelas = parseInteiro(entrada.numeroParcelas)
   const diaVencimento = parseInteiro(entrada.diaVencimento)
 
-  if (valorTotalCentavos === null || valorTotalCentavos <= 0) {
-    throw new TypeError('montarCamposVenda recebeu um valor que não passou na validação')
+  // Item nenhum inválido chega ao lote: a regra só confere o tamanho da lista.
+  if (itens === null || valorTotalCentavos === null) {
+    throw new TypeError('montarCamposVenda recebeu itens que não passaram na validação')
   }
   if (numeroParcelas === null || numeroParcelas < 1) {
     throw new TypeError('montarCamposVenda recebeu parcelas que não passaram na validação')
@@ -251,6 +372,7 @@ export function montarCamposVenda(
     // gravar aquela aqui faria o resumo da tela mentir por alguns centavos.
     valorParcelaCentavos: geradas[0].valorCentavos,
     diaVencimento,
+    itens,
     versaoCalculo: VERSAO_CALCULO,
     atualizadoPor: dispositivo,
   }

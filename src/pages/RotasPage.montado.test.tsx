@@ -283,6 +283,71 @@ describe('RotasPage — calendário', () => {
   })
 })
 
+describe('RotasPage — próxima cobrança (E7)', () => {
+  const HUGO = cliente('hugo', 19, 'Hugo Dias', { proximaCobranca: HOJE })
+  const IVO = cliente('ivo', 20, 'Ivo Lopes', { proximaCobranca: '2026-10-12' })
+  const JOAO = cliente('joao', 21, 'João Reis', { proximaCobranca: '2026-10-20' })
+  const LIA = cliente('lia', 22, 'Lia Paz', { proximaCobranca: '2026-10-22' })
+
+  it('na rota de hoje, a cobrança mostra "Cobrança marcada" e a atrasada só "Cobrança pendente desde"', () => {
+    simulado.clientes = estado([ANA, HUGO, IVO])
+    montar()
+
+    expect(ordem()).toEqual(['Ana', 'Hugo', '— atrasados —', 'Ivo'])
+    expect(within(item('Hugo')).getByText('Cobrança marcada')).toBeTruthy()
+    expect(within(item('Hugo')).getByRole('button', { name: 'Arrastar Hugo Dias' })).toBeTruthy()
+    expect(within(item('Ivo')).getByText('Cobrança pendente desde 12/10/2026')).toBeTruthy()
+    expect(within(item('Ivo')).queryByText('Cobrança marcada')).toBeNull()
+    expect(within(item('Ivo')).queryByText(/Visita pendente/)).toBeNull()
+  })
+
+  it('cliente de dia do mês continua com a alça e sem etiqueta de cobrança', () => {
+    simulado.clientes = estado([ANA, HUGO, DAVI])
+    montar()
+
+    expect(within(item('Ana')).getByRole('button', { name: 'Arrastar Ana Lima' })).toBeTruthy()
+    expect(within(item('Ana')).queryByText(/Cobrança/)).toBeNull()
+    expect(within(item('Davi')).getByText('Visita pendente desde 10/10/2026')).toBeTruthy()
+    expect(within(item('Davi')).queryByText(/Cobrança/)).toBeNull()
+  })
+
+  it('no calendário, a cobrança aparece em "Cobranças marcadas", depois da lista arrastável e sem alça', () => {
+    simulado.clientes = estado([...TODOS, JOAO, { ...BIA, id: 'bia2', nome: 'Bia Dupla', diasDeVisita: [20], proximaCobranca: '2026-10-20' }])
+    montar()
+
+    escolherDia(/^20 de outubro, 4 clientes/)
+
+    expect(ordem()).toEqual(['Ana', 'Bia', 'Gil', 'João'])
+    const cobrancas = screen.getByRole('list', { name: 'Cobranças marcadas' })
+    expect(within(cobrancas).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(cobrancas).getByText('Cobrança marcada')).toBeTruthy()
+    expect(within(cobrancas).queryByRole('button', { name: /^Arrastar/ })).toBeNull()
+    expect(within(item('Bia')).queryByText('Cobrança marcada')).toBeNull()
+    expect(within(item('Ana')).getByRole('button', { name: 'Arrastar Ana Lima' })).toBeTruthy()
+    expect(within(item('Ana')).queryByText('Cobrança marcada')).toBeNull()
+    expect(screen.queryByText(/Nenhum cliente neste dia/)).toBeNull()
+
+    // A lista de cobranças fica fora do arraste: soltar o João não grava nada.
+    soltar('joao', 'ana')
+    expect(simulado.clientes.reordenarRota).not.toHaveBeenCalled()
+  })
+
+  it('data só com cobrança mostra a lista, não "Nenhum cliente neste dia"', () => {
+    simulado.clientes = estado([...TODOS, LIA])
+    montar()
+
+    escolherDia(/^22 de outubro, 1 cliente/)
+
+    expect(ordem()).toEqual(['Lia'])
+    expect(screen.getByRole('list', { name: 'Cobranças marcadas' })).toBeTruthy()
+    expect(screen.queryByText(/Nenhum cliente neste dia/)).toBeNull()
+
+    escolherDia(/^21 de outubro/)
+    expect(screen.getByText(/Nenhum cliente neste dia/)).toBeTruthy()
+    expect(screen.queryByText('Cobranças marcadas')).toBeNull()
+  })
+})
+
 describe('RotasPage — soltar um arraste', () => {
   it('cliente do dia solto no bloco de atrasados para logo acima dele, numa escrita só', () => {
     montar()

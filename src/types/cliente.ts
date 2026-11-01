@@ -23,6 +23,7 @@ export type Cliente = {
   ultimaMarcaEm?: string
   ultimoVisitado?: string
   visitadoAnterior?: string
+  proximaCobranca?: string
   observacao?: string
   arquivado?: boolean
   cadastradoEm: string

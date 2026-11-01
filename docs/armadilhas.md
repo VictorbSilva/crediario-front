@@ -985,7 +985,7 @@ item no arrasto simples; sem precisão, também completa os dias coincidentes, c
 - **Limitação aceita:** Ausente → Visitado → Desmarcar perde a marca de Ausente; ela é informativa e sua perda não altera pendência nem rota, então o modelo de desfazer de um nível permanece.
 
 **Pendente é derivado, nunca gravado.** `agendaRecente` escolhe a maior data até hoje
-entre os dias de visita no mês atual e no anterior. Sem Visitado cobrindo essa agenda,
+entre os dias de visita no mês atual e no anterior e a `proximaCobranca` (seção abaixo). Sem Visitado cobrindo essa agenda,
 o cliente segue pendente no dia seguinte, inclusive na virada do mês. Ausente registra
 só a tentativa e não encerra a pendência; `ausenteHoje` vale apenas na data da marca.
 Visitado hoje continua na lista, na mesma posição. Desfazer volta `ultimoVisitado` para
@@ -1009,6 +1009,34 @@ quando está configurado, porque os demais foram limitados para baixo. Assim, em
 28/02/2027, `[29, 31]` e `[31, 29]` usam 29; `[28, 31]` usa 28. Um dia 31 sozinho
 continua usando 31. O desempate nunca inventa um dia fora de `diasDeVisita` e não
 depende da ordem dos dias ou dos meses percorridos, preservando a chave de `ordemPorDia`.
+
+**A próxima cobrança põe o cliente na rota daquela data (E7, pedido do dono em 30/10).**
+`proximaCobranca` é uma data civil opcional. Em `agendaRecente` ela é candidata **sem dia**
+(`dia: null`) quando é `<= hoje` e maior que a agenda dos dias de visita; no empate de datas
+vence o dia de visita, com `dia` preenchido, e o cliente aparece uma vez. `rotaDesde` não a
+corta, porque é marcada à mão. Como no dia de visita, só Visitado encerra: Ausente mantém o
+cliente, e a data passada vira atraso. Exemplo, hoje 12/10: dias `[5]` visitado em 05/10 e
+cobrança em 12/10 dá pendente sem dia; dias `[5]` sem visita e cobrança em 05/10 dá atrasado
+desde 05/10 com dia 5; um cliente só com cobrança em 13/10 fica fora até amanhã.
+
+- **Ordem na rota de hoje:** sem dia do mês não há `ordemPorDia`. A chave é a `ordemDoDia` de
+  hoje quando existe **e é menor que `BASE_ATRASADO`**; senão, `BASE_SEM_ORDEM + numero`. O teto
+  não é enfeite: um atrasado arrastado de manhã grava, por exemplo, `ordemDoDia.valor =
+  1_000_000_005`; se no mesmo dia ganha `proximaCobranca = hoje`, deixa de ser atrasado, mas
+  com essa chave seria o início do bloco de atrasados. Com o teto, o cliente 7 volta a 1 000 007.
+- **Arraste:** `arrasteNaRotaDeHoje` grava `tipo: 'hoje'` para o atrasado **e para quem não tem
+  `diaAgendado`** — nunca `ordemPorDia` com dia nulo. O encaixe dele é o do cliente do dia
+  (`chaveDoDiaEntre`, com o teto): solto sobre o primeiro atrasado depois de um 999 999 500,
+  grava 999 999 750 e fica antes do bloco. No rebalanceamento ele recebe `PASSO * (i + 1)` como
+  ordem de hoje, e os dias a completar ignoram o `null`. A ordem vale só hoje.
+- **Calendário de outra data:** `rotaDaData` e `arrasteNaRotaDaData` não mudam (só dias de
+  visita). `cobrancasDaData(clientes, data)` lista à parte os não arquivados com
+  `proximaCobranca === data` e sem dia de visita nessa data, por número; a tela mostra essa
+  lista sem alça, porque não há ordem por data para gravar. `contagemPorData` conta a cobrança
+  na data dela, com o cliente uma vez só por data.
+- **Para a tela:** `estado.diaAgendado === null` é o que identifica o cliente de cobrança na
+  rota de hoje. Compare com `=== null`: no calendário `estado` é `undefined`, e `== null`
+  poria a etiqueta de cobrança em todo item.
 
 **A ordem não é recalculada por endereço ou nome.** No dia agendado, a chave vem de
 `ordemPorDia[String(dia)]`; sem ela, vem de `BASE_SEM_ORDEM + numero`, usando o número
@@ -1052,7 +1080,7 @@ a média das chaves dos novos vizinhos, ou um `PASSO` antes/depois na borda. Se 
 não fica estritamente entre os vizinhos, acabou a precisão numérica: só então a lista
 é rebalanceada na ordem nova com `PASSO * (i + 1)`. Na rota de hoje, cada item
 rebalanceado mantém seu destino: ordem por dia para os do dia, temporária para os
-atrasados, incluindo os soltos. Posição sem mudança não produz escrita. As funções
+atrasados, incluindo os soltos, e para os de cobrança. Posição sem mudança não produz escrita. As funções
 não modificam as listas nem os clientes recebidos.
 
 **O rebalanceamento de hoje leva o dia inteiro (C3).** `arrasteNaRotaDeHoje` recebe
@@ -2017,6 +2045,48 @@ formulário recusa antes o que a regra recusaria depois. As fixtures de
 espelho do que o código deve produzir — mas **nada automatiza essa comparação**, porque
 `vitest.rules.config.ts` deliberadamente não importa de `src/`. É conferência manual,
 e está registrada aqui por isso.
+
+### Itens da venda — aqui a validação do código é a única (30/10/2026)
+
+Pedido do dono: cada venda registra a quantidade, a descrição e o valor de cada produto. O
+formulário troca o campo "Valor" por uma lista de itens, e o total **não é mais digitado**:
+`valorTotalCentavos` sai de `totalDosItens`, a soma de `quantidade × valorUnitarioCentavos`.
+As parcelas continuam saindo do total, como antes, e "parcelas demais para este valor"
+passa a conferir contra a soma dos itens.
+
+**O resto desta seção é sobre o formulário espelhar a regra. Para `itens`, não há o que
+espelhar.** A regra confere só que `itens` é uma lista de 1 a 30 elementos — a linguagem de
+regras não percorre os elementos (AVISO na seção dos itens em `firestore.rules`). Então:
+
+- cada item precisa ter `quantidade` inteira de 1 a 999, `descricao` de 1 a 120 caracteres
+  depois do `trim` e `valorUnitarioCentavos` inteiro maior que zero — **só `validarItens`
+  confere isso**;
+- a soma precisa ser inteiro exato (`Number.isSafeInteger`) e bater com
+  `valorTotalCentavos` — **só `totalDosItens` garante isso**;
+- os tetos de 999 e de 120 caracteres não existem na regra. Se mudarem, mudam só em
+  `LIMITES_VENDA`.
+
+O risco aqui é o contrário do zero centavo acima. Lá, o erro do código vira **recusa**
+silenciosa e atrasada. Aqui, vira **aceitação** silenciosa: o servidor grava o item errado
+ou o total que não bate, e `imutaveisPreservados()` não deixa corrigir nem `itens` nem
+`valorTotalCentavos` depois. Por isso `montarCamposVenda` não confia no formulário: monta
+os itens por `lerItens` e **lança** se algum não passar, antes de qualquer coisa chegar ao
+`writeBatch`. A mensagem do erro está nos testes, para o guarda não sumir.
+
+Soma grande demais não é teórica: 999 unidades de um valor de 13 dígitos cabem nos campos
+(o valor unitário aceita 15 caracteres) e passam de 9 × 10^15. `validarItens` devolve
+"Total grande demais" no erro geral, e o teste `total grande demais aparece ao lançar e não
+grava` cobre isso pela tela.
+
+**Venda antiga continua sem `itens`.** `paraVenda` deixa o campo `undefined`, e
+`VendaExpansivel` só mostra a lista quando há itens. Não existe migração, nem pode existir:
+a regra recusa acrescentar `itens` a uma venda já gravada.
+
+**A leitura confia no formato.** `paraVenda` copia `itens` como veio, sem conferir cada
+elemento. Uma venda gravada fora do app com `itens: ['panela']` passaria pela regra e
+apareceria na lista como uma linha sem quantidade nem descrição, com traços no lugar dos
+valores — sem quebrar a tela (`formatarCentavos` devolve "—" para o que não é número), mas
+sem sentido. Só o app grava vendas hoje, então ficou assim.
 
 ## src/data/useCarne.ts — a venda e as parcelas vão num lote só
 

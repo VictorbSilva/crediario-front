@@ -219,6 +219,18 @@ describe('useCarne — carregamento', () => {
     expect(result.current.estadoSync).toBe('pendente')
   })
 
+  it('venda com itens chega com os itens; venda antiga, sem eles, chega sem o campo', () => {
+    const itens = [{ quantidade: 2, descricao: 'Panela', valorUnitarioCentavos: 4990 }]
+    const { result } = renderHook(() => useCarne('ana'))
+    emitir('sales', [{ ...VENDA, dados: { ...VENDA.dados, itens } }, { ...VENDA, id: 'v2' }])
+    emitir('installments', [])
+    emitir('payments', [])
+
+    const vendas = new Map(result.current.carnes.map((c) => [c.venda.id, c.venda]))
+    expect(vendas.get('v1')?.itens).toStrictEqual(itens)
+    expect(vendas.get('v2')?.itens).toBeUndefined()
+  })
+
   it('venda cancelada fica no carnê mas sai do saldo', () => {
     const { result } = renderHook(() => useCarne('ana'))
     emitir('sales', [{ ...VENDA, dados: { ...VENDA.dados, cancelada: true, canceladaEm: '2026-10-01' } }])
@@ -366,7 +378,7 @@ describe('useCarne — confiança no carnê deste aparelho', () => {
 describe('useCarne — escritas', () => {
   const entradaVenda = () => ({
     ...entradaVendaVazia(new Date(2026, 9, 15)),
-    valor: '300,00',
+    itens: [{ quantidade: '3', descricao: 'Panela', valorUnitario: '100,00' }],
     numeroParcelas: '3',
     diaVencimento: '10',
   })
@@ -391,6 +403,7 @@ describe('useCarne — escritas', () => {
     expect(refVenda.colecao).toEqual({ caminho: ['businesses', 'loja-treino', 'sales'] })
     expect(camposVenda).toMatchObject({
       clientId: 'ana', valorTotalCentavos: 30000, numeroParcelas: 3, atualizadoPor: 'aparelho',
+      itens: [{ quantidade: 3, descricao: 'Panela', valorUnitarioCentavos: 10000 }],
       criadoEm: 'carimbo-do-servidor', atualizadoEm: 'carimbo-do-servidor',
     })
     expect(parcelas.map(([, campos]) => campos.numero)).toEqual([1, 2, 3])

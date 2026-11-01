@@ -99,6 +99,7 @@ function paraVenda(documento: Documento): Venda {
     multaFixaCentavos: dados.multaFixaCentavos,
     jurosPercentualDia: dados.jurosPercentualDia,
     observacao: dados.observacao,
+    itens: dados.itens,
     cancelada: dados.cancelada,
     canceladaEm: dados.canceladaEm,
     versaoCalculo: dados.versaoCalculo,

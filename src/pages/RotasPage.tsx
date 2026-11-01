@@ -15,7 +15,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { ParadaDaRota } from '@/components/rotas/ParadaDaRota'
+import { ParadaDaRota, ParadaFixa } from '@/components/rotas/ParadaDaRota'
 import { SeletorDoDia } from '@/components/rotas/SeletorDoDia'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Kpi } from '@/components/ui/Kpi'
@@ -25,6 +25,7 @@ import { dataBonita, dataLocalISO } from '@/lib/data'
 import {
   arrasteNaRotaDaData,
   arrasteNaRotaDeHoje,
+  cobrancasDaData,
   contagemPorData,
   dataDaVisita,
   inicioDoBlocoDeAtrasados,
@@ -81,6 +82,12 @@ export function RotasPage() {
   )
   const itensData = useMemo(
     () => (ehHoje ? [] : rotaDaData(clientes, dataEscolhida)),
+    [clientes, dataEscolhida, ehHoje],
+  )
+  // Na rota de hoje a cobrança já entra em `rotaDeHoje`; em outra data ela fica numa lista à
+  // parte, porque sem dia do mês não há `ordemPorDia` para o arraste gravar.
+  const cobrancas = useMemo(
+    () => (ehHoje ? [] : cobrancasDaData(clientes, dataEscolhida)),
     [clientes, dataEscolhida, ehHoje],
   )
   const ids = useMemo(
@@ -222,11 +229,11 @@ export function RotasPage() {
 
           {carregando ? (
             <EmptyState>Carregando os clientes deste aparelho…</EmptyState>
-          ) : ids.length === 0 ? (
+          ) : ids.length === 0 && cobrancas.length === 0 ? (
             <EmptyState>
               Nenhum cliente neste dia. Escolha os dias de visita no cadastro do cliente.
             </EmptyState>
-          ) : (
+          ) : ids.length === 0 ? null : (
             <DndContext
               sensors={sensores}
               collisionDetection={closestCenter}
@@ -259,6 +266,22 @@ export function RotasPage() {
               </SortableContext>
             </DndContext>
           )}
+
+          {cobrancas.length > 0 ? (
+            <>
+              <h3
+                id="titulo-cobrancas-marcadas"
+                className={`mb-3 text-sm font-semibold text-slate-900 ${ids.length > 0 ? 'mt-5' : ''}`}
+              >
+                Cobranças marcadas
+              </h3>
+              <ul aria-labelledby="titulo-cobrancas-marcadas" className="flex max-w-3xl flex-col gap-2.5">
+                {cobrancas.map((cliente) => (
+                  <ParadaFixa key={cliente.id} cliente={cliente} cobrancaMarcada />
+                ))}
+              </ul>
+            </>
+          ) : null}
         </section>
       </div>
     </div>

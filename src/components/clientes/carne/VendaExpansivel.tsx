@@ -111,6 +111,22 @@ export function VendaExpansivel({
 
       {aberta ? (
         <div id={painelId} className="flex flex-col gap-2 pl-0 sm:pl-8">
+          {venda.itens && venda.itens.length > 0 ? (
+            <ul
+              aria-label="Itens da venda"
+              className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700"
+            >
+              {venda.itens.map((item, indice) => (
+                // A lista é imutável depois de gravada: a posição identifica o item.
+                <li key={indice} className="tabular-nums">
+                  {item.quantidade} × {item.descricao} —{' '}
+                  {formatarCentavos(item.valorUnitarioCentavos)} ={' '}
+                  {formatarCentavos(item.quantidade * item.valorUnitarioCentavos)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
           {carne.cancelada ? (
             <Nota tom="info">
               Venda cancelada. Não entra no saldo nem nas vencidas; os pagamentos lançados
