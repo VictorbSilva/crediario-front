@@ -2,6 +2,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { iniciaisDe } from '@/lib/texto'
+import { enderecoDoCliente } from '@/lib/cliente'
 import type { Cliente } from '@/types/cliente'
 
 type ListaDeClientesProps = Readonly<{
@@ -54,7 +55,7 @@ export function ListaDeClientes({
                   <span className="text-brand-700">#{cliente.numero}</span> · {cliente.nome}
                 </span>
                 <span className="mt-0.5 block truncate text-xs text-slate-500">
-                  {cliente.endereco ?? 'Sem endereço'}
+                  {enderecoDoCliente(cliente) || 'Sem endereço'}
                 </span>
               </span>
               <span className="flex shrink-0 flex-col items-end gap-1">

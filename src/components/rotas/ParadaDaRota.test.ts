@@ -37,6 +37,11 @@ function fixa(c: Cliente, cobrancaMarcada?: boolean): string {
 }
 
 describe('ParadaDaRota', () => {
+  it('mostra endereço em três campos em vez do endereço antigo', () => {
+    expect(html({ ...cliente, rua: 'Rua B', bairro: 'Centro', cidade: 'Recife' }))
+      .toContain('Rua B · Centro · Recife')
+  })
+
   it('só a alça tem touch-none; o resto do item deixa o dedo rolar a lista', () => {
     const marcacao = html(cliente, pendente)
     expect(marcacao.match(/touch-none/g)).toHaveLength(1)

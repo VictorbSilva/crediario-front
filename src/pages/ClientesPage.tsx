@@ -12,6 +12,7 @@ import { SearchInput } from '@/components/ui/SearchInput'
 import { useCarneDaEmpresa } from '@/data/useCarneDaEmpresa'
 import type { CarneDaEmpresa } from '@/data/useCarneDaEmpresa'
 import { useClientes } from '@/data/useClientes'
+import { enderecoDoCliente } from '@/lib/cliente'
 import { dataLocalISO } from '@/lib/data'
 import { contagemDeClientes, documentosParaFinanceiro, listaDeAtrasados, situacaoFinanceira } from '@/lib/financeiro'
 import { normalizar, somenteDigitos } from '@/lib/texto'
@@ -35,7 +36,7 @@ function LeituraDosContadores({ aoReceber }: { aoReceber: (dados: DadosDosContad
 
 function combina(cliente: Cliente, termo: string, digitos: string): boolean {
   if (cliente.nomeBusca.includes(termo)) return true
-  if (normalizar(cliente.endereco ?? '').includes(termo)) return true
+  if (normalizar(enderecoDoCliente(cliente)).includes(termo)) return true
   if (digitos === '') return false
 
   return (

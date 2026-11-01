@@ -10,7 +10,9 @@ export const LIMITES_CLIENTE = {
   telefoneDigits: 20,
   cpf: 20,
   cpfDigits: 11,
-  endereco: 200,
+  rua: 120,
+  bairro: 80,
+  cidade: 80,
   observacao: 500,
 } as const
 
@@ -25,7 +27,9 @@ export type EntradaCliente = {
   nome: string
   telefone: string
   cpf: string
-  endereco: string
+  rua: string
+  bairro: string
+  cidade: string
   observacao: string
   diasDeVisita: number[]
 }
@@ -35,7 +39,9 @@ export const ENTRADA_CLIENTE_VAZIA: EntradaCliente = {
   nome: '',
   telefone: '',
   cpf: '',
-  endereco: '',
+  rua: '',
+  bairro: '',
+  cidade: '',
   observacao: '',
   diasDeVisita: [],
 }
@@ -46,6 +52,9 @@ export function entradaDoCliente(cliente: {
   telefone?: string
   cpf?: string
   endereco?: string
+  rua?: string
+  bairro?: string
+  cidade?: string
   observacao?: string
   diasDeVisita?: number[]
 }): EntradaCliente {
@@ -54,7 +63,9 @@ export function entradaDoCliente(cliente: {
     nome: cliente.nome,
     telefone: cliente.telefone ?? '',
     cpf: cliente.cpf ?? '',
-    endereco: cliente.endereco ?? '',
+    rua: cliente.rua ?? cliente.endereco ?? '',
+    bairro: cliente.bairro ?? '',
+    cidade: cliente.cidade ?? '',
     observacao: cliente.observacao ?? '',
     diasDeVisita: [...(cliente.diasDeVisita ?? [])],
   }
@@ -75,7 +86,9 @@ export type CamposCliente = {
   telefoneDigits?: string
   cpf?: string
   cpfDigits?: string
-  endereco?: string
+  rua?: string
+  bairro?: string
+  cidade?: string
   observacao?: string
   diasDeVisita?: number[]
   rotaDesde?: string
@@ -90,6 +103,9 @@ export type CampoRemovivel =
   | 'cpf'
   | 'cpfDigits'
   | 'endereco'
+  | 'rua'
+  | 'bairro'
+  | 'cidade'
   | 'observacao'
   | 'diasDeVisita'
   | 'rotaDesde'
@@ -102,7 +118,9 @@ export type EdicaoCliente = {
     telefoneDigits?: string
     cpf?: string
     cpfDigits?: string
-    endereco?: string
+    rua?: string
+    bairro?: string
+    cidade?: string
     observacao?: string
     diasDeVisita?: number[]
     rotaDesde?: string
@@ -126,6 +144,18 @@ export function clienteComNumero(
   numero: number,
 ): ClienteConhecido | undefined {
   return clientes.find((cliente) => cliente.numero === numero && cliente.arquivado !== true)
+}
+
+export function enderecoDoCliente(cliente: {
+  rua?: string
+  bairro?: string
+  cidade?: string
+  endereco?: string
+}): string {
+  const partes = [cliente.rua, cliente.bairro, cliente.cidade]
+    .map((parte) => parte?.trim() ?? '')
+    .filter(Boolean)
+  return partes.length > 0 ? partes.join(' · ') : cliente.endereco ?? ''
 }
 
 function erroDoNumero(
@@ -197,7 +227,9 @@ function errosDosDadosCliente(entrada: EntradaCliente): ErrosCliente {
     nome: erroDoNome(entrada.nome),
     telefone: erroDoTelefone(entrada.telefone),
     cpf: erroDoCpf(entrada.cpf),
-    endereco: erroDeTamanho(entrada.endereco, LIMITES_CLIENTE.endereco, 'Endereço muito longo'),
+    rua: erroDeTamanho(entrada.rua, LIMITES_CLIENTE.rua, 'Rua muito longa'),
+    bairro: erroDeTamanho(entrada.bairro, LIMITES_CLIENTE.bairro, 'Bairro muito longo'),
+    cidade: erroDeTamanho(entrada.cidade, LIMITES_CLIENTE.cidade, 'Cidade muito longa'),
     observacao: erroDeTamanho(
       entrada.observacao,
       LIMITES_CLIENTE.observacao,
@@ -223,8 +255,17 @@ export function validarCliente(
   return numero ? { numero, ...erros } : erros
 }
 
-export function validarEdicaoCliente(entrada: EntradaCliente): ErrosCliente {
-  return errosDosDadosCliente(entrada)
+export function validarEdicaoCliente(entrada: EntradaCliente, original?: EntradaCliente): ErrosCliente {
+  const erros = errosDosDadosCliente(entrada)
+  // Endereço antigo pode ter 200 caracteres. Só exige o limite novo ao regravá-lo.
+  if (original && !enderecoAlterado(entrada, original)) delete erros.rua
+  return erros
+}
+
+function enderecoAlterado(entrada: EntradaCliente, original: EntradaCliente): boolean {
+  return (['rua', 'bairro', 'cidade'] as const).some(
+    (campo) => entrada[campo].trim() !== original[campo].trim(),
+  )
 }
 
 export function montarCamposCliente(
@@ -265,8 +306,10 @@ export function montarCamposCliente(
     if (digitos) campos.cpfDigits = digitos
   }
 
-  const endereco = entrada.endereco.trim()
-  if (endereco) campos.endereco = endereco
+  for (const campo of ['rua', 'bairro', 'cidade'] as const) {
+    const valor = entrada[campo].trim()
+    if (valor) campos[campo] = valor
+  }
 
   const observacao = entrada.observacao.trim()
   if (observacao) campos.observacao = observacao
@@ -311,9 +354,16 @@ export function montarEdicaoCliente(
   if (cpfDigits) definir.cpfDigits = cpfDigits
   else remover.push('cpfDigits')
 
-  const endereco = entrada.endereco.trim()
-  if (endereco) definir.endereco = endereco
-  else remover.push('endereco')
+  const camposDoEndereco = ['rua', 'bairro', 'cidade'] as const
+  const mudouEndereco = !original || enderecoAlterado(entrada, original)
+  if (mudouEndereco) {
+    for (const campo of camposDoEndereco) {
+      const valor = entrada[campo].trim()
+      if (valor) definir[campo] = valor
+      else remover.push(campo)
+    }
+    remover.push('endereco')
+  }
 
   const observacao = entrada.observacao.trim()
   if (observacao) definir.observacao = observacao
@@ -334,10 +384,9 @@ export function montarEdicaoCliente(
       ['nome', 'nomeBusca'],
       ['telefone', 'telefoneDigits'],
       ['cpf', 'cpfDigits'],
-      ['endereco'],
       ['observacao'],
     ]
-    const inalterados = new Set<keyof EdicaoCliente['definir']>()
+    const inalterados = new Set<keyof EdicaoCliente['definir'] | CampoRemovivel>()
     for (const grupo of grupos) {
       if (definir[grupo[0]] !== anterior[grupo[0]]) continue
       for (const campo of grupo) {

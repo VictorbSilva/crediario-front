@@ -33,7 +33,7 @@ export function FormularioCliente({
   const base = useId()
 
   const erros = cliente
-    ? validarEdicaoCliente(entrada)
+    ? validarEdicaoCliente(entrada, clienteInicial ? entradaDoCliente(clienteInicial) : undefined)
     : validarCliente(entrada, clientes, confianca)
   const aviso = cliente ? null : avisoDeConferencia(confianca)
 
@@ -46,7 +46,9 @@ export function FormularioCliente({
   }
 
   function mudar(campo: keyof EntradaCliente) {
-    return (valor: string) => setEntrada((atual) => ({ ...atual, [campo]: valor }))
+    return (valor: string) => {
+      setEntrada((atual) => ({ ...atual, [campo]: valor }))
+    }
   }
 
   function sair(campo: keyof EntradaCliente) {
@@ -116,17 +118,6 @@ export function FormularioCliente({
       />
 
       <Campo
-        id={base + '-telefone'}
-        rotulo="Telefone"
-        valor={entrada.telefone}
-        maxLength={LIMITES_CLIENTE.telefone}
-        inputMode="tel"
-        erro={mostrar('telefone')}
-        aoMudar={mudar('telefone')}
-        aoSair={sair('telefone')}
-      />
-
-      <Campo
         id={base + '-cpf'}
         rotulo="CPF"
         valor={entrada.cpf}
@@ -139,13 +130,44 @@ export function FormularioCliente({
       />
 
       <Campo
-        id={base + '-endereco'}
-        rotulo="Endereço"
-        valor={entrada.endereco}
-        maxLength={LIMITES_CLIENTE.endereco}
-        erro={mostrar('endereco')}
-        aoMudar={mudar('endereco')}
-        aoSair={sair('endereco')}
+        id={base + '-telefone'}
+        rotulo="Contato"
+        valor={entrada.telefone}
+        maxLength={LIMITES_CLIENTE.telefone}
+        inputMode="tel"
+        erro={mostrar('telefone')}
+        aoMudar={mudar('telefone')}
+        aoSair={sair('telefone')}
+      />
+
+      <Campo
+        id={base + '-rua'}
+        rotulo="Rua e número"
+        valor={entrada.rua}
+        maxLength={LIMITES_CLIENTE.rua}
+        erro={mostrar('rua')}
+        aoMudar={mudar('rua')}
+        aoSair={sair('rua')}
+      />
+
+      <Campo
+        id={base + '-bairro'}
+        rotulo="Bairro"
+        valor={entrada.bairro}
+        maxLength={LIMITES_CLIENTE.bairro}
+        erro={mostrar('bairro')}
+        aoMudar={mudar('bairro')}
+        aoSair={sair('bairro')}
+      />
+
+      <Campo
+        id={base + '-cidade'}
+        rotulo="Cidade"
+        valor={entrada.cidade}
+        maxLength={LIMITES_CLIENTE.cidade}
+        erro={mostrar('cidade')}
+        aoMudar={mudar('cidade')}
+        aoSair={sair('cidade')}
       />
 
       <SeletorDeDias
