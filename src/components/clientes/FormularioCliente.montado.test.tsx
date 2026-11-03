@@ -386,8 +386,8 @@ describe('FormularioCliente — ordem e número sugerido', () => {
     ])
   })
 
-  it.each(['confiavel', 'parcial'] as const)('nasce com o próximo número na lista %s, incluindo arquivados', (confianca) => {
-    simulado.confianca = confianca
+  it('nasce com o próximo número na lista confiável, incluindo arquivados', () => {
+    simulado.confianca = 'confiavel'
     simulado.clientes = [cliente({ numero: 3 }), cliente({ numero: 12, arquivado: true }), cliente({ numero: 7 })]
     const { rerender } = render(<FormularioCliente aoFechar={aoFechar} />)
     expect(campo(/^Número/).value).toBe('13')
@@ -400,20 +400,27 @@ describe('FormularioCliente — ordem e número sugerido', () => {
     expect(simulado.criarCliente).toHaveBeenCalledWith(expect.objectContaining({ numero: '80' }))
   })
 
-  it.each(['confiavel', 'parcial'] as const)('sugere uma vez ao carregar a lista %s, sem sobrescrever alterações', (confianca) => {
-    simulado.confianca = 'desconhecida'
+  it.each(['desconhecida', 'parcial'] as const)('espera a lista %s ficar confiável e sugere uma vez, sem sobrescrever alterações', (confianca) => {
+    simulado.confianca = confianca
+    simulado.clientes = []
     const { rerender } = render(<FormularioCliente aoFechar={aoFechar} />)
     expect(campo(/^Número/).value).toBe('')
-    expect(screen.getByText(/Esperando a lista de clientes carregar/)).toBeTruthy()
-    simulado.confianca = confianca
+    expect(screen.getByText(confianca === 'desconhecida'
+      ? /Esperando a lista de clientes carregar/
+      : /Este aparelho ainda não sincronizou a lista de clientes/)).toBeTruthy()
+    simulado.confianca = 'parcial'
     simulado.clientes = [cliente({ numero: 12, arquivado: true }), cliente({ numero: 3 }), cliente({ numero: 7 })]
     rerender(<FormularioCliente aoFechar={aoFechar} />)
-    expect(campo(/^Número/).value).toBe('13')
+    expect(campo(/^Número/).value).toBe('')
+    simulado.confianca = 'confiavel'
     simulado.clientes = [cliente({ numero: 20 })]
     rerender(<FormularioCliente aoFechar={aoFechar} />)
-    expect(campo(/^Número/).value).toBe('13')
-    digitar(/^Número/, '')
+    expect(campo(/^Número/).value).toBe('21')
     simulado.clientes = [cliente({ numero: 30 })]
+    rerender(<FormularioCliente aoFechar={aoFechar} />)
+    expect(campo(/^Número/).value).toBe('21')
+    digitar(/^Número/, '')
+    simulado.clientes = [cliente({ numero: 40 })]
     rerender(<FormularioCliente aoFechar={aoFechar} />)
     expect(campo(/^Número/).value).toBe('')
   })
@@ -424,8 +431,10 @@ describe('FormularioCliente — ordem e número sugerido', () => {
     expect(campo(/^Número/).value).toBe('1')
   })
 
-  it.each([false, true])('preserva número digitado antes de carregar, mesmo apagado: %s', (apagar) => {
-    simulado.confianca = 'desconhecida'
+  it.each([
+    ['desconhecida', false], ['desconhecida', true], ['parcial', false], ['parcial', true],
+  ] as const)('preserva número digitado com lista %s, mesmo apagado: %s', (confianca, apagar) => {
+    simulado.confianca = confianca
     const { rerender } = render(<FormularioCliente aoFechar={aoFechar} />)
     digitar(/^Número/, '80')
     if (apagar) digitar(/^Número/, '')

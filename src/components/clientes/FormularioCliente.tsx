@@ -27,11 +27,11 @@ export function FormularioCliente({
   const [entrada, setEntrada] = useState<EntradaCliente>(() =>
     cliente ? entradaDoCliente(cliente) : {
       ...ENTRADA_CLIENTE_VAZIA,
-      numero: confianca === 'desconhecida' ? '' : String(proximoNumero(clientes)),
+      numero: confianca === 'confiavel' ? String(proximoNumero(clientes)) : '',
     },
   )
   const [numeroPreenchido, setNumeroPreenchido] = useState(
-    cliente !== undefined || confianca !== 'desconhecida',
+    cliente !== undefined || confianca === 'confiavel',
   )
   const [tocados, setTocados] = useState<Partial<Record<keyof EntradaCliente, boolean>>>({})
   const [tentouSalvar, setTentouSalvar] = useState(false)
@@ -39,7 +39,7 @@ export function FormularioCliente({
 
   const base = useId()
 
-  if (!numeroPreenchido && confianca !== 'desconhecida') {
+  if (!numeroPreenchido && confianca === 'confiavel') {
     setNumeroPreenchido(true)
     setEntrada({ ...entrada, numero: String(proximoNumero(clientes)) })
   }
