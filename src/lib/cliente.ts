@@ -167,6 +167,10 @@ export function clienteComNumero(
   return clientes.find((cliente) => cliente.numero === numero && cliente.arquivado !== true)
 }
 
+export function proximoNumero(clientes: readonly ClienteConhecido[]): number {
+  return clientes.reduce((maior, cliente) => Math.max(maior, cliente.numero), 0) + 1
+}
+
 export function enderecoDoCliente(cliente: {
   rua?: string
   bairro?: string

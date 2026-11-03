@@ -9,6 +9,7 @@ import {
   montarProximaCobranca,
   montarRemocaoDaProximaCobranca,
   parseNumeroCadastro,
+  proximoNumero,
   validarCliente,
   validarEdicaoCliente,
 } from './cliente'
@@ -16,6 +17,20 @@ import type { ClienteConhecido, EntradaCliente } from './cliente'
 import { normalizar } from './texto'
 
 const CONTEXTO = { agora: new Date(2026, 8, 21, 15, 30), dispositivo: 'a1b2c3d4' }
+
+describe('proximoNumero', () => {
+  it('sugere 1 para a lista vazia', () => {
+    expect(proximoNumero([])).toBe(1)
+  })
+
+  it('sugere o maior número mais 1, incluindo arquivados', () => {
+    expect(proximoNumero([
+      { numero: 3, nome: 'Ana' },
+      { numero: 7, nome: 'João' },
+      { numero: 12, nome: 'Rita', arquivado: true },
+    ])).toBe(13)
+  })
+})
 
 describe('próxima cobrança', () => {
   it('define só a data e a autoria', () => {

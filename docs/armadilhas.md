@@ -127,7 +127,7 @@ A lista fechada de `camposConhecidos()` é o que transforma um campo digitado er
 
 — referente a firestore.rules, `carimboDeCriacao()`
 
-`numero` é fixo por decisão do dono: a lista de papel vai de 1 a N e essa ordem não muda. `criadoEm` e `cadastradoEm` são fatos históricos — um diz quando sincronizou, o outro quando o dono estava lá.
+`numero` é fixo depois de salvo. No cadastro novo, o app sugere o maior número + 1 (arquivados inclusive, para nunca reaproveitar) e o dono pode trocar, para quem vem da lista de papel (decisão de 30/10). Não tire a sugestão por causa da lista de papel: as duas coisas convivem. `criadoEm` e `cadastradoEm` são fatos históricos — um diz quando sincronizou, o outro quando o dono estava lá.
 
 — referente a firestore.rules, `imutaveisPreservados()`
 

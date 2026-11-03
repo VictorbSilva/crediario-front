@@ -8,6 +8,7 @@ import {
   ENTRADA_CLIENTE_VAZIA,
   LIMITES_CLIENTE,
   entradaDoCliente,
+  proximoNumero,
   validarCliente,
   validarEdicaoCliente,
 } from '@/lib/cliente'
@@ -24,13 +25,24 @@ export function FormularioCliente({
 
   const [clienteInicial] = useState(cliente)
   const [entrada, setEntrada] = useState<EntradaCliente>(() =>
-    cliente ? entradaDoCliente(cliente) : ENTRADA_CLIENTE_VAZIA,
+    cliente ? entradaDoCliente(cliente) : {
+      ...ENTRADA_CLIENTE_VAZIA,
+      numero: confianca === 'desconhecida' ? '' : String(proximoNumero(clientes)),
+    },
+  )
+  const [numeroPreenchido, setNumeroPreenchido] = useState(
+    cliente !== undefined || confianca !== 'desconhecida',
   )
   const [tocados, setTocados] = useState<Partial<Record<keyof EntradaCliente, boolean>>>({})
   const [tentouSalvar, setTentouSalvar] = useState(false)
   const [semEmpresa, setSemEmpresa] = useState(false)
 
   const base = useId()
+
+  if (!numeroPreenchido && confianca !== 'desconhecida') {
+    setNumeroPreenchido(true)
+    setEntrada({ ...entrada, numero: String(proximoNumero(clientes)) })
+  }
 
   const erros = cliente
     ? validarEdicaoCliente(entrada, clienteInicial ? entradaDoCliente(clienteInicial) : undefined)
@@ -47,6 +59,7 @@ export function FormularioCliente({
 
   function mudar(campo: keyof EntradaCliente) {
     return (valor: string) => {
+      if (campo === 'numero') setNumeroPreenchido(true)
       setEntrada((atual) => ({ ...atual, [campo]: valor }))
     }
   }
@@ -75,7 +88,7 @@ export function FormularioCliente({
       subtitulo={
         cliente
           ? `#${cliente.numero} — o número não muda depois do cadastro.`
-          : 'O número é o mesmo da lista de papel.'
+          : 'O número vem com o próximo livre. Se o cliente já tem número na lista de papel, troque.'
       }
       rotuloDeEnvio={cliente ? 'Salvar alterações' : 'Salvar cliente'}
       idDoTitulo={base + '-titulo'}
