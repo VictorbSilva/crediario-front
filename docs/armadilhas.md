@@ -127,7 +127,7 @@ A lista fechada de `camposConhecidos()` é o que transforma um campo digitado er
 
 — referente a firestore.rules, `carimboDeCriacao()`
 
-`numero` é fixo por decisão do dono: a lista de papel vai de 1 a N e essa ordem não muda. `criadoEm` e `cadastradoEm` são fatos históricos — um diz quando sincronizou, o outro quando o dono estava lá.
+`numero` é fixo depois de salvo. No cadastro novo, só com a lista `confiavel`, o app sugere o maior número + 1 (arquivados inclusive, para nunca reaproveitar) e o dono pode trocar, para quem vem da lista de papel (decisão de 30/10). Não tire a sugestão por causa da lista de papel: as duas coisas convivem. `criadoEm` e `cadastradoEm` são fatos históricos — um diz quando sincronizou, o outro quando o dono estava lá.
 
 — referente a firestore.rules, `imutaveisPreservados()`
 
@@ -1950,11 +1950,18 @@ Consequência prática: **a checagem local não garante unicidade entre aparelho
 Ela recusa a duplicata que o cache já conhece; não aloca nem reserva números.
 
 **Dono decidido em 01/09/2026, confirmado pelo dono do negócio em 03/09/2026:** o caminho
-de escrita do app. O cliente cadastrado fica com **o mesmo número que já tem no papel**, e
-quem digita é o dono — **o app nunca aloca número**, nem para cliente que nunca esteve na
-lista (ele continua a sequência de cabeça). Por isso `max(numero) + 1`, contador
-transacionado e reserva de bloco estão todos descartados, e não existe "maior número do
-caderno" que o app precise conhecer.
+de escrita do app. **Atualização do dono e do Victor em 30/10/2026:** no cadastro novo,
+o app sugere `max(numero) + 1` entre todos os clientes, arquivados inclusive; lista vazia
+sugere 1. O dono pode trocar a sugestão para manter **o mesmo número que já tem no papel**.
+Depois de salvo, `numero` é fixo. A lista de papel e a sugestão convivem: não retire a
+sugestão por causa da decisão anterior.
+
+A sugestão só aparece com a lista `confiavel`. Com `desconhecida` ou `parcial`, o campo
+fica vazio e o aviso existente continua aparecendo; o cache parcial pode não conhecer o
+maior número. Ao passar a `confiavel`, preenche uma vez, usando a lista daquele momento,
+e nunca sobrescreve o que o dono digitou, mesmo que tenha apagado. Na edição não há
+sugestão. Isso não reserva números nem garante unicidade entre aparelhos offline;
+contador transacionado e reserva de bloco continuam descartados.
 
 Sendo assim, o formulário de cadastro consulta os clientes que o listener já mantém em
 cache e **recusa um número que já exista**, com mensagem explícita. É verificação local,

@@ -82,6 +82,7 @@ Vitest has its own `vitest.config.ts`, separate from `vite.config.ts`, so the te
 ## Domain Notes
 
 - Core entities include clients, collection routes (with drag-and-drop ordering), and installment-based finances (installments, due dates, late-payment processing computed on demand).
+- Client number decision by the owner and Victor on 30/10/2026: new-client registration suggests the highest `numero` across all clients, including archived clients, plus 1 (empty list → 1), and the owner may change it to match the paper list. Suggest only when the list is `confiavel`, once, without overwriting anything the owner typed; `desconhecida` and `parcial` keep the field blank until then. Never suggest during editing: the number is immutable after saving. This is a suggestion, not a reservation or a guarantee of uniqueness across offline devices; see `docs/armadilhas.md`, section 1 on `numero` uniqueness.
 
 ### Financial rules — answered by the owner on 21/09/2026 (voice note)
 
