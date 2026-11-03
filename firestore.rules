@@ -88,7 +88,7 @@ service cloud.firestore {
             'telefone', 'telefoneDigits',
             'cpf', 'cpfDigits',
             'endereco', 'rotaId', 'observacao', 'arquivado',
-            'rua', 'bairro', 'cidade', 'proximaCobranca',
+            'rua', 'bairro', 'cidade', 'referencia', 'proximaCobranca',
             'cadastradoEm',
             'diasDeVisita', 'rotaDesde', 'ordemPorDia', 'ordemDoDia',
             'ultimaMarca', 'ultimaMarcaEm', 'ultimoVisitado', 'visitadoAnterior',
@@ -130,6 +130,8 @@ service cloud.firestore {
                 || (dados().bairro is string && dados().bairro.size() >= 1 && dados().bairro.size() <= 80))
             && (!('cidade' in dados())
                 || (dados().cidade is string && dados().cidade.size() >= 1 && dados().cidade.size() <= 80))
+            && (!('referencia' in dados())
+                || (dados().referencia is string && dados().referencia.size() >= 1 && dados().referencia.size() <= 120))
             && (!('proximaCobranca' in dados()) || ehDataCivil(dados().proximaCobranca))
             && (!('rotaId' in dados())
                 || dados().rotaId == null

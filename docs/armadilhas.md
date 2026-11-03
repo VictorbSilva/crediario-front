@@ -254,6 +254,29 @@ tem endereco` existe para pegar isso.
 — referente a firestore.rules, `match /clients/{clientId}`, e tests/regras/clients.test.ts,
 `describe('clients — endereço e próxima cobrança')`
 
+### Ponto de referência — acrescentado em 03/11/2026
+
+Pedido do dono em 03/11/2026: no endereço, "a opção de colocar ponto de referência". Um campo
+entra em `camposConhecidos()` e `tiposValidos()`:
+
+- `referencia` — string de 1 a 120 caracteres, como o dono digitar ("Perto da padaria").
+
+**É opcional e sai com `deleteField()`**, pelo mesmo motivo de `rua`, `bairro` e `cidade`: o app
+está em uso, há cliente gravado sem o campo, e um aparelho com a versão anterior do app não o
+manda. Também como eles, **recusa `''`**: o formulário que gravar o campo precisa omiti-lo ou
+mandar `deleteField()` quando o dono apagar o texto.
+
+O teste `aceita remover referencia com deleteField` passa mesmo com a regra antiga, porque o
+documento sem o campo já era válido. Ele não prova que a regra aceita o campo — isso é dos
+testes que gravam `referencia` — e existe para pegar quem um dia tornar o campo obrigatório.
+
+> **AVISO**
+> A regra é publicada à mão, e **antes** de qualquer código gravar o campo, pelo mesmo motivo
+> dos campos de rota.
+
+— referente a firestore.rules, `match /clients/{clientId}`, e tests/regras/clients.test.ts,
+`describe('clients — endereço e próxima cobrança')`
+
 ## firestore.rules — sales, installments e payments
 
 Nascidas em 21/09/2026, com regra e teste no mesmo commit. Os helpers `dados()`,

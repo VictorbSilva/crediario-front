@@ -558,10 +558,18 @@ describe('clients — endereço e próxima cobrança', () => {
     expect(await veredito(setDoc(doc(bancoDono(), caminhoCliente('c1')), clienteValido(enderecoCompleto)))).toBe('permitido')
   })
 
+  it('aceita referencia preenchida', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), caminhoCliente('c1')),
+        clienteValido({ referencia: 'Perto da padaria' }),
+      ))).toBe('permitido')
+  })
+
   const limites: Array<[string, number]> = [
     ['rua', 120],
     ['bairro', 80],
     ['cidade', 80],
+    ['referencia', 120],
   ]
 
   for (const [campo, limite] of limites) {
@@ -626,6 +634,26 @@ describe('clients — endereço e próxima cobrança', () => {
         rua: deleteField(),
         bairro: deleteField(),
         cidade: deleteField(),
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: 'celular-do-dono',
+      }))).toBe('permitido')
+  })
+
+  it('aceita gravar só referencia em cliente que não a tinha', async () => {
+    await semearAntigo('c1')
+    const documento = doc(bancoDono(), caminhoCliente('c1'))
+    expect(await veredito(updateDoc(documento, {
+        referencia: 'Perto da padaria',
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: 'celular-do-dono',
+      }))).toBe('permitido')
+    expect((await getDoc(documento)).data()!.referencia).toBe('Perto da padaria')
+  })
+
+  it('aceita remover referencia com deleteField', async () => {
+    await semearAntigo('c1', { referencia: 'Perto da padaria' })
+    expect(await veredito(updateDoc(doc(bancoDono(), caminhoCliente('c1')), {
+        referencia: deleteField(),
         atualizadoEm: serverTimestamp(),
         atualizadoPor: 'celular-do-dono',
       }))).toBe('permitido')
