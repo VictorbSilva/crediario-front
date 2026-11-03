@@ -1,17 +1,72 @@
+import { useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
+import { deveChecarAtualizacao, INTERVALO_DE_CHECAGEM_MS } from '@/lib/atualizacao'
+
+/**
+ * O caminho normal recarrega antes, no `controlling` do vite-plugin-pwa; este relógio
+ * só garante que, tocado "Atualizar", ninguém fica parado sem recarregar.
+ */
+const ESPERA_PARA_RECARREGAR_MS = 5 * 1000
+
+// O React em modo estrito pode registrar duas vezes no desenvolvimento: os gatilhos
+// da checagem ligam uma vez só por página.
+let checagensLigadas = false
+
+/**
+ * Sem isto o navegador só confere o `sw.js` numa navegação, e o app instalado volta
+ * do segundo plano sem navegar. Ver docs/armadilhas.md (src/components/pwa/PwaPrompt.tsx).
+ */
+function ligarChecagens(swUrl: string, registro: ServiceWorkerRegistration | undefined) {
+  if (!registro || checagensLigadas) return
+  checagensLigadas = true
+  let ultimaChecagem: number | null = null
+
+  const checar = () => {
+    const agora = Date.now()
+    const deve = deveChecarAtualizacao({
+      online: navigator.onLine,
+      instalando: Boolean(registro.installing),
+      ultimaChecagem,
+      agora,
+    })
+    if (!deve) return
+    ultimaChecagem = agora
+    fetch(swUrl, { cache: 'no-store', headers: { 'cache-control': 'no-cache' } })
+      .then((resposta) => {
+        if (resposta.status === 200) return registro.update()
+      })
+      // Offline é o estado normal do app: a checagem que falha não é erro.
+      .catch(() => {})
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checar()
+  })
+  window.addEventListener('online', checar)
+  setInterval(checar, INTERVALO_DE_CHECAGEM_MS)
+}
 
 export function PwaPrompt() {
   const {
     offlineReady: [offlineReady, setOfflineReady],
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
-  } = useRegisterSW()
+  } = useRegisterSW({ onRegisteredSW: ligarChecagens })
+  const [atualizando, setAtualizando] = useState(false)
 
   if (!offlineReady && !needRefresh) return null
 
   function fechar() {
     setOfflineReady(false)
     setNeedRefresh(false)
+  }
+
+  function atualizar() {
+    setAtualizando(true)
+    updateServiceWorker().catch((erro: unknown) => {
+      console.error('[pwa] Falha ao aplicar a atualização.', erro)
+    })
+    setTimeout(() => window.location.reload(), ESPERA_PARA_RECARREGAR_MS)
   }
 
   return (
@@ -30,14 +85,11 @@ export function PwaPrompt() {
         {needRefresh && (
           <button
             type="button"
-            onClick={() => {
-              updateServiceWorker().catch((erro: unknown) => {
-                console.error('[pwa] Falha ao aplicar a atualização.', erro)
-              })
-            }}
-            className="min-h-11 shrink-0 rounded-lg bg-brand-600 px-4 text-sm font-medium text-white transition-colors hover:bg-brand-700"
+            onClick={atualizar}
+            disabled={atualizando}
+            className="min-h-11 shrink-0 rounded-lg bg-brand-600 px-4 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Atualizar
+            {atualizando ? 'Atualizando…' : 'Atualizar'}
           </button>
         )}
 
