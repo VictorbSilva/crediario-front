@@ -60,6 +60,9 @@ function CorpoDaParada({ cliente, estado, aoMarcar, cobrancaMarcada, alca, liPro
           <div className="mt-0.5 truncate text-xs text-slate-500">
             {enderecoDoCliente(cliente) || 'Sem endereço'}
           </div>
+          {cliente.referencia ? (
+            <div className="mt-0.5 truncate text-xs text-slate-500">Ref.: {cliente.referencia}</div>
+          ) : null}
           <div className="mt-1.5 flex flex-wrap gap-1.5 empty:hidden">
             {estado?.atrasado && estado.agendadoPara ? (
               <StatusPill tom="perigo">

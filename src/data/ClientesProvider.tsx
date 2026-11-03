@@ -67,6 +67,7 @@ function paraCliente(documento: QueryDocumentSnapshot<DocumentData>): Cliente {
     rua: dados.rua,
     bairro: dados.bairro,
     cidade: dados.cidade,
+    referencia: dados.referencia,
     rotaId: dados.rotaId,
     diasDeVisita: dados.diasDeVisita,
     rotaDesde: dados.rotaDesde,

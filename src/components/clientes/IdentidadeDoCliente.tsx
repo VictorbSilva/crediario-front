@@ -47,12 +47,13 @@ export function DadosDoCliente({ cliente, aoRemoverProximaCobranca }: Readonly<{
         </Linha>
       ) : null}
 
-      {endereco ? (
+      {endereco || cliente.referencia ? (
         <Linha rotulo="Endereço">
-          <span className="flex items-start gap-2">
+          {endereco ? <span className="flex items-start gap-2">
             <MapPin size={16} aria-hidden className="mt-0.5 shrink-0 text-slate-400" />
             {endereco}
-          </span>
+          </span> : null}
+          {cliente.referencia ? <p className="mt-1">Ref.: {cliente.referencia}</p> : null}
         </Linha>
       ) : null}
 

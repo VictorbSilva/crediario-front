@@ -37,6 +37,7 @@ function LeituraDosContadores({ aoReceber }: { aoReceber: (dados: DadosDosContad
 function combina(cliente: Cliente, termo: string, digitos: string): boolean {
   if (cliente.nomeBusca.includes(termo)) return true
   if (normalizar(enderecoDoCliente(cliente)).includes(termo)) return true
+  if (normalizar(cliente.referencia ?? '').includes(termo)) return true
   if (digitos === '') return false
 
   return (

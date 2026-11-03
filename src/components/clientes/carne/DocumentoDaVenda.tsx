@@ -86,6 +86,7 @@ export function DocumentoDaVenda({ dados, aoFechar }: DocumentoDaVendaProps) {
               {documento.cpf ? <p>{documento.cpf}</p> : null}
               {documento.contato ? <p>{documento.contato}</p> : null}
               {documento.endereco ? <p>{documento.endereco}</p> : null}
+              {documento.referencia ? <p>{documento.referencia}</p> : null}
               <p className="mt-2">Data da venda: {documento.dataVenda}</p>
             </div>
             {documento.itens && documento.itens.length > 0 ? (

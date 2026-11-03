@@ -41,6 +41,51 @@ function entrada(partes: Partial<EntradaCliente> = {}): EntradaCliente {
   return { ...ENTRADA_CLIENTE_VAZIA, numero: '500', nome: 'Ana Paula Ferreira', ...partes }
 }
 
+describe('ponto de referência', () => {
+  it('valida 120/121 caracteres no cadastro e na edição, sem contar espaços externos', () => {
+    for (const validar of [
+      (dados: EntradaCliente) => validarCliente(dados, lista, 'confiavel'), validarEdicaoCliente,
+    ]) {
+      expect(validar(entrada({ referencia: 'a'.repeat(121) })).referencia).toBeTypeOf('string')
+      expect(validar(entrada({ referencia: `  ${'a'.repeat(120)}  ` })).referencia).toBeUndefined()
+      expect(validar(entrada({ referencia: ' ' })).referencia).toBeUndefined()
+    }
+  })
+
+  it('grava a referência aparada e omite texto vazio no cadastro', () => {
+    expect(montarCamposCliente(entrada({ referencia: ' Perto da padaria ' }), CONTEXTO))
+      .toHaveProperty('referencia', 'Perto da padaria')
+    expect(montarCamposCliente(entrada({ referencia: ' ' }), CONTEXTO)).not.toHaveProperty('referencia')
+  })
+
+  it('traz a referência para a edição e deixa a ausente em branco', () => {
+    expect(entradaDoCliente({ numero: 1, nome: 'Ana', referencia: 'Perto da padaria' }).referencia)
+      .toBe('Perto da padaria')
+    expect(entradaDoCliente({ numero: 1, nome: 'Ana' }).referencia).toBe('')
+  })
+
+  it('remove somente a referência apagada', () => {
+    const original = entrada({ referencia: 'Perto da padaria', rua: 'Rua A' })
+    expect(montarEdicaoCliente({ ...original, referencia: ' ' }, CONTEXTO, original)).toEqual({
+      definir: { atualizadoPor: CONTEXTO.dispositivo }, remover: ['referencia'],
+    })
+  })
+
+  it('grava a referência alterada em trim sem regravar o endereço', () => {
+    const original = entrada({ referencia: 'Perto da padaria', rua: 'Rua A' })
+    expect(montarEdicaoCliente({ ...original, referencia: ' Ao lado da escola ' }, CONTEXTO, original)).toEqual({
+      definir: { referencia: 'Ao lado da escola', atualizadoPor: CONTEXTO.dispositivo }, remover: [],
+    })
+  })
+
+  it('editar só o nome preserva a referência sem enviá-la na escrita', () => {
+    const original = entrada({ referencia: 'Perto da padaria' })
+    expect(montarEdicaoCliente({ ...original, nome: 'Ana' }, CONTEXTO, original)).toEqual({
+      definir: { nome: 'Ana', nomeBusca: 'ana', atualizadoPor: CONTEXTO.dispositivo }, remover: [],
+    })
+  })
+})
+
 describe('ENTRADA_CLIENTE_VAZIA', () => {
   it('começa sem dias de visita', () => {
     expect(ENTRADA_CLIENTE_VAZIA.diasDeVisita).toEqual([])
@@ -57,6 +102,7 @@ describe('entradaDoCliente', () => {
       rua: '',
       bairro: '',
       cidade: '',
+      referencia: '',
       observacao: '',
       diasDeVisita: [],
     })
@@ -67,6 +113,7 @@ describe('entradaDoCliente', () => {
       telefone: '9999',
       cpf: '529.982.247-25',
       rua: 'Rua A',
+      referencia: 'Perto da padaria',
       observacao: 'Aviso',
       diasDeVisita: [5, 20],
     })
@@ -148,7 +195,7 @@ describe('montarEdicaoCliente', () => {
       observacao: 'Aviso',
       atualizadoPor: 'abc',
     })
-    expect(remover).toEqual(['bairro', 'cidade', 'endereco', 'diasDeVisita', 'rotaDesde'])
+    expect(remover).toEqual(['bairro', 'cidade', 'endereco', 'referencia', 'diasDeVisita', 'rotaDesde'])
   })
 
   it.each(['', '   '])('remove opcionais apagados (%j), incluindo os pares de dígitos', (vazio) => {
@@ -169,6 +216,7 @@ describe('montarEdicaoCliente', () => {
       'diasDeVisita',
       'endereco',
       'observacao',
+      'referencia',
       'rotaDesde',
       'rua',
       'telefone',
@@ -190,7 +238,7 @@ describe('montarEdicaoCliente', () => {
     expect(definir.cpf).toBe('sem CPF')
     expect(definir).not.toHaveProperty('telefoneDigits')
     expect(definir).not.toHaveProperty('cpfDigits')
-    expect(remover.sort()).toEqual(['bairro', 'cidade', 'cpfDigits', 'diasDeVisita', 'endereco', 'rotaDesde', 'telefoneDigits'])
+    expect(remover.sort()).toEqual(['bairro', 'cidade', 'cpfDigits', 'diasDeVisita', 'endereco', 'referencia', 'rotaDesde', 'telefoneDigits'])
   })
 
   it('nunca define o número, datas de cadastro e criação ou o arquivamento', () => {

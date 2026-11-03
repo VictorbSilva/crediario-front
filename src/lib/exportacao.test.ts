@@ -45,6 +45,20 @@ function parcelas(quantidade: number): DocumentoExportavel[] {
 }
 
 describe('paraCSV', () => {
+  it('exporta referência depois de cidade e deixa a célula vazia quando ausente', () => {
+    const linhas = paraCSV([
+      cliente({ cidade: 'Recife', referencia: 'Perto da padaria', observacao: 'De manhã' }), cliente(),
+    ]).replace('﻿', '').split('\r\n')
+    expect(linhas[0].split(';').slice(7, 10)).toEqual(['cidade', 'referencia', 'observacao'])
+    expect(linhas[1].split(';').slice(7, 10)).toEqual(['Recife', 'Perto da padaria', 'De manhã'])
+    expect(linhas[2].split(';')[8]).toBe('')
+  })
+
+  it('escapa separador, aspas e quebras de linha também na referência', () => {
+    expect(paraCSV([cliente({ referencia: 'Perto; da "padaria"\nAzul' })]))
+      .toContain('"Perto; da ""padaria""\nAzul"')
+  })
+
   it('leva o endereço antigo e as três partes nas colunas próprias, inclusive opcionais vazios', () => {
     const linhas = paraCSV([
       cliente({ endereco: 'Antigo', rua: 'Rua A, 10', bairro: 'Centro', cidade: 'João Pessoa' }),
@@ -62,7 +76,7 @@ describe('paraCSV', () => {
     const linhas = paraCSV([cliente()]).replace('﻿', '').split('\r\n')
 
     expect(linhas[0]).toBe(
-      'numero;nome;telefone;cpf;endereco;rua;bairro;cidade;observacao;arquivado;cadastradoEm;criadoEm;atualizadoEm;atualizadoPor',
+      'numero;nome;telefone;cpf;endereco;rua;bairro;cidade;referencia;observacao;arquivado;cadastradoEm;criadoEm;atualizadoEm;atualizadoPor',
     )
     expect(linhas[1].startsWith('137;Maria Aparecida Santos;')).toBe(true)
   })
@@ -133,6 +147,14 @@ describe('serializar', () => {
 })
 
 describe('paraJSON', () => {
+  it('inclui referência no backup e omite o campo dos clientes que não a têm', () => {
+    const conteudo = JSON.parse(paraJSON([
+      cliente({ referencia: 'Perto da padaria' }), cliente(),
+    ], SEM_CARNE, AGORA))
+    expect(conteudo.clientes[0].referencia).toBe('Perto da padaria')
+    expect(conteudo.clientes[1]).not.toHaveProperty('referencia')
+  })
+
   it('leva rua, bairro, cidade e proximaCobranca sem mudar a versão 2', () => {
     const novos = { rua: 'Rua A, 10', bairro: 'Centro', cidade: 'João Pessoa', proximaCobranca: '2026-11-05' }
     const conteudo = JSON.parse(paraJSON([cliente(novos), cliente()], SEM_CARNE, AGORA))

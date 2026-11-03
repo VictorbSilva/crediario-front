@@ -170,6 +170,17 @@ export function FormularioCliente({
         aoSair={sair('cidade')}
       />
 
+      <Campo
+        id={base + '-referencia'}
+        rotulo="Ponto de referência"
+        valor={entrada.referencia}
+        maxLength={LIMITES_CLIENTE.referencia}
+        dica="Ex.: perto da padaria"
+        erro={mostrar('referencia')}
+        aoMudar={mudar('referencia')}
+        aoSair={sair('referencia')}
+      />
+
       <SeletorDeDias
         id={base + '-dias-de-visita'}
         dias={entrada.diasDeVisita}

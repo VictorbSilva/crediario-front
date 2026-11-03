@@ -8,7 +8,7 @@ import type { Pagamento, Venda } from '@/types/venda'
 
 export type EntradaDocumentoDaVenda = {
   loja: DadosDaLoja
-  cliente: Pick<Cliente, 'numero' | 'nome' | 'cpf' | 'telefone' | 'rua' | 'bairro' | 'cidade' | 'endereco'>
+  cliente: Pick<Cliente, 'numero' | 'nome' | 'cpf' | 'telefone' | 'rua' | 'bairro' | 'cidade' | 'endereco' | 'referencia'>
   venda: Pick<Venda, 'dataVenda' | 'valorTotalCentavos' | 'itens' | 'numeroParcelas' | 'valorParcelaCentavos' | 'periodicidade'>
   parcelas: readonly ParcelaComEstado[]
 }
@@ -23,6 +23,7 @@ export function montarDocumentoDaVenda({ loja, cliente, venda, parcelas }: Entra
     cpf: cliente.cpf ? `CPF: ${cliente.cpf}` : undefined,
     contato: cliente.telefone ? `Contato: ${cliente.telefone}` : undefined,
     endereco: enderecoDoCliente(cliente),
+    referencia: cliente.referencia ? `Ref.: ${cliente.referencia}` : undefined,
     dataVenda: dataBonita(venda.dataVenda),
     itens: venda.itens?.map((item) => ({
       quantidade: item.quantidade,
