@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { DndContext } from '@dnd-kit/core'
 import { SortableContext } from '@dnd-kit/sortable'
 import { describe, expect, it } from 'vitest'
+import { DadosDoCliente } from '@/components/clientes/IdentidadeDoCliente'
 import type { EstadoNaRota } from '@/lib/rotas'
 import type { Cliente } from '@/types/cliente'
 import { ParadaDaRota, ParadaFixa } from './ParadaDaRota'
@@ -37,6 +38,16 @@ function fixa(c: Cliente, cobrancaMarcada?: boolean): string {
 }
 
 describe('ParadaDaRota', () => {
+  it('mostra a referência em linha própria abaixo do endereço, pequena e truncada, nas duas paradas', () => {
+    for (const renderizar of [html, fixa]) {
+      const marcacao = renderizar({ ...cliente, referencia: 'Perto da padaria' })
+      expect(marcacao).toMatch(/Rua A, 10<\/div><div class="[^"]*truncate text-xs text-slate-500">Ref\.: Perto da padaria<\/div>/)
+      expect(renderizar(cliente)).not.toContain('Ref.:')
+      expect(renderizar({ ...cliente, endereco: undefined, referencia: 'Perto da padaria' }))
+        .toContain('Ref.: Perto da padaria')
+    }
+  })
+
   it('mostra endereço em três campos em vez do endereço antigo', () => {
     expect(html({ ...cliente, rua: 'Rua B', bairro: 'Centro', cidade: 'Recife' }))
       .toContain('Rua B · Centro · Recife')
@@ -137,5 +148,18 @@ describe('ParadaDaRota', () => {
   it('a parada fixa usa o mesmo <li> da parada arrastável', () => {
     const li = (marcacao: string) => /<li[^>]*>/.exec(marcacao)?.[0]
     expect(li(fixa(cliente))).toBe(li(html(cliente)))
+  })
+})
+
+describe('DadosDoCliente — referência na ficha', () => {
+  const ficha = (c: Cliente) => renderToStaticMarkup(createElement(DadosDoCliente, { cliente: c }))
+
+  it('mostra a referência abaixo do endereço, em linha própria, e omite quando ausente', () => {
+    const marcacao = ficha({ ...cliente, referencia: 'Perto da padaria' })
+    expect(marcacao).toContain('Ref.: Perto da padaria')
+    expect(marcacao.indexOf('Ref.: Perto da padaria')).toBeGreaterThan(marcacao.indexOf('Rua A, 10'))
+    expect(ficha(cliente)).not.toContain('Ref.:')
+    expect(ficha({ ...cliente, endereco: undefined, referencia: 'Perto da padaria' }))
+      .toContain('Ref.: Perto da padaria')
   })
 })

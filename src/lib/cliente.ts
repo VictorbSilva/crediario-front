@@ -13,6 +13,7 @@ export const LIMITES_CLIENTE = {
   rua: 120,
   bairro: 80,
   cidade: 80,
+  referencia: 120,
   observacao: 500,
 } as const
 
@@ -30,6 +31,7 @@ export type EntradaCliente = {
   rua: string
   bairro: string
   cidade: string
+  referencia: string
   observacao: string
   diasDeVisita: number[]
 }
@@ -42,6 +44,7 @@ export const ENTRADA_CLIENTE_VAZIA: EntradaCliente = {
   rua: '',
   bairro: '',
   cidade: '',
+  referencia: '',
   observacao: '',
   diasDeVisita: [],
 }
@@ -55,6 +58,7 @@ export function entradaDoCliente(cliente: {
   rua?: string
   bairro?: string
   cidade?: string
+  referencia?: string
   observacao?: string
   diasDeVisita?: number[]
 }): EntradaCliente {
@@ -66,6 +70,7 @@ export function entradaDoCliente(cliente: {
     rua: cliente.rua ?? cliente.endereco ?? '',
     bairro: cliente.bairro ?? '',
     cidade: cliente.cidade ?? '',
+    referencia: cliente.referencia ?? '',
     observacao: cliente.observacao ?? '',
     diasDeVisita: [...(cliente.diasDeVisita ?? [])],
   }
@@ -89,6 +94,7 @@ export type CamposCliente = {
   rua?: string
   bairro?: string
   cidade?: string
+  referencia?: string
   observacao?: string
   diasDeVisita?: number[]
   rotaDesde?: string
@@ -106,6 +112,7 @@ export type CampoRemovivel =
   | 'rua'
   | 'bairro'
   | 'cidade'
+  | 'referencia'
   | 'observacao'
   | 'diasDeVisita'
   | 'rotaDesde'
@@ -122,6 +129,7 @@ export type EdicaoCliente = {
     rua?: string
     bairro?: string
     cidade?: string
+    referencia?: string
     observacao?: string
     diasDeVisita?: number[]
     rotaDesde?: string
@@ -243,6 +251,7 @@ function errosDosDadosCliente(entrada: EntradaCliente): ErrosCliente {
     rua: erroDeTamanho(entrada.rua, LIMITES_CLIENTE.rua, 'Rua muito longa'),
     bairro: erroDeTamanho(entrada.bairro, LIMITES_CLIENTE.bairro, 'Bairro muito longo'),
     cidade: erroDeTamanho(entrada.cidade, LIMITES_CLIENTE.cidade, 'Cidade muito longa'),
+    referencia: erroDeTamanho(entrada.referencia, LIMITES_CLIENTE.referencia, 'Referência muito longa'),
     observacao: erroDeTamanho(
       entrada.observacao,
       LIMITES_CLIENTE.observacao,
@@ -319,7 +328,7 @@ export function montarCamposCliente(
     if (digitos) campos.cpfDigits = digitos
   }
 
-  for (const campo of ['rua', 'bairro', 'cidade'] as const) {
+  for (const campo of ['rua', 'bairro', 'cidade', 'referencia'] as const) {
     const valor = entrada[campo].trim()
     if (valor) campos[campo] = valor
   }
@@ -378,6 +387,10 @@ export function montarEdicaoCliente(
     remover.push('endereco')
   }
 
+  const referencia = entrada.referencia.trim()
+  if (referencia) definir.referencia = referencia
+  else remover.push('referencia')
+
   const observacao = entrada.observacao.trim()
   if (observacao) definir.observacao = observacao
   else remover.push('observacao')
@@ -397,6 +410,7 @@ export function montarEdicaoCliente(
       ['nome', 'nomeBusca'],
       ['telefone', 'telefoneDigits'],
       ['cpf', 'cpfDigits'],
+      ['referencia'],
       ['observacao'],
     ]
     const inalterados = new Set<keyof EdicaoCliente['definir'] | CampoRemovivel>()

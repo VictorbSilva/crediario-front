@@ -13,6 +13,7 @@ export type Cliente = {
   rua?: string
   bairro?: string
   cidade?: string
+  referencia?: string
   rotaId?: string | null
   diasDeVisita?: number[]
   rotaDesde?: string

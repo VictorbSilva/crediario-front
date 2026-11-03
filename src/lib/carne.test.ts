@@ -28,6 +28,15 @@ describe('montarDocumentoDaVenda', () => {
     })),
   }
 
+  it('leva a referência como linha separada e omite quando ausente', () => {
+    const documento = montarDocumentoDaVenda({ ...base,
+      cliente: { ...base.cliente, referencia: 'Perto da padaria' },
+    })
+    expect(documento.referencia).toBe('Ref.: Perto da padaria')
+    expect(documento.endereco).toBe('Rua A · Centro · São Paulo')
+    expect(montarDocumentoDaVenda(base).referencia).toBeUndefined()
+  })
+
   it('monta loja, cliente, itens e total; vencimentos usam os valores integrais do carnê em ordem', () => {
     const documento = montarDocumentoDaVenda(base)
     expect(documento).toMatchObject({ titulo: 'Comprovante de venda', nomeDaLoja: 'Loja X',

@@ -103,6 +103,22 @@ beforeEach(() => {
 })
 
 describe('editarCliente', () => {
+  it('remove a referência apagada com deleteField e preserva os outros campos', () => {
+    const comReferencia = { ...cliente, referencia: 'Perto da padaria' }
+    contexto().editarCliente(comReferencia, { ...entradaDoCliente(comReferencia), referencia: ' ' })
+    expect(simulado.updateDoc).toHaveBeenCalledExactlyOnceWith('referencia', {
+      referencia: 'remover-campo', atualizadoPor: 'aparelho', atualizadoEm: 'carimbo-do-servidor',
+    })
+  })
+
+  it('editar somente o nome não envia nem remove a referência', () => {
+    const comReferencia = { ...cliente, referencia: 'Perto da padaria' }
+    contexto().editarCliente(comReferencia, { ...entradaDoCliente(comReferencia), nome: 'Ana Maria' })
+    expect(simulado.updateDoc).toHaveBeenCalledExactlyOnceWith('referencia', {
+      nome: 'Ana Maria', nomeBusca: 'ana maria', atualizadoPor: 'aparelho', atualizadoEm: 'carimbo-do-servidor',
+    })
+  })
+
   it('fecha uma edição sem mudanças sem escrever ou trocar carimbos e autoria', () => {
     expect(contexto().editarCliente(cliente, entradaDoCliente(cliente))).toBe(true)
     expect(simulado.updateDoc).not.toHaveBeenCalled()
@@ -151,6 +167,21 @@ describe('criarCliente — endereço', () => {
 })
 
 describe('mapeamento do documento para Cliente', () => {
+  it('leva a referência do listener ao cliente e mantém a ausente undefined', () => {
+    contexto()
+    simulado.efeitos[0]()
+    simulado.onSnapshot.mock.calls[0][2]({
+      docs: [
+        { id: 'novo', data: () => ({ ...cliente, referencia: 'Perto da padaria' }), metadata: { hasPendingWrites: false } },
+        { id: 'antigo', data: () => cliente, metadata: { hasPendingWrites: false } },
+      ],
+      metadata: { fromCache: true },
+    })
+    const [clientes] = simulado.setters[0].mock.calls[0] as [Cliente[]]
+    expect(clientes[0].referencia).toBe('Perto da padaria')
+    expect(clientes[1].referencia).toBeUndefined()
+  })
+
   it('preserva os quatro campos novos e o endereco dos clientes antigos sem inventar as três partes', () => {
     contexto()
     simulado.efeitos[0]()

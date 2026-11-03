@@ -62,6 +62,46 @@ afterEach(() => {
 })
 
 describe('FormularioCliente — cadastro', () => {
+  it('mostra referência opcional depois de Cidade, com dica e limite da regra', () => {
+    render(<FormularioCliente aoFechar={aoFechar} />)
+    const referencia = campo(/^Ponto de referência/)
+    expect(referencia.value).toBe('')
+    expect(referencia.maxLength).toBe(120)
+    const dica = screen.getByText('Ex.: perto da padaria')
+    expect(referencia.getAttribute('aria-describedby')?.split(' ')).toContain(dica.id)
+    expect(referencia.labels?.[0].textContent).toContain('opcional')
+    const campos = Array.from(document.querySelectorAll('input, textarea'))
+    expect(campos.indexOf(referencia)).toBe(campos.indexOf(campo(/^Cidade/)) + 1)
+  })
+
+  it('envia a referência no cadastro e impede 121 caracteres antes de gravar', () => {
+    render(<FormularioCliente aoFechar={aoFechar} />)
+    digitar(/^Número/, '41')
+    digitar(/^Nome/, 'Ana')
+    digitar(/^Ponto de referência/, 'a'.repeat(121))
+    fireEvent.blur(campo(/^Ponto de referência/))
+    expect(erroDe(/^Ponto de referência/)).toBe('Referência muito longa: máximo 120 caracteres.')
+    salvar()
+    expect(simulado.criarCliente).not.toHaveBeenCalled()
+    digitar(/^Ponto de referência/, 'a'.repeat(120))
+    salvar()
+    expect(simulado.criarCliente).toHaveBeenCalledWith(expect.objectContaining({ referencia: 'a'.repeat(120) }))
+  })
+
+  it('preenche a referência ao editar, preserva ao mudar só o nome e permite apagar', () => {
+    const atual = cliente({ referencia: 'Perto da padaria' })
+    render(<FormularioCliente cliente={atual} aoFechar={aoFechar} />)
+    expect(campo(/^Ponto de referência/).value).toBe('Perto da padaria')
+    digitar(/^Nome/, 'Ana')
+    salvar()
+    expect(simulado.editarCliente).toHaveBeenLastCalledWith(atual,
+      expect.objectContaining({ nome: 'Ana', referencia: 'Perto da padaria' }))
+    digitar(/^Ponto de referência/, '')
+    salvar()
+    expect(simulado.editarCliente).toHaveBeenLastCalledWith(atual,
+      expect.objectContaining({ referencia: '' }))
+  })
+
   it('nasce vazio, com o foco no número e os limites da regra em cada campo', () => {
     render(<FormularioCliente aoFechar={aoFechar} />)
 
@@ -341,6 +381,7 @@ describe('FormularioCliente — ordem e número manual', () => {
       .map((item) => item.firstChild?.textContent?.trim())
     expect(rotulos).toEqual([
       'Número', 'Nome', 'CPF', 'Contato', 'Rua e número', 'Bairro', 'Cidade',
+      'Ponto de referência',
       'Dias de visita no mês', 'Observação',
     ])
   })
