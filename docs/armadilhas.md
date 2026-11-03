@@ -1640,15 +1640,69 @@ Este componente só acompanha o service worker (código do app), sem dados pende
 gravação. O indicador de dados já existe: `SyncBadge`, ligado aos metadados dos snapshots
 de clientes. `PwaPrompt` monta em `App`, fora da guarda de autenticação, inclusive no login.
 
-— referente a src/components/pwa/PwaPrompt.tsx, linhas 3–11
+— referente a src/components/pwa/PwaPrompt.tsx, linhas 49–57
 
 Uma atualização pendente é mais importante que o aviso de "pronto offline".
 
-— referente a src/components/pwa/PwaPrompt.tsx, linha 21
+— referente a src/components/pwa/PwaPrompt.tsx, linha 80
 
 Acima da BottomNav no celular (mesmo 4.5rem usado pelo AppShell).
 
-— referente a src/components/pwa/PwaPrompt.tsx, linha 33
+— referente a src/components/pwa/PwaPrompt.tsx, linha 76
+
+### O aviso de versão nova não chegava (03/11/2026)
+
+**Achado de 03/11/2026: o dono não recebia "Nova versão disponível".** O `useRegisterSW()`
+era chamado sem opções, e assim quem decide quando conferir o `sw.js` é o navegador, que só
+faz isso numa navegação (abrir o app do zero, recarregar). O app instalado no celular volta
+do segundo plano sem navegar, e a troca de tela é do react-router, não do navegador: o
+aparelho podia passar dias na versão velha sem o aviso aparecer.
+
+Agora o `onRegisteredSW` liga três gatilhos, todos chamando a mesma `checar()`:
+
+- **`visibilitychange` com a tela visível** — o caso do dono, que tira o app do segundo
+  plano;
+- **`online` na `window`** — a internet voltou, e a checagem que o offline barrou pode
+  acontecer;
+- **`setInterval` de `INTERVALO_DE_CHECAGEM_MS` (1 h)** — para o app que fica aberto na
+  tela o dia inteiro, como no computador.
+
+`checar()` passa por `deveChecarAtualizacao` (`src/lib/atualizacao.ts`): não checa offline,
+nem com um worker novo já instalando, nem a menos de `INTERVALO_MINIMO_MS` (**5 min**) da
+última checagem. Os 5 minutos existem porque, na rua, a pessoa alterna de app o tempo todo:
+sem eles, cada volta à tela seria uma busca do `sw.js`. Exemplo: checou às 10:00; voltou à
+tela às 10:01 e às 10:04, nada; voltou às 10:05, checa. A tentativa barrada por estar
+offline **não** conta como checagem: a próxima volta à tela, já com internet, checa na hora.
+
+Quando passa, `checar()` busca o `sw.js` com `cache: 'no-store'` e só chama
+`registration.update()` se ele voltar com status 200. O `update()` que acha um worker novo
+leva ao evento `waiting` do workbox-window, que é o que acende o aviso. O `sw.js` já sai com
+`no-cache` da Vercel (ver `vercel.json` abaixo), então a busca chega ao servidor. Erro de
+rede e erro do `update()` são engolidos com `.catch(() => {})`: offline é o estado normal do
+app, não falha, e não pode virar mensagem na tela nem rejeição solta no console.
+
+**Os gatilhos ligam uma vez só.** Eles ficam ligados enquanto a página vive, e a guarda
+`checagensLigadas` é variável de módulo, não estado do componente: o React em modo estrito
+chama o inicializador do `useState` duas vezes no desenvolvimento, e o `useRegisterSW` cria
+o registro ali — sem a guarda, seriam dois ouvintes de cada e duas buscas a cada volta à
+tela. Por ser estado de módulo, o teste usa `vi.resetModules()` e `import()` dinâmico (ver
+`src/test/` abaixo) e tira os ouvintes no `afterEach`, porque o jsdom é o mesmo para o
+arquivo inteiro.
+
+**Nada recarrega sem o toque.** `registerType: 'prompt'` continua (ver `vite.config.ts`
+abaixo): a checagem só faz o aviso aparecer mais cedo, e o worker novo fica esperando até a
+pessoa tocar em "Atualizar".
+
+**O relógio de 5 s no "Atualizar".** Ao tocar, o botão fica desabilitado com
+"Atualizando…", `updateServiceWorker()` manda o worker novo assumir e um `setTimeout`
+agenda `window.location.reload()` para 5 s depois. O caminho normal recarrega antes: o
+vite-plugin-pwa recarrega sozinho no evento `controlling`, quando o worker novo assume. Mas
+se a mensagem de `skipWaiting` se perde ou o worker novo não assume, a pessoa ficaria
+olhando um botão que não faz nada. O relógio garante que, tocado "Atualizar", a página
+recarrega de qualquer jeito — inclusive quando `updateServiceWorker()` rejeita, caso em que
+a falha continua indo para o console.
+
+— referente a src/components/pwa/PwaPrompt.tsx e src/lib/atualizacao.ts
 
 ## src/index.css
 
