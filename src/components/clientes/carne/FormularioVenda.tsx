@@ -12,6 +12,8 @@ import {
   entradaItemVazia,
   entradaVendaVazia,
   montarCamposVenda,
+  primeiroVencimentoEscolhido,
+  primeiroVencimentoPadrao,
   totalDosItens,
   validarItens,
   validarVenda,
@@ -36,11 +38,32 @@ const TODO_DIA = [
 ]
 
 function dicaDaDataVenda(entrada: EntradaVenda): string | undefined {
+  // Com data escolhida, quem diz quando vence é o "Cobrar a partir de".
+  if (primeiroVencimentoEscolhido(entrada) !== null) return undefined
   if (entrada.periodicidade === 'mensal') return 'A primeira parcela cai no mês seguinte.'
   if (!ehDataCivil(entrada.dataVenda)) return undefined
 
   const primeira = dataBonita(vencimentoSemanal(entrada.dataVenda, 1))
   return `Vence ${TODO_DIA[diaDaSemanaISO(entrada.dataVenda)]}, a primeira em ${primeira}.`
+}
+
+function dicaDoPrimeiroVencimento(entrada: EntradaVenda): string | undefined {
+  const escolhido = entrada.primeiroVencimento
+
+  if (escolhido === '') {
+    // Sem data da venda válida, a conta do padrão sai "NaN": melhor sem dica.
+    const padrao = primeiroVencimentoPadrao(entrada)
+    if (padrao === null || !ehDataCivil(padrao)) return undefined
+
+    return `Em branco, a primeira vence em ${dataBonita(padrao)}.`
+  }
+
+  if (!ehDataCivil(escolhido)) return undefined
+  if (entrada.periodicidade === 'mensal') {
+    return `As seguintes vencem todo dia ${Number(escolhido.slice(8, 10))}.`
+  }
+
+  return `As seguintes vencem ${TODO_DIA[diaDaSemanaISO(escolhido)]}.`
 }
 
 type FormuladorVendaProps = Readonly<{
@@ -299,7 +322,7 @@ export function FormularioVenda({ aoSalvar, aoFechar, aviso }: FormuladorVendaPr
           aoSair={sair('numeroParcelas')}
         />
 
-        {entrada.periodicidade === 'mensal' ? (
+        {entrada.periodicidade === 'mensal' && primeiroVencimentoEscolhido(entrada) === null ? (
           <Campo
             id={base + '-dia'}
             rotulo="Dia do vencimento"
@@ -325,6 +348,31 @@ export function FormularioVenda({ aoSalvar, aoFechar, aviso }: FormuladorVendaPr
         aoMudar={mudar('dataVenda')}
         aoSair={sair('dataVenda')}
       />
+
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <Campo
+            id={base + '-primeiro'}
+            rotulo="Cobrar a partir de"
+            valor={entrada.primeiroVencimento}
+            tipo="date"
+            erro={mostrar('primeiroVencimento')}
+            dica={dicaDoPrimeiroVencimento(entrada)}
+            aoMudar={mudar('primeiroVencimento')}
+            aoSair={sair('primeiroVencimento')}
+          />
+        </div>
+        {/* No iPhone, apagar um campo de data é difícil: o botão volta ao padrão. */}
+        {entrada.primeiroVencimento === '' ? null : (
+          <button
+            type="button"
+            onClick={() => setEntrada((atual) => ({ ...atual, primeiroVencimento: '' }))}
+            className="mt-[1.625rem] inline-flex h-11 shrink-0 items-center rounded-lg px-3 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50"
+          >
+            Usar o padrão
+          </button>
+        )}
+      </div>
 
       {previa ? (
         <div className="rounded-xl border border-brand-100 bg-brand-50 p-3.5">
