@@ -1,7 +1,12 @@
 import { dataLocalISO, diaDaSemanaISO, ehDataCivil, vencimentoDaParcela, vencimentoSemanal } from './data'
 import { parseReaisParaCentavos } from './dinheiro'
-import { VERSAO_CALCULO, VERSAO_CALCULO_SEMANAL, gerarParcelas } from './parcelas'
-import type { Periodicidade } from './parcelas'
+import {
+  VERSAO_CALCULO,
+  VERSAO_CALCULO_PRIMEIRO_VENCIMENTO,
+  VERSAO_CALCULO_SEMANAL,
+  gerarParcelas,
+} from './parcelas'
+import type { Periodicidade, PlanoDaVenda } from './parcelas'
 import type { FormaDePagamento, ItemDaVenda, TipoDeMulta } from '@/types/venda'
 
 export const LIMITES_VENDA = {
@@ -39,8 +44,13 @@ export type EntradaVenda = {
   itens: EntradaItem[]
   numeroParcelas: string
   periodicidade: Periodicidade
-  /** Só a mensal usa: na semanal, o vencimento é o dia da semana da venda. */
+  /**
+   * Só a mensal usa, e só sem data escolhida: na semanal, o vencimento é o dia
+   * da semana da venda; com data escolhida, o dia dela.
+   */
   diaVencimento: string
+  /** "Cobrar a partir de". `''` é o padrão, derivado da `dataVenda`. */
+  primeiroVencimento: string
   cobrarTaxas: boolean
   multaTipo: TipoDeMulta
   multaPercentual: string
@@ -66,6 +76,8 @@ export type CamposVenda = {
   itens: ItemDaVenda[]
   /** Só a semanal grava: ausente é mensal, como em toda venda anterior a ela. */
   periodicidade?: 'semanal'
+  /** Só com data escolhida diferente da padrão, e aí na versão 3. */
+  primeiroVencimento?: string
   versaoCalculo: number
   atualizadoPor: string
 }
@@ -95,6 +107,7 @@ export function entradaVendaVazia(agora: Date): EntradaVenda {
     // O dia do vencimento nasce igual ao dia da venda; a primeira parcela cai
     // no mês seguinte. É sugestão de valor padrão, não regra — o dono troca.
     diaVencimento: String(Number(hoje.slice(8, 10))),
+    primeiroVencimento: '',
     cobrarTaxas: false,
     multaTipo: 'percentual',
     multaPercentual: '',
@@ -127,14 +140,62 @@ export function parseTaxa(entrada: string): number | null {
   return Number.isFinite(valor) ? valor : null
 }
 
-/** `null` quando o dia da mensal não passa: aí quem acusa é o próprio campo. */
-function ultimoVencimento(entrada: EntradaVenda, numero: number): string | null {
-  if (entrada.periodicidade === 'semanal') return vencimentoSemanal(entrada.dataVenda, numero)
-
+/** O dia digitado da mensal, ou `null` se não passa. */
+function diaDigitado(entrada: EntradaVenda): number | null {
   const dia = parseInteiro(entrada.diaVencimento)
-  if (dia === null || dia < 1 || dia > 31) return null
+  if (dia === null || dia < 1 || dia > LIMITES_VENDA.diaVencimento) return null
 
-  return vencimentoDaParcela(entrada.dataVenda, numero, dia)
+  return dia
+}
+
+function diaDoMes(data: string): number {
+  return Number(data.slice(8, 10))
+}
+
+/**
+ * A primeira parcela de quando o dono não escolhe: semanal, 7 dias depois da
+ * venda; mensal, o dia digitado no mês seguinte. `null` quando o dia da mensal
+ * não passa.
+ */
+export function primeiroVencimentoPadrao(entrada: EntradaVenda): string | null {
+  if (entrada.periodicidade === 'semanal') return vencimentoSemanal(entrada.dataVenda, 1)
+
+  const dia = diaDigitado(entrada)
+  return dia === null ? null : vencimentoDaParcela(entrada.dataVenda, 1, dia)
+}
+
+/**
+ * A data "cobrar a partir de", só quando ela muda alguma coisa. Vazia ou igual
+ * à padrão, `null`: a venda sai como antes, na v1 ou na v2. Senão, toda venda
+ * nova viraria v3 e sumiria do Financeiro de um aparelho com o app antigo.
+ */
+export function primeiroVencimentoEscolhido(entrada: EntradaVenda): string | null {
+  const escolhido = entrada.primeiroVencimento
+  if (escolhido === '' || escolhido === primeiroVencimentoPadrao(entrada)) return null
+
+  return escolhido
+}
+
+/**
+ * `null` quando o dia da mensal ou a data escolhida não passa: aí quem acusa é
+ * o próprio campo.
+ */
+function ultimoVencimento(entrada: EntradaVenda, numero: number): string | null {
+  const semanal = entrada.periodicidade === 'semanal'
+  const escolhido = primeiroVencimentoEscolhido(entrada)
+
+  if (escolhido !== null) {
+    if (!ehDataCivil(escolhido)) return null
+
+    return semanal
+      ? vencimentoSemanal(escolhido, numero - 1)
+      : vencimentoDaParcela(escolhido, numero - 1, diaDoMes(escolhido))
+  }
+
+  if (semanal) return vencimentoSemanal(entrada.dataVenda, numero)
+
+  const dia = diaDigitado(entrada)
+  return dia === null ? null : vencimentoDaParcela(entrada.dataVenda, numero, dia)
 }
 
 function erroDaDataVenda(entrada: EntradaVenda): string | undefined {
@@ -281,6 +342,16 @@ function erroDoDia(entrada: string): string | undefined {
   return undefined
 }
 
+function erroDoPrimeiroVencimento(entrada: EntradaVenda): string | undefined {
+  const data = entrada.primeiroVencimento
+  if (data === '') return undefined
+  if (!ehDataCivil(data)) return 'Data inválida'
+  // A regra exige o mesmo: `primeiroVencimento > dataVenda`.
+  if (data <= entrada.dataVenda) return 'Tem que ser depois da data da venda'
+
+  return undefined
+}
+
 function erroDaTaxa(entrada: string): string | undefined {
   const taxa = parseTaxa(entrada)
   if (taxa === null) return 'Número inválido'
@@ -316,7 +387,10 @@ export function validarVenda(entrada: EntradaVenda): ErrosVenda {
     numeroParcelas: erroDasParcelas(entrada.numeroParcelas, totalDosItens(entrada.itens)),
     periodicidade: undefined,
     diaVencimento:
-      entrada.periodicidade === 'semanal' ? undefined : erroDoDia(entrada.diaVencimento),
+      entrada.periodicidade === 'semanal' || primeiroVencimentoEscolhido(entrada) !== null
+        ? undefined
+        : erroDoDia(entrada.diaVencimento),
+    primeiroVencimento: erroDoPrimeiroVencimento(entrada),
     cobrarTaxas: undefined,
     multaTipo: undefined,
     multaPercentual:
@@ -338,6 +412,13 @@ export function validarVenda(entrada: EntradaVenda): ErrosVenda {
   })
 }
 
+/** O `diaVencimento` gravado: o da data escolhida, quando há uma, ou o de sempre. */
+function diaDoVencimento(entrada: EntradaVenda, escolhido: string | null): number | null {
+  if (entrada.periodicidade === 'semanal') return diaDaSemanaISO(escolhido ?? entrada.dataVenda)
+
+  return escolhido !== null ? diaDoMes(escolhido) : parseInteiro(entrada.diaVencimento)
+}
+
 /**
  * Monta a venda e as parcelas que vão para o Firestore.
  *
@@ -349,6 +430,11 @@ export function validarVenda(entrada: EntradaVenda): ErrosVenda {
  * A mensal sai como antes da semanal: sem `periodicidade` e na `VERSAO_CALCULO`.
  * A semanal grava `periodicidade`, a `VERSAO_CALCULO_SEMANAL` e, em
  * `diaVencimento`, o dia da semana ISO da venda, que é o de todo vencimento.
+ *
+ * Com data escolhida (`primeiroVencimentoEscolhido`), as duas gravam
+ * `primeiroVencimento` e a `VERSAO_CALCULO_PRIMEIRO_VENCIMENTO`, e o
+ * `diaVencimento` sai dela: o dia do mês na mensal (o digitado é ignorado), o
+ * dia da semana ISO na semanal. Vazia ou igual à padrão, nada disso muda.
  *
  * `valorTotalCentavos` é sempre a soma exata dos `itens` gravados junto: o
  * total não se digita, sai deles.
@@ -362,9 +448,8 @@ export function montarCamposVenda(
   const valorTotalCentavos = itens ? somar(itens) : null
   const numeroParcelas = parseInteiro(entrada.numeroParcelas)
   const semanal = entrada.periodicidade === 'semanal'
-  const diaVencimento = semanal
-    ? diaDaSemanaISO(entrada.dataVenda)
-    : parseInteiro(entrada.diaVencimento)
+  const escolhido = primeiroVencimentoEscolhido(entrada)
+  const diaVencimento = diaDoVencimento(entrada, escolhido)
 
   // Item nenhum inválido chega ao lote: a regra só confere o tamanho da lista.
   if (itens === null || valorTotalCentavos === null) {
@@ -377,13 +462,16 @@ export function montarCamposVenda(
     throw new TypeError('montarCamposVenda recebeu um dia que não passou na validação')
   }
 
-  const geradas = gerarParcelas({
+  const plano: PlanoDaVenda = {
     dataVenda: entrada.dataVenda,
     numeroParcelas,
     valorTotalCentavos,
     diaVencimento,
     periodicidade: entrada.periodicidade,
-  })
+  }
+  if (escolhido !== null) plano.primeiroVencimento = escolhido
+
+  const geradas = gerarParcelas(plano)
 
   const venda: CamposVenda = {
     clientId,
@@ -400,6 +488,10 @@ export function montarCamposVenda(
   }
 
   if (semanal) venda.periodicidade = 'semanal'
+  if (escolhido !== null) {
+    venda.primeiroVencimento = escolhido
+    venda.versaoCalculo = VERSAO_CALCULO_PRIMEIRO_VENCIMENTO
+  }
 
   if (entrada.cobrarTaxas) {
     venda.multaTipo = entrada.multaTipo
