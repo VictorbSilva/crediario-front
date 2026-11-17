@@ -11,6 +11,8 @@ import {
   parseInteiro,
   parseTaxa,
   podeCancelarVenda,
+  primeiroVencimentoEscolhido,
+  primeiroVencimentoPadrao,
   totalDosItens,
   validarItens,
   validarPagamento,
@@ -100,9 +102,63 @@ describe('entradaVendaVazia', () => {
   it('nasce em branco, com um item de quantidade 1, a data de hoje, o dia de hoje como vencimento e multa e juros desligados', () => {
     expect(entradaVendaVazia(new Date(2026, 8, 5, 23, 30))).toStrictEqual({
       dataVenda: '2026-09-05', itens: [{ quantidade: '1', descricao: '', valorUnitario: '' }],
-      numeroParcelas: '', periodicidade: 'mensal', diaVencimento: '5', cobrarTaxas: false,
+      numeroParcelas: '', periodicidade: 'mensal', diaVencimento: '5', primeiroVencimento: '', cobrarTaxas: false,
       multaTipo: 'percentual', multaPercentual: '', multaFixa: '', jurosPercentualDia: '', observacao: '',
     })
+  })
+})
+
+describe('primeiroVencimentoPadrao', () => {
+  it('mensal: a primeira parcela do mês seguinte, no dia digitado', () => {
+    expect(primeiroVencimentoPadrao(venda({ dataVenda: '2026-09-22', diaVencimento: '10' }))).toBe('2026-10-10')
+    expect(primeiroVencimentoPadrao(venda({ dataVenda: '2026-09-22', diaVencimento: '25' }))).toBe('2026-10-25')
+  })
+
+  it('mensal: dia 31 encolhe para o último dia do mês curto', () => {
+    expect(primeiroVencimentoPadrao(venda({ dataVenda: '2026-01-15', diaVencimento: '31' }))).toBe('2026-02-28')
+  })
+
+  it('mensal: sem dia que passe, não há padrão', () => {
+    for (const diaVencimento of ['', '0', '32', 'x']) {
+      expect(primeiroVencimentoPadrao(venda({ diaVencimento }))).toBeNull()
+    }
+  })
+
+  it('mensal: as bordas do dia valem, 1 e 31', () => {
+    expect(primeiroVencimentoPadrao(venda({ dataVenda: '2026-09-22', diaVencimento: '1' }))).toBe('2026-10-01')
+    expect(primeiroVencimentoPadrao(venda({ dataVenda: '2026-09-22', diaVencimento: '31' }))).toBe('2026-10-31')
+  })
+
+  it('semanal: 7 dias depois da venda, ignorando o dia digitado', () => {
+    for (const diaVencimento of ['10', '', '32']) {
+      expect(primeiroVencimentoPadrao(venda({ periodicidade: 'semanal', dataVenda: '2026-11-01', diaVencimento })))
+        .toBe('2026-11-08')
+    }
+  })
+})
+
+describe('primeiroVencimentoEscolhido', () => {
+  it('campo vazio não é escolha', () => {
+    expect(primeiroVencimentoEscolhido(venda({ primeiroVencimento: '' }))).toBeNull()
+    expect(primeiroVencimentoEscolhido(venda({ periodicidade: 'semanal', primeiroVencimento: '' }))).toBeNull()
+  })
+
+  it('a data igual à padrão não é escolha', () => {
+    expect(primeiroVencimentoEscolhido(venda({ dataVenda: '2026-09-22', diaVencimento: '10', primeiroVencimento: '2026-10-10' })))
+      .toBeNull()
+    expect(primeiroVencimentoEscolhido(venda({ periodicidade: 'semanal', dataVenda: '2026-11-01', primeiroVencimento: '2026-11-08' })))
+      .toBeNull()
+  })
+
+  it('a data diferente da padrão é escolha, mesmo a um dia dela', () => {
+    expect(primeiroVencimentoEscolhido(venda({ dataVenda: '2026-09-22', diaVencimento: '10', primeiroVencimento: '2026-10-11' })))
+      .toBe('2026-10-11')
+    expect(primeiroVencimentoEscolhido(venda({ periodicidade: 'semanal', dataVenda: '2026-11-01', primeiroVencimento: '2026-11-07' })))
+      .toBe('2026-11-07')
+  })
+
+  it('mensal sem dia que passe: qualquer data preenchida é escolha', () => {
+    expect(primeiroVencimentoEscolhido(venda({ diaVencimento: '', primeiroVencimento: '2026-10-10' }))).toBe('2026-10-10')
   })
 })
 
@@ -429,6 +485,86 @@ describe('validarVenda', () => {
       expect(erros).toEqual({ dataVenda: 'Confira o ano: a última parcela passaria do ano 9999.' })
     })
   })
+
+  describe('primeiro vencimento', () => {
+    const ANO = 'Confira o ano: a última parcela passaria do ano 9999.'
+
+    it('vazio não tem erro, na mensal e na semanal', () => {
+      expect(validarVenda(venda({ primeiroVencimento: '' }))).toEqual({})
+      expect(validarVenda(venda({ periodicidade: 'semanal', primeiroVencimento: '' }))).toEqual({})
+    })
+
+    it.each(['2026-02-31', '2026-13-01', '22/10/2026', 'abc'])('recusa data que não é civil: %s', (primeiroVencimento) => {
+      expect(validarVenda(venda({ primeiroVencimento }))).toEqual({ primeiroVencimento: 'Data inválida' })
+    })
+
+    it('recusa a data da venda e a véspera dela; o dia seguinte passa', () => {
+      const depois = 'Tem que ser depois da data da venda'
+
+      for (const periodicidade of ['mensal', 'semanal'] as const) {
+        const com = (primeiroVencimento: string) =>
+          validarVenda(venda({ periodicidade, dataVenda: '2026-09-22', primeiroVencimento }))
+
+        expect(com('2026-09-22')).toEqual({ primeiroVencimento: depois })
+        expect(com('2026-09-21')).toEqual({ primeiroVencimento: depois })
+        expect(com('2026-09-23')).toEqual({})
+      }
+    })
+
+    it('mensal com data escolhida não confere o dia digitado, que não é usado', () => {
+      for (const diaVencimento of ['', '0', '32', 'x']) {
+        expect(validarVenda(venda({ diaVencimento, primeiroVencimento: '2026-10-05' }))).toEqual({})
+      }
+    })
+
+    it('a data igual à padrão passa, na mensal e na semanal', () => {
+      expect(validarVenda(venda({ diaVencimento: '10', primeiroVencimento: '2026-10-10' }))).toEqual({})
+      expect(validarVenda(venda({ periodicidade: 'semanal', dataVenda: '2026-11-01', primeiroVencimento: '2026-11-08' })))
+        .toEqual({})
+    })
+
+    it('semanal: o teto do ano conta a partir da data escolhida', () => {
+      const semanal = (primeiroVencimento: string, numeroParcelas: string) =>
+        validarVenda(venda({ periodicidade: 'semanal', dataVenda: '9999-12-01', primeiroVencimento, numeroParcelas })).dataVenda
+
+      // Pela data da venda, duas parcelas iriam até 15/12 e caberiam.
+      expect(semanal('9999-12-24', '2')).toBeUndefined()
+      expect(semanal('9999-12-25', '2')).toBe(ANO)
+      // A primeira parcela é a própria data escolhida: no último dia, uma cabe.
+      expect(semanal('9999-12-31', '1')).toBeUndefined()
+    })
+
+    it('mensal: o teto do ano conta a partir da data escolhida, para mais e para menos', () => {
+      const mensal = (dataVenda: string, primeiroVencimento: string, numeroParcelas: string) =>
+        validarVenda(venda({ dataVenda, diaVencimento: '20', primeiroVencimento, numeroParcelas })).dataVenda
+
+      // Pela data da venda, a 2ª parcela cairia em 20/12/9999 e caberia; escolhendo dezembro, estoura.
+      expect(mensal('9999-10-20', '9999-12-10', '1')).toBeUndefined()
+      expect(mensal('9999-10-20', '9999-12-10', '2')).toBe(ANO)
+      // Pela data da venda, a 2ª parcela cairia em janeiro de 10000; escolhendo novembro, cabe.
+      expect(mensal('9999-11-20', '9999-11-25', '2')).toBeUndefined()
+      expect(validarVenda(venda({ dataVenda: '9999-11-20', diaVencimento: '20', numeroParcelas: '2' })).dataVenda)
+        .toBe(ANO)
+    })
+
+    it('mensal: o teto do ano com data escolhida não depende do dia digitado', () => {
+      const erros = validarVenda(venda({
+        dataVenda: '9999-10-20', diaVencimento: '', primeiroVencimento: '9999-12-10', numeroParcelas: '2',
+      }))
+
+      expect(erros).toEqual({ dataVenda: ANO })
+    })
+
+    it('data escolhida inválida acusa no próprio campo, não no teto do ano', () => {
+      for (const periodicidade of ['mensal', 'semanal'] as const) {
+        const erros = validarVenda(venda({
+          periodicidade, dataVenda: '9999-06-01', primeiroVencimento: 'abc', numeroParcelas: '12',
+        }))
+
+        expect(erros).toEqual({ primeiroVencimento: 'Data inválida' })
+      }
+    })
+  })
 })
 
 describe('montarCamposVenda', () => {
@@ -657,6 +793,94 @@ describe('montarCamposVenda', () => {
 
     expect('valor' in v).toBe(false)
     expect(Object.keys(v.itens[0]).sort()).toEqual(['descricao', 'quantidade', 'valorUnitarioCentavos'])
+  })
+
+  describe('primeiro vencimento', () => {
+    it('data igual à padrão grava o mesmo documento de sem data, na mensal (v1) e na semanal (v2)', () => {
+      expect(montarCamposVenda('c1', venda({ primeiroVencimento: '2026-10-10' }), CONTEXTO))
+        .toStrictEqual(montarCamposVenda('c1', venda(), CONTEXTO))
+
+      const semanal = { periodicidade: 'semanal', dataVenda: '2026-11-01' } as const
+      const semData = montarCamposVenda('c1', venda(semanal), CONTEXTO)
+      expect(montarCamposVenda('c1', venda({ ...semanal, primeiroVencimento: '2026-11-08' }), CONTEXTO))
+        .toStrictEqual(semData)
+      expect(semData.venda.versaoCalculo).toBe(2)
+      expect('primeiroVencimento' in semData.venda).toBe(false)
+    })
+
+    it('mensal com data escolhida: versão 3, o dia da data escolhida e as parcelas a partir dela', () => {
+      // O dia digitado (10) é ignorado: vale o 5 da data escolhida.
+      expect(montarCamposVenda('c1', venda({ diaVencimento: '10', primeiroVencimento: '2026-10-05' }), CONTEXTO))
+        .toStrictEqual({
+          venda: {
+            clientId: 'c1',
+            dataVenda: '2026-09-22',
+            valorTotalCentavos: 30_000,
+            numeroParcelas: 3,
+            valorParcelaCentavos: 10_000,
+            diaVencimento: 5,
+            primeiroVencimento: '2026-10-05',
+            itens: [{ quantidade: 1, descricao: 'Panela', valorUnitarioCentavos: 30_000 }],
+            versaoCalculo: 3,
+            atualizadoPor: 'ab12cd34',
+          },
+          parcelas: ['2026-10-05', '2026-11-05', '2026-12-05'].map((vencimento, i) => ({
+            clientId: 'c1', numero: i + 1, total: 3, vencimento, valorCentavos: 10_000, atualizadoPor: 'ab12cd34',
+          })),
+        })
+    })
+
+    it('mensal com data escolhida no dia 31: encolhe nos meses curtos e volta ao 31', () => {
+      const { venda: v, parcelas } = montarCamposVenda(
+        'c1',
+        venda({ dataVenda: '2026-01-10', diaVencimento: '10', primeiroVencimento: '2026-01-31' }),
+        CONTEXTO,
+      )
+
+      expect(v.diaVencimento).toBe(31)
+      expect(parcelas.map((p) => p.vencimento)).toEqual(['2026-01-31', '2026-02-28', '2026-03-31'])
+    })
+
+    it('mensal com data escolhida monta mesmo com o dia digitado inválido, que não é usado', () => {
+      for (const diaVencimento of ['', '0', '32']) {
+        const { venda: v } = montarCamposVenda('c1', venda({ diaVencimento, primeiroVencimento: '2026-10-05' }), CONTEXTO)
+        expect(v.diaVencimento).toBe(5)
+      }
+    })
+
+    it('semanal com data escolhida: versão 3, periodicidade, o dia da semana da data escolhida', () => {
+      // A venda é num domingo (7); a data escolhida, numa quarta (3).
+      const { venda: v, parcelas } = montarCamposVenda(
+        'c1',
+        venda({ periodicidade: 'semanal', dataVenda: '2026-11-01', diaVencimento: '10', primeiroVencimento: '2026-11-04' }),
+        CONTEXTO,
+      )
+
+      expect(v).toStrictEqual({
+        clientId: 'c1',
+        dataVenda: '2026-11-01',
+        valorTotalCentavos: 30_000,
+        numeroParcelas: 3,
+        valorParcelaCentavos: 10_000,
+        diaVencimento: 3,
+        periodicidade: 'semanal',
+        primeiroVencimento: '2026-11-04',
+        itens: [{ quantidade: 1, descricao: 'Panela', valorUnitarioCentavos: 30_000 }],
+        versaoCalculo: 3,
+        atualizadoPor: 'ab12cd34',
+      })
+      expect(parcelas.map((p) => p.vencimento)).toEqual(['2026-11-04', '2026-11-11', '2026-11-18'])
+    })
+
+    it('semanal com data escolhida num domingo grava 7, e não o 0 do getDay', () => {
+      const { venda: v } = montarCamposVenda(
+        'c1',
+        venda({ periodicidade: 'semanal', dataVenda: '2026-11-04', primeiroVencimento: '2026-11-08' }),
+        CONTEXTO,
+      )
+
+      expect(v.diaVencimento).toBe(7)
+    })
   })
 })
 
