@@ -368,7 +368,8 @@ combinados continua sendo `imutaveisPreservados()`, que também vale no update q
 Os dois são opcionais pela mesma porta de mão única: já existe venda gravada sem eles, e um
 aparelho com a versão anterior do app continua gravando venda mensal sem mandar nenhum dos
 dois. Para a venda mensal nada muda — `diaVencimento` segue de 1 a 31 e `versaoCalculo`
-segue livre.
+segue livre, menos o 3, que exige `primeiroVencimento` (ver "Primeira parcela escolhida",
+abaixo).
 
 > **AVISO**
 > **A regra valida o tipo e o tamanho de `itens`, não o conteúdo.** A linguagem de regras não
@@ -379,7 +380,8 @@ segue livre.
 > de `ordemPorDia`, na seção dos campos de rota.
 
 > **AVISO**
-> **Venda semanal exige `versaoCalculo == 2` e `diaVencimento` de 1 a 7** — o dia da semana
+> **Venda semanal exige `versaoCalculo == 2` (ou 3, com `primeiroVencimento` — ver abaixo) e
+> `diaVencimento` de 1 a 7** — o dia da semana
 > ISO do vencimento, 1 = segunda … 7 = domingo. O `versaoCalculo` é a trava de
 > compatibilidade: um aparelho com a versão anterior do app não conhece `periodicidade` e
 > calcularia as parcelas da venda semanal como mensais. Com `versaoCalculo` 2, o Financeiro
@@ -398,6 +400,78 @@ porque é igual ao padrão. Cancelar continua valendo para venda semanal com ite
 civil.
 
 — referente a firestore.rules e tests/regras/vendas.test.ts
+
+### Primeira parcela escolhida (versão 3) — acrescentada em 16/11/2026
+
+Pedido do dono: escolher a data da primeira parcela ("cobrar a partir de"). Até aqui ela é
+derivada da venda — a mensal vence no mês seguinte e a semanal 7 dias depois —, e essas vendas
+continuam exatamente como estão, nas versões 1 e 2. Um campo novo entra em
+`camposConhecidos()`, `tiposValidos()` e `imutaveisPreservados()`:
+
+- `primeiroVencimento` — data civil, **estritamente depois** de `dataVenda`. Na mensal v3, as
+  parcelas seguintes caem no mesmo dia dos meses seguintes; na semanal v3, de 7 em 7 dias a
+  partir dessa data. O cálculo é do app, não da regra.
+
+**O campo e a versão 3 andam juntos, nos dois sentidos:**
+`('primeiroVencimento' in dados()) == (dados().versaoCalculo == 3)`. Venda com o campo tem de
+ser v3, e venda v3 tem de ter o campo. É a mesma trava da venda semanal na v2: um aparelho com
+a versão anterior do app não conhece `primeiroVencimento` e geraria as parcelas a partir da
+`dataVenda`, como sempre fez. Com `versaoCalculo` 3, que ele não sabe recalcular, a venda vai
+para `vendasNaoCalculadas` em vez de aparecer com vencimentos errados. Na prática:
+
+| Venda                                      | Resultado |
+| ------------------------------------------ | --------- |
+| mensal v1, sem o campo (o app de hoje)     | aceita    |
+| semanal v2, sem o campo (o app de hoje)    | aceita    |
+| mensal ou semanal v3, com o campo          | aceita    |
+| v3 sem o campo                             | negada    |
+| v1, ou semanal v2, com o campo             | negada    |
+
+A venda semanal passou a aceitar `versaoCalculo` 2 **ou** 3, e `diaVencimento` continua de 1 a
+7 nas duas. Isso fecha o "`versaoCalculo` segue livre" da venda mensal para o valor 3. Nenhuma
+venda existente fica presa por isso, porque o app só grava 1 (`VERSAO_CALCULO`) e 2
+(`VERSAO_CALCULO_SEMANAL`) em `src/lib/parcelas.ts`.
+
+> **AVISO**
+> **A regra não confere se `diaVencimento` bate com `primeiroVencimento`.** Regra não tem
+> calendário: ela não sabe que `2026-09-28` é uma segunda-feira (dia 1) nem que `2026-10-05` é
+> dia 5. Uma semanal v3 com `primeiroVencimento: '2026-09-28'` e `diaVencimento: 4` passa. **O
+> dono dessa coerência é o código do app**, como o conteúdo de `itens`, acima.
+
+**A comparação de datas é entre strings**, e só funciona por causa de `ehDataCivil()`. O
+formato `AAAA-MM-DD`, sempre com zeros à esquerda, faz a ordem alfabética coincidir com a do
+calendário, porque os caracteres são comparados da esquerda para a direita e o ano vem
+primeiro. Com `dataVenda: '2026-09-21'`:
+
+- `'2026-10-05' > '2026-09-21'` → verdadeiro: na posição 6, `'1'` vem depois de `'0'`. Aceita.
+- `'2026-09-21' > '2026-09-21'` → falso: são iguais. Primeira parcela no dia da venda é
+  negada.
+- `'2026-09-20' > '2026-09-21'` → falso. Negada.
+
+Sem os zeros à esquerda, a comparação mentiria: `'2026-9-30' > '2026-10-01'` é verdadeiro,
+porque na posição 6 `'9'` vem depois de `'1'`. Por isso `ehDataCivil()` vem **antes** do `>` no
+mesmo `&&`, e o valor que não é data civil (`'2026-13-01'`, um número) é negado ali, sem chegar
+à comparação.
+
+**Imutável com `.get()` dos dois lados**, como `itens`:
+`dados().get('primeiroVencimento', null) == anterior().get('primeiroVencimento', null)`. Trocar
+a data de uma venda gravada é negado. Acrescentar a data a uma venda gravada sem ela também é
+negado, e por duas travas ao mesmo tempo: a imutabilidade e a equivalência com a v3, já que
+`versaoCalculo` também é imutável. O teste `recusa acrescentar primeiroVencimento a uma venda
+gravada sem ele` só quebra se as duas caírem juntas. Cancelar uma venda v3 continua valendo —
+teste `cancela uma venda com versaoCalculo 3`. Ler `anterior().primeiroVencimento` direto, sem
+`.get()`, daria erro em toda venda antiga e a deixaria inatualizável (ver o AVISO de
+`cancelada`, acima).
+
+> **AVISO**
+> **Ordem de publicação.** A regra é publicada à mão (`firebase deploy --only firestore:rules`)
+> e **antes** de qualquer código gravar o campo. A regra antiga recusa `primeiroVencimento` pela
+> lista fechada e a semanal v3 pela linha que exigia `versaoCalculo == 2`, e offline essa recusa
+> chega horas depois, longe de quem tocou no botão. Pela regra do `CLAUDE.md`, o formulário que
+> gravar o campo também precisa impedir uma data igual ou anterior à da venda.
+
+— referente a firestore.rules, `match /sales/{saleId}`, e tests/regras/vendas.test.ts,
+`describe('sales — primeira parcela escolhida (versão 3)')`
 
 ## tests/regras/ambiente.ts — `veredito`
 

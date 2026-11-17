@@ -205,7 +205,7 @@ service cloud.firestore {
             'valorTotalCentavos', 'numeroParcelas', 'valorParcelaCentavos', 'diaVencimento',
             'multaTipo', 'multaPercentual', 'multaFixaCentavos', 'jurosPercentualDia',
             'observacao', 'versaoCalculo', 'cancelada', 'canceladaEm',
-            'itens', 'periodicidade',
+            'itens', 'periodicidade', 'primeiroVencimento',
             'criadoEm', 'atualizadoEm', 'atualizadoPor'
           ]);
         }
@@ -248,8 +248,13 @@ service cloud.firestore {
                     && dados().itens.size() <= 30))
             && (!('periodicidade' in dados())
                 || dados().periodicidade in ['mensal', 'semanal'])
+            && (!('primeiroVencimento' in dados())
+                || (ehDataCivil(dados().primeiroVencimento)
+                    && dados().primeiroVencimento > dados().dataVenda))
+            && (('primeiroVencimento' in dados()) == (dados().versaoCalculo == 3))
             && (dados().get('periodicidade', 'mensal') != 'semanal'
-                || (dados().versaoCalculo == 2 && dados().diaVencimento <= 7));
+                || ((dados().versaoCalculo == 2 || dados().versaoCalculo == 3)
+                    && dados().diaVencimento <= 7));
         }
 
         function nasceNaoCancelada() {
@@ -272,6 +277,7 @@ service cloud.firestore {
             && dados().versaoCalculo == anterior().versaoCalculo
             && dados().get('itens', null) == anterior().get('itens', null)
             && dados().get('periodicidade', 'mensal') == anterior().get('periodicidade', 'mensal')
+            && dados().get('primeiroVencimento', null) == anterior().get('primeiroVencimento', null)
             && dados().criadoEm == anterior().criadoEm;
         }
 

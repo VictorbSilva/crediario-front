@@ -357,6 +357,94 @@ describe('sales — itens e periodicidade', () => {
   })
 })
 
+describe('sales — primeira parcela escolhida (versão 3)', () => {
+  // vendaValida() vende em 2026-09-21, uma segunda-feira.
+  const mensalV3 = { versaoCalculo: 3, primeiroVencimento: '2026-10-05', diaVencimento: 5 }
+
+  const semanalV3 = { periodicidade: 'semanal', versaoCalculo: 3, diaVencimento: 1, primeiroVencimento: '2026-09-28' }
+
+  it('aceita venda mensal com versaoCalculo 3 e primeiroVencimento depois da dataVenda', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida(mensalV3)))).toBe('permitido')
+  })
+
+  it('aceita venda semanal com versaoCalculo 3, dia da semana de 1 a 7 e primeiroVencimento', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda('v1')), vendaValida(semanalV3)))).toBe('permitido')
+    expect(await veredito(setDoc(
+        doc(bancoDono(), venda('v2')),
+        vendaValida({ ...semanalV3, diaVencimento: 7, primeiroVencimento: '2026-09-27' }),
+      ))).toBe('permitido')
+  })
+
+  it('recusa versaoCalculo 3 sem primeiroVencimento', async () => {
+    const mensalSemData: Record<string, unknown> = vendaValida(mensalV3)
+    delete mensalSemData.primeiroVencimento
+    const semanalSemData: Record<string, unknown> = vendaValida(semanalV3)
+    delete semanalSemData.primeiroVencimento
+
+    expect(await veredito(setDoc(doc(bancoDono(), venda('v1')), mensalSemData))).toBe('negado')
+    expect(await veredito(setDoc(doc(bancoDono(), venda('v2')), semanalSemData))).toBe('negado')
+  })
+
+  it('recusa primeiroVencimento na versaoCalculo 1 e na semanal com versaoCalculo 2', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda('v1')), vendaValida({ ...mensalV3, versaoCalculo: 1 })))).toBe('negado')
+    expect(await veredito(setDoc(doc(bancoDono(), venda('v2')), vendaValida({ ...semanalV3, versaoCalculo: 2 })))).toBe('negado')
+  })
+
+  it('recusa primeiroVencimento igual à dataVenda ou anterior a ela', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), venda('v1')),
+        vendaValida({ ...mensalV3, primeiroVencimento: '2026-09-21' }),
+      ))).toBe('negado')
+    expect(await veredito(setDoc(
+        doc(bancoDono(), venda('v2')),
+        vendaValida({ ...mensalV3, primeiroVencimento: '2026-09-20' }),
+      ))).toBe('negado')
+  })
+
+  it('recusa primeiroVencimento que não é data civil', async () => {
+    expect(await veredito(setDoc(
+        doc(bancoDono(), venda('v1')),
+        vendaValida({ ...mensalV3, primeiroVencimento: '2026-13-01' }),
+      ))).toBe('negado')
+    expect(await veredito(setDoc(
+        doc(bancoDono(), venda('v2')),
+        vendaValida({ ...mensalV3, primeiroVencimento: 20261005 }),
+      ))).toBe('negado')
+  })
+
+  it('recusa venda semanal com versaoCalculo 3 e dia de vencimento 8', async () => {
+    expect(await veredito(setDoc(doc(bancoDono(), venda()), vendaValida({ ...semanalV3, diaVencimento: 8 })))).toBe('negado')
+  })
+
+  it('recusa trocar o primeiroVencimento de uma venda gravada', async () => {
+    await semear(venda(), vendaValida(mensalV3))
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        primeiroVencimento: '2026-10-06',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('recusa acrescentar primeiroVencimento a uma venda gravada sem ele', async () => {
+    await semear(venda(), vendaValida())
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        primeiroVencimento: '2026-10-05',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('negado')
+  })
+
+  it('cancela uma venda com versaoCalculo 3', async () => {
+    await semear(venda(), vendaValida(mensalV3))
+
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), {
+        cancelada: true,
+        canceladaEm: '2026-10-30',
+        atualizadoEm: serverTimestamp(),
+      }))).toBe('permitido')
+  })
+})
+
 describe('installments', () => {
   it('o dono cria uma parcela válida', async () => {
     expect(await veredito(setDoc(doc(bancoDono(), parcela()), parcelaValida()))).toBe('permitido')
