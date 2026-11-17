@@ -101,6 +101,7 @@ function paraVenda(documento: Documento): Venda {
     observacao: dados.observacao,
     itens: dados.itens,
     periodicidade: dados.periodicidade,
+    primeiroVencimento: dados.primeiroVencimento,
     cancelada: dados.cancelada,
     canceladaEm: dados.canceladaEm,
     versaoCalculo: dados.versaoCalculo,

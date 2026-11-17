@@ -245,6 +245,20 @@ describe('useCarne — carregamento', () => {
     expect(vendas.get('v2')?.periodicidade).toBeUndefined()
   })
 
+  it('venda da versão 3 chega com o primeiroVencimento; venda antiga, sem o campo', () => {
+    const { result } = renderHook(() => useCarne('ana'))
+    emitir('sales', [
+      { ...VENDA, dados: { ...VENDA.dados, primeiroVencimento: '2026-12-15', versaoCalculo: 3 } },
+      { ...VENDA, id: 'v2' },
+    ])
+    emitir('installments', [])
+    emitir('payments', [])
+
+    const vendas = new Map(result.current.carnes.map((c) => [c.venda.id, c.venda]))
+    expect(vendas.get('v1')?.primeiroVencimento).toBe('2026-12-15')
+    expect(vendas.get('v2')?.primeiroVencimento).toBeUndefined()
+  })
+
   it('venda cancelada fica no carnê mas sai do saldo', () => {
     const { result } = renderHook(() => useCarne('ana'))
     emitir('sales', [{ ...VENDA, dados: { ...VENDA.dados, cancelada: true, canceladaEm: '2026-10-01' } }])

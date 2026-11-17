@@ -9,6 +9,13 @@ export const VERSAO_CALCULO = 1
  */
 export const VERSAO_CALCULO_SEMANAL = 2
 
+/**
+ * A primeira parcela escolhida (`primeiroVencimento`), mensal ou semanal.
+ * Pelo mesmo motivo da semanal: o app de antes dela não conhece o campo e
+ * calcularia a partir da `dataVenda`; com a versão 3, deixa a venda de fora.
+ */
+export const VERSAO_CALCULO_PRIMEIRO_VENCIMENTO = 3
+
 export type Periodicidade = 'mensal' | 'semanal'
 
 export type TaxasDeSimulacao = {
@@ -25,6 +32,8 @@ export type PlanoDaVenda = {
   diaVencimento: number
   /** Ausente é mensal, como em toda venda gravada antes da semanal. */
   periodicidade?: Periodicidade
+  /** Só na versão 3. Ausente, a primeira parcela é derivada da `dataVenda`. */
+  primeiroVencimento?: string
 }
 
 export type ParcelaGerada = {
@@ -75,15 +84,42 @@ export type ResumoDaVenda = {
   quitada: boolean
 }
 
-/** A versão que este app sabe calcular para a periodicidade da venda. */
-export function versaoConhecida(versaoCalculo: number, periodicidade?: Periodicidade): boolean {
+/**
+ * A versão que este app sabe calcular para a venda: com `primeiroVencimento`,
+ * só a 3; sem ele, a da periodicidade.
+ */
+export function versaoConhecida(venda: {
+  versaoCalculo: number
+  periodicidade?: Periodicidade
+  primeiroVencimento?: string
+}): boolean {
+  const { versaoCalculo, periodicidade, primeiroVencimento } = venda
+
+  if (primeiroVencimento !== undefined) {
+    return versaoCalculo === VERSAO_CALCULO_PRIMEIRO_VENCIMENTO
+  }
+
   return periodicidade === 'semanal'
     ? versaoCalculo === VERSAO_CALCULO_SEMANAL
     : versaoCalculo === VERSAO_CALCULO
 }
 
+function vencimentoDaParcelaNumero(plano: PlanoDaVenda, numero: number): string {
+  const { dataVenda, diaVencimento, periodicidade, primeiroVencimento } = plano
+
+  if (primeiroVencimento !== undefined) {
+    return periodicidade === 'semanal'
+      ? vencimentoSemanal(primeiroVencimento, numero - 1)
+      : vencimentoDaParcela(primeiroVencimento, numero - 1, diaVencimento)
+  }
+
+  return periodicidade === 'semanal'
+    ? vencimentoSemanal(dataVenda, numero)
+    : vencimentoDaParcela(dataVenda, numero, diaVencimento)
+}
+
 export function gerarParcelas(plano: PlanoDaVenda): ParcelaGerada[] {
-  const { dataVenda, numeroParcelas, valorTotalCentavos, diaVencimento, periodicidade } = plano
+  const { numeroParcelas, valorTotalCentavos } = plano
 
   if (!Number.isSafeInteger(numeroParcelas) || numeroParcelas < 1) {
     throw new TypeError('gerarParcelas exige pelo menos uma parcela')
@@ -100,10 +136,7 @@ export function gerarParcelas(plano: PlanoDaVenda): ParcelaGerada[] {
     parcelas.push({
       numero,
       total: numeroParcelas,
-      vencimento:
-        periodicidade === 'semanal'
-          ? vencimentoSemanal(dataVenda, numero)
-          : vencimentoDaParcela(dataVenda, numero, diaVencimento),
+      vencimento: vencimentoDaParcelaNumero(plano, numero),
       valorCentavos: numero === numeroParcelas ? base + sobra : base,
     })
   }

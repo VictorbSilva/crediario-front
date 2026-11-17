@@ -28,6 +28,8 @@ export type Venda = {
   itens?: ItemDaVenda[]
   /** Ausente é mensal: toda venda lançada antes da semanal (31/10/2026). */
   periodicidade?: Periodicidade
+  /** Só na versão 3. Ausente em toda venda lançada antes da primeira parcela escolhida (16/11/2026). */
+  primeiroVencimento?: string
   cancelada?: boolean
   canceladaEm?: string
   versaoCalculo: number
