@@ -73,6 +73,38 @@ describe('montarDocumentoDaVenda', () => {
     expect(montarDocumentoDaVenda({ ...base, parcelas: base.parcelas.slice(0, quantas) }).vencimentos).toBeNull()
   })
 
+  describe('primeira cobrança', () => {
+    // A parcela 1 fica no meio da lista e a 3 vence antes dela: o texto tem de vir da parcela de número 1.
+    const comPrimeiraEm = (vencimento: string) => ({ ...base,
+      venda: { ...base.venda, dataVenda: '2026-11-06' },
+      parcelas: base.parcelas.map((item) => ({ ...item,
+        parcela: { ...item.parcela, vencimento: item.parcela.numero === 1 ? vencimento : '2026-11-08' } })),
+    })
+
+    it.each([
+      ['2026-12-29', 'Primeira cobrança em 53 dias (29/12/2026)'],
+      ['2026-11-08', 'Primeira cobrança em 2 dias (08/11/2026)'],
+      ['2026-11-07', 'Primeira cobrança em 1 dia (07/11/2026)'],
+      ['2026-11-06', 'Primeira cobrança em 06/11/2026'],
+      ['2026-11-05', 'Primeira cobrança em 05/11/2026'],
+    ])('parcela 1 em %s, venda de 06/11/2026 → %s', (vencimento, texto) => {
+      expect(montarDocumentoDaVenda(comPrimeiraEm(vencimento)).primeiraCobranca).toBe(texto)
+    })
+
+    it('o cenário põe a parcela 1 fora da primeira posição da lista', () => {
+      const entrada = comPrimeiraEm('2026-12-29')
+      expect(entrada.parcelas[0].parcela.numero).toBe(3)
+      expect(entrada.parcelas[1].parcela.numero).toBe(1)
+    })
+
+    it.each([0, 2])('com %i parcelas de 3 fica undefined, mesmo com a parcela 1 presente', (quantas) => {
+      const entrada = comPrimeiraEm('2026-12-29')
+      const parciais = entrada.parcelas.slice(0, quantas)
+      if (quantas === 2) expect(parciais.some(({ parcela }) => parcela.numero === 1)).toBe(true)
+      expect(montarDocumentoDaVenda({ ...entrada, parcelas: parciais }).primeiraCobranca).toBeUndefined()
+    })
+  })
+
   it('omite linhas da loja ausentes', () => {
     const documento = montarDocumentoDaVenda({ ...base, loja: { nome: 'Loja X' } })
     expect(documento.cnpj).toBeUndefined()

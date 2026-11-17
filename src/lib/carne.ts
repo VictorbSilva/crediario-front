@@ -14,6 +14,13 @@ export type EntradaDocumentoDaVenda = {
 }
 
 export function montarDocumentoDaVenda({ loja, cliente, venda, parcelas }: EntradaDocumentoDaVenda) {
+  const primeira = parcelas.length < venda.numeroParcelas
+    ? undefined
+    : parcelas.find(({ parcela }) => parcela.numero === 1)?.parcela
+  const primeiraCobranca: string | undefined = primeira
+    ? textoDaPrimeiraCobranca(venda.dataVenda, primeira.vencimento)
+    : undefined
+
   return {
     titulo: 'Comprovante de venda',
     nomeDaLoja: loja.nome,
@@ -33,6 +40,7 @@ export function montarDocumentoDaVenda({ loja, cliente, venda, parcelas }: Entra
     })),
     total: formatarCentavos(venda.valorTotalCentavos),
     plano: textoDoPlano(venda.numeroParcelas, venda.valorParcelaCentavos, venda.periodicidade),
+    primeiraCobranca,
     vencimentos: parcelas.length < venda.numeroParcelas ? null : [...parcelas]
       .sort((a, b) => a.parcela.numero - b.parcela.numero)
       .map(({ parcela }) => ({
@@ -41,6 +49,13 @@ export function montarDocumentoDaVenda({ loja, cliente, venda, parcelas }: Entra
         valor: formatarCentavos(parcela.valorCentavos),
       })),
   }
+}
+
+/** Conta a partir da data da venda, não de hoje: a nota reaberta depois diz o mesmo que a assinada. */
+function textoDaPrimeiraCobranca(dataVenda: string, vencimento: string): string {
+  const dias = diferencaEmDias(dataVenda, vencimento)
+  if (dias < 1) return `Primeira cobrança em ${dataBonita(vencimento)}`
+  return `Primeira cobrança em ${dias} ${dias === 1 ? 'dia' : 'dias'} (${dataBonita(vencimento)})`
 }
 
 export type EntradaRecibo = {
