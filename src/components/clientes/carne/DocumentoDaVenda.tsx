@@ -106,6 +106,7 @@ export function DocumentoDaVenda({ dados, aoFechar }: DocumentoDaVendaProps) {
             ) : null}
             <p className="my-3 text-right font-bold">Total: {documento.total}</p>
             <p className="mb-3 font-semibold">{documento.plano}</p>
+            {documento.primeiraCobranca ? <p className="mb-3 font-bold">{documento.primeiraCobranca}</p> : null}
           </>
         ) : null}
         {documento?.vencimentos ? (

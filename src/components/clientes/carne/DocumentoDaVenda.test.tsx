@@ -71,6 +71,18 @@ describe('DocumentoDaVenda', () => {
     expect(fechar).toHaveBeenCalledOnce()
   })
 
+  it('mostra a primeira cobrança em negrito entre o plano e a tabela de vencimentos', async () => {
+    render(<DocumentoDaVenda dados={DADOS} aoFechar={vi.fn()} />)
+    await preparar()
+    const linha = screen.getByText('Primeira cobrança em 40 dias (10/11/2026)')
+    expect(linha.className).toContain('font-bold')
+    const plano = screen.getByText(/^2 parcelas de/)
+    const tabela = screen.getByRole('table', { name: 'Vencimentos' })
+    expect(plano.compareDocumentPosition(linha) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(linha.compareDocumentPosition(tabela) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(screen.getByRole('article')).getByText(/^Primeira cobrança/)).toBe(linha)
+  })
+
   it('prepara o PNG antes do toque e chama share na mesma volta do clique', async () => {
     let concluir!: (blob: Blob) => void
     vi.mocked(toBlob).mockReturnValueOnce(new Promise((resolve) => { concluir = resolve }))
@@ -99,6 +111,7 @@ describe('DocumentoDaVenda', () => {
     rerender(<DocumentoDaVenda dados={{ ...DADOS, parcelas: DADOS.parcelas.slice(0, 1) }} aoFechar={vi.fn()} />)
     expect(screen.getByText('Carregando os vencimentos…')).toBeTruthy()
     expect(screen.queryByRole('table', { name: 'Vencimentos' })).toBeNull()
+    expect(screen.queryByText(/^Primeira cobrança/)).toBeNull()
     expect(toBlob).not.toHaveBeenCalled()
     expect((screen.getByRole('button', { name: 'Imprimir' }) as HTMLButtonElement).disabled).toBe(true)
     rerender(<DocumentoDaVenda dados={DADOS} aoFechar={vi.fn()} />)
