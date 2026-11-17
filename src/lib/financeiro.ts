@@ -13,6 +13,7 @@ export type VendaParaFinanceiro = {
   diaVencimento: number
   versaoCalculo: number
   periodicidade?: Periodicidade
+  primeiroVencimento?: string
   cancelada?: boolean
 }
 
@@ -30,7 +31,7 @@ export type PagamentoParaFinanceiro = {
 export type ParcelaRegenerada = ParcelaGerada & { id: string }
 
 export function parcelasRegeneradas(venda: VendaParaFinanceiro): ParcelaRegenerada[] | null {
-  if (!versaoConhecida(venda.versaoCalculo, venda.periodicidade)) return null
+  if (!versaoConhecida(venda)) return null
 
   return gerarParcelas(venda).map((parcela) => ({ ...parcela, id: `${venda.id}#${parcela.numero}` }))
 }
@@ -325,6 +326,7 @@ export function documentosParaFinanceiro(
       diaVencimento: dados.diaVencimento as number,
       versaoCalculo: dados.versaoCalculo as number,
       periodicidade: dados.periodicidade as Periodicidade | undefined,
+      primeiroVencimento: dados.primeiroVencimento as string | undefined,
       cancelada: dados.cancelada === true,
     })),
     pagamentos: pagamentos.map(({ id, dados }): PagamentoParaFinanceiro => ({

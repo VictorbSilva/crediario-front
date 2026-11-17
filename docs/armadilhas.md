@@ -1273,6 +1273,7 @@ Decisão do mesmo dia: a parcela N da semanal vence na **data da venda + 7 × N 
 |---|---|---|---|
 | Mensal | **ausente** | `1` (`VERSAO_CALCULO`) | 1 a 31, digitado |
 | Semanal | `'semanal'` | `2` (`VERSAO_CALCULO_SEMANAL`) | 1 a 7, o dia da semana ISO da venda (`diaDaSemanaISO`) |
+| Primeira parcela escolhida, com `primeiroVencimento` (16/11/2026) | ausente (mensal) ou `'semanal'` | `3` (`VERSAO_CALCULO_PRIMEIRO_VENCIMENTO`) | como na mensal ou na semanal; parcela N em `vencimentoDaParcela(primeiroVencimento, N - 1, diaVencimento)` ou `vencimentoSemanal(primeiroVencimento, N - 1)` |
 
 **A mensal não muda em nada**: `montarCamposVenda` grava o mesmo documento de antes da
 semanal — nem `periodicidade: 'mensal'` explícito —, e `gerarParcelas` sem `periodicidade`
@@ -1291,10 +1292,10 @@ semana de todo vencimento, mas `gerarParcelas` não o usa.
 > com as datas certas no mesmo lote da venda. É a regra *reversible by construction* do
 > `CLAUDE.md` funcionando: a versão diz qual cálculo gerou a venda.
 >
-> No app novo, quem decide se sabe recalcular é `versaoConhecida(versaoCalculo,
-> periodicidade)`: mensal (campo ausente ou `'mensal'`) só na 1, semanal só na 2. Qualquer
-> outra combinação — semanal na 1, mensal na 2, versão 3 — é desconhecida e **não é
-> adivinhada**. A regra do Firestore recusa semanal sem `versaoCalculo == 2` (seção de
+> No app novo, quem decide se sabe recalcular é `versaoConhecida(venda)`: com
+> `primeiroVencimento`, só na 3, mensal ou semanal; sem ele, mensal (campo ausente ou
+> `'mensal'`) só na 1 e semanal só na 2. Qualquer outra combinação — semanal na 1, mensal na
+> 2, versão 3 sem o campo, o campo na 1 ou na 2 — é desconhecida e **não é adivinhada**. A regra do Firestore recusa semanal sem `versaoCalculo == 2` (seção de
 > `firestore.rules`, acima), então a combinação perigosa nem chega ao servidor.
 
 O teto do ano 9999 (`erroDaDataVenda` em `src/lib/venda.ts`) conta pela periodicidade
@@ -1329,7 +1330,8 @@ leituras** por abertura; sem as parcelas, 300 + 1.500 = **1.800**. Numa tela abe
 vezes por dia, a diferença é a cota.
 
 Recalcular só é seguro porque a venda guarda **todas** as entradas do cálculo (`dataVenda`,
-`valorTotalCentavos`, `numeroParcelas`, `diaVencimento`, `periodicidade` na semanal) e o
+`valorTotalCentavos`, `numeroParcelas`, `diaVencimento`, `periodicidade` na semanal,
+`primeiroVencimento` na versão 3) e o
 `versaoCalculo` — é a regra de
 reversibilidade do `CLAUDE.md` sendo usada para o que ela existe. `montarCamposVenda` grava a
 venda e as parcelas do mesmo `gerarParcelas`, num lote só, e a regra torna imutáveis tanto as
@@ -1342,8 +1344,8 @@ de `alocarPagamentos` e **não é** o id do documento em `installments` — nunc
 nem para apontar uma parcela.
 
 > **AVISO — versão de cálculo desconhecida**
-> Venda cuja versão `versaoConhecida` não reconhece (mensal fora da 1, semanal fora da 2)
-> **não é recalculada**:
+> Venda cuja versão `versaoConhecida` não reconhece (mensal fora da 1, semanal fora da 2,
+> `primeiroVencimento` fora da 3) **não é recalculada**:
 > `parcelasRegeneradas` devolve `null`, a venda fica fora do a receber, do vencido e dos
 > atrasados, e entra em `vendasNaoCalculadas`, para a tela avisar que os números estão abaixo
 > do real. **Nunca adivinhar.** Gerar com a regra da versão 1 uma venda feita pela versão 2

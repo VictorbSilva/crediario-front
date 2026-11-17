@@ -88,6 +88,16 @@ describe('documentosParaFinanceiro', () => {
     expect(vendas[0].versaoCalculo).toBe(2)
   })
 
+  it('leva o primeiroVencimento da venda; ausente continua ausente', () => {
+    const { id, ...dados } = venda({ versaoCalculo: 3, primeiroVencimento: '2026-10-10' })
+    const { id: idAntiga, ...dadosAntiga } = venda({ id: 'v2' })
+
+    const { vendas } = documentosParaFinanceiro([{ id, dados }, { id: idAntiga, dados: dadosAntiga }], [])
+
+    expect(vendas.map((v) => v.primeiroVencimento)).toEqual(['2026-10-10', undefined])
+    expect(vendas[0].versaoCalculo).toBe(3)
+  })
+
   it('normaliza cancelamentos ausentes e preserva encargo ausente', () => {
     const { id: vendaId, ...dadosVenda } = venda()
     const { id: pagamentoId, ...dadosPagamento } = pagamento()
@@ -269,6 +279,73 @@ describe('venda semanal no Financeiro', () => {
     expect(situacao.vendasNaoCalculadas).toBe(1)
     expect(aReceberNoMes([semanal({ versaoCalculo: 1 })], [], [], 2026, 10, HOJE).parcelas).toEqual([])
     expect(mesesDeRecebimento([semanal({ versaoCalculo: 3 })], HOJE)).toEqual([{ ano: 2026, mes: 10 }])
+  })
+})
+
+describe('venda da versão 3 (primeiroVencimento) no Financeiro', () => {
+  // Mensal: a mesma venda de `venda()`, mas com a primeira escolhida para
+  // 10/10 — vence em 10/10, 10/11 e 10/12, não em 10/09, 10/10 e 10/11.
+  const mensalV3 = venda({ versaoCalculo: 3, primeiroVencimento: '2026-10-10' })
+  // Semanal: a mesma de `semanal()`, com a primeira escolhida numa terça,
+  // 13/10 — vence de 13/10 a 17/11, não de 08/10 a 12/11.
+  const semanalV3 = semanal({ versaoCalculo: 3, diaVencimento: 2, primeiroVencimento: '2026-10-13' })
+
+  it('a mensal entra nas somas pelas datas escolhidas', () => {
+    const situacao = situacaoFinanceira([mensalV3], [], HOJE)
+
+    // Em 14/10, só a de 10/10 venceu (4 dias).
+    expect(situacao.aReceberCentavos).toBe(30_000)
+    expect(situacao.vencidoCentavos).toBe(10_000)
+    expect(situacao.vendasNaoCalculadas).toBe(0)
+    expect(situacao.porCliente.get('c1')).toEqual({
+      clientId: 'c1',
+      abertoCentavos: 30_000,
+      vencidoCentavos: 10_000,
+      parcelasVencidas: 1,
+      atrasoDesde: '2026-10-10',
+      diasDeAtraso: 4,
+    })
+
+    const dezembro = aReceberNoMes([mensalV3], [], [], 2026, 12, HOJE)
+    expect(dezembro.parcelas.map((p) => [p.numero, p.vencimento])).toEqual([[3, '2026-12-10']])
+    expect(mesesDeRecebimento([mensalV3], HOJE)).toEqual([
+      { ano: 2026, mes: 10 },
+      { ano: 2026, mes: 11 },
+      { ano: 2026, mes: 12 },
+    ])
+  })
+
+  it('a semanal entra nas somas pelas datas escolhidas', () => {
+    const situacao = situacaoFinanceira([semanalV3], [], HOJE)
+
+    // Em 14/10, só a de 13/10 venceu (1 dia).
+    expect(situacao.aReceberCentavos).toBe(30_000)
+    expect(situacao.vencidoCentavos).toBe(5_000)
+    expect(situacao.vendasNaoCalculadas).toBe(0)
+    expect(situacao.porCliente.get('c1')?.atrasoDesde).toBe('2026-10-13')
+    expect(situacao.porCliente.get('c1')?.diasDeAtraso).toBe(1)
+
+    const novembro = aReceberNoMes([semanalV3], [], [], 2026, 11, HOJE)
+    expect(novembro.parcelas.map((p) => p.vencimento)).toEqual([
+      '2026-11-03',
+      '2026-11-10',
+      '2026-11-17',
+    ])
+  })
+
+  it('o campo fora da versão 3, ou a versão 3 sem ele, fica fora das somas e é avisado', () => {
+    const situacao = situacaoFinanceira(
+      [
+        venda({ primeiroVencimento: '2026-10-10' }),
+        semanal({ id: 'v2', primeiroVencimento: '2026-10-13' }),
+        venda({ id: 'v3', versaoCalculo: 3 }),
+      ],
+      [],
+      HOJE,
+    )
+
+    expect(situacao.aReceberCentavos).toBe(0)
+    expect(situacao.vendasNaoCalculadas).toBe(3)
   })
 })
 

@@ -104,24 +104,115 @@ describe('gerarParcelas', () => {
       { numero: 4, total: 4, vencimento: '2026-11-27', valorCentavos: 2_501 },
     ])
   })
+
+  describe('com primeiroVencimento (versão 3)', () => {
+    // As datas de venda são escolhidas para a conta antiga, a partir da
+    // `dataVenda`, dar outras datas: o teste quebra se o campo for ignorado.
+    it('mensal: a primeira vence na data escolhida, as seguintes no mesmo dia dos meses seguintes', () => {
+      const parcelas = gerarParcelas({
+        dataVenda: '2026-10-20',
+        numeroParcelas: 3,
+        valorTotalCentavos: 30_000,
+        diaVencimento: 15,
+        primeiroVencimento: '2026-12-15',
+      })
+
+      expect(parcelas).toStrictEqual([
+        { numero: 1, total: 3, vencimento: '2026-12-15', valorCentavos: 10_000 },
+        { numero: 2, total: 3, vencimento: '2027-01-15', valorCentavos: 10_000 },
+        { numero: 3, total: 3, vencimento: '2027-02-15', valorCentavos: 10_000 },
+      ])
+    })
+
+    it('mensal: dia 31 encolhe no mês curto e volta a 31 no mês seguinte', () => {
+      const parcelas = gerarParcelas({
+        dataVenda: '2026-11-16',
+        numeroParcelas: 3,
+        valorTotalCentavos: 30_000,
+        diaVencimento: 31,
+        primeiroVencimento: '2027-01-31',
+      })
+
+      expect(parcelas.map((p) => p.vencimento)).toEqual(['2027-01-31', '2027-02-28', '2027-03-31'])
+    })
+
+    it('semanal: a primeira vence na data escolhida, as seguintes de 7 em 7 dias a partir dela', () => {
+      // Venda numa segunda, 16/11; primeira escolhida numa sexta, 20/11.
+      const parcelas = gerarParcelas({
+        dataVenda: '2026-11-16',
+        numeroParcelas: 3,
+        valorTotalCentavos: 30_000,
+        diaVencimento: 5,
+        periodicidade: 'semanal',
+        primeiroVencimento: '2026-11-20',
+      })
+
+      expect(parcelas).toStrictEqual([
+        { numero: 1, total: 3, vencimento: '2026-11-20', valorCentavos: 10_000 },
+        { numero: 2, total: 3, vencimento: '2026-11-27', valorCentavos: 10_000 },
+        { numero: 3, total: 3, vencimento: '2026-12-04', valorCentavos: 10_000 },
+      ])
+    })
+
+    it('a sobra da divisão vai para a última, como nas versões 1 e 2', () => {
+      const base = {
+        dataVenda: '2026-11-16',
+        numeroParcelas: 3,
+        valorTotalCentavos: 10_000,
+        primeiroVencimento: '2026-11-20',
+      }
+
+      for (const plano of [
+        { ...base, diaVencimento: 20 },
+        { ...base, diaVencimento: 5, periodicidade: 'semanal' as const },
+      ]) {
+        const parcelas = gerarParcelas(plano)
+        expect(parcelas.map((p) => p.valorCentavos)).toEqual([3333, 3333, 3334])
+        expect(parcelas.reduce((soma, p) => soma + p.valorCentavos, 0)).toBe(10_000)
+      }
+    })
+  })
 })
 
 describe('versaoConhecida', () => {
+  const PRIMEIRO = '2026-12-15'
+
   it('a mensal é a versão 1, com ou sem o campo', () => {
-    expect(versaoConhecida(1, undefined)).toBe(true)
-    expect(versaoConhecida(1, 'mensal')).toBe(true)
+    expect(versaoConhecida({ versaoCalculo: 1 })).toBe(true)
+    expect(versaoConhecida({ versaoCalculo: 1, periodicidade: 'mensal' })).toBe(true)
   })
 
   it('a semanal é a versão 2', () => {
-    expect(versaoConhecida(2, 'semanal')).toBe(true)
+    expect(versaoConhecida({ versaoCalculo: 2, periodicidade: 'semanal' })).toBe(true)
+  })
+
+  it('com primeiroVencimento, mensal ou semanal, é a versão 3', () => {
+    expect(versaoConhecida({ versaoCalculo: 3, primeiroVencimento: PRIMEIRO })).toBe(true)
+    expect(
+      versaoConhecida({ versaoCalculo: 3, periodicidade: 'mensal', primeiroVencimento: PRIMEIRO }),
+    ).toBe(true)
+    expect(
+      versaoConhecida({ versaoCalculo: 3, periodicidade: 'semanal', primeiroVencimento: PRIMEIRO }),
+    ).toBe(true)
   })
 
   it('o que não bate não é adivinhado', () => {
-    expect(versaoConhecida(1, 'semanal')).toBe(false)
-    expect(versaoConhecida(2, undefined)).toBe(false)
-    expect(versaoConhecida(2, 'mensal')).toBe(false)
-    expect(versaoConhecida(3, 'semanal')).toBe(false)
-    expect(versaoConhecida(3, undefined)).toBe(false)
+    expect(versaoConhecida({ versaoCalculo: 1, periodicidade: 'semanal' })).toBe(false)
+    expect(versaoConhecida({ versaoCalculo: 2 })).toBe(false)
+    expect(versaoConhecida({ versaoCalculo: 2, periodicidade: 'mensal' })).toBe(false)
+    expect(versaoConhecida({ versaoCalculo: 3, periodicidade: 'semanal' })).toBe(false)
+    expect(versaoConhecida({ versaoCalculo: 3 })).toBe(false)
+  })
+
+  it('primeiroVencimento fora da versão 3 não é adivinhado', () => {
+    expect(versaoConhecida({ versaoCalculo: 1, primeiroVencimento: PRIMEIRO })).toBe(false)
+    expect(
+      versaoConhecida({ versaoCalculo: 1, periodicidade: 'mensal', primeiroVencimento: PRIMEIRO }),
+    ).toBe(false)
+    expect(
+      versaoConhecida({ versaoCalculo: 2, periodicidade: 'semanal', primeiroVencimento: PRIMEIRO }),
+    ).toBe(false)
+    expect(versaoConhecida({ versaoCalculo: 4, primeiroVencimento: PRIMEIRO })).toBe(false)
   })
 })
 
