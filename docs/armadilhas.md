@@ -31,6 +31,9 @@ para localizar o trecho atual, prefira o arquivo e o nome da função indicados.
 - [src/data/useCarne.ts](#srcdatausecarnets)
 - [src/data/ClientesProvider.tsx](#srcdataclientesprovidertsx)
 - [src/lib/acesso.ts e src/data/AcessoProvider.tsx](#srclibacessots-e-srcdataacessoprovidertsx)
+- [src/data/criarContaDeFuncionario.ts](#srcdatacriarcontadefuncionariots)
+- [src/data/useEquipe.ts](#srcdatauseequipets)
+- [src/lib/equipe.ts](#srclibequipets)
 - [src/lib/exportacao.ts](#srclibexportacaots)
 - [src/data/useCarneDaEmpresa.ts](#srcdatausecarnedaempresats)
 - [src/lib/rotas.ts](#srclibrotasts)
@@ -1061,6 +1064,119 @@ sendo cobrada nas requisições do funcionário às quatro coleções. O dono n�
 
 — referente a src/lib/acesso.ts, `ehDonoNoApp()` e `acessoDoMembro()`;
 src/data/AcessoProvider.tsx; src/components/layout/AppShell.tsx
+
+## src/data/criarContaDeFuncionario.ts
+
+Nascido em 19/11/2026. Cria a conta do funcionário no Firebase Auth e devolve o uid, que é o
+id do documento em `membros`.
+
+**Por que existe uma segunda instância.** `createUserWithEmailAndPassword` não só cria a
+conta: ele entra nela. Na instância principal (o `auth` de `src/lib/firebase.ts`), o dono
+sairia da própria conta no meio do cadastro e o app passaria a rodar como o funcionário. Por
+isso a criação usa outra instância do app, `initializeApp(configuracaoFirebase,
+'cadastro-de-funcionario')`, com Auth próprio criado por `initializeAuth(app, { persistence:
+inMemoryPersistence })`, e termina com `signOut` nela, num `finally`. Com a persistência em
+memória, a sessão do funcionário nunca é gravada no aparelho do dono. A instância nasce no
+primeiro cadastro, não ao abrir o app.
+
+> **AVISO**
+> **`initializeAuth` lança se for chamado de novo no mesmo app**, a mesma armadilha de
+> [src/lib/firebase.ts](#srclibfirebasets-1). O Auth secundário fica num cache do módulo.
+> Se o módulo recarregar (HMR) com o app ainda em `getApps()`, o `initializeAuth` lança e o
+> código usa `getAuth(app)`, que devolve a instância existente em vez de criar outra.
+
+**Um `signOut` que falha só avisa.** A falha vai para o console com `console.warn`, e o uid
+volta mesmo assim. Se a falha ao sair fizesse a função rejeitar, o hook concluiria que a conta
+não foi criada, e ela ficaria órfã sem ninguém saber. A sessão que sobra fica em memória, numa
+instância que só serve para cadastrar.
+
+> **AVISO**
+> **Conta órfã.** Criar a conta e gravar o membro são duas operações em serviços diferentes,
+> sem transação entre elas. A conta vem primeiro, porque o uid é o id do documento, e o
+> `setDoc` em `membros/{uid}` vai depois, sem `await`. Se a regra recusar esse documento, a
+> conta existe e não tem acesso: o funcionário entra e vê "Esta conta não tem acesso a esta
+> loja.", e um novo cadastro com o mesmo e-mail falha com "Este e-mail já tem conta.". Para
+> resolver, apague a conta desse e-mail no console do Firebase (Authentication → Usuários) e
+> cadastre o funcionário de novo pelo app. A mensagem de erro do `useEquipe` já diz isso.
+
+**Emuladores.** Com `VITE_USE_FIREBASE_EMULATORS=true`, o Auth secundário é ligado ao
+emulador (`connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })`)
+logo depois de criado, com a mesma condição e o mesmo endereço do Auth principal em
+`src/lib/firebase.ts`. Sem isso, com `npm run emu`, a conta iria para o Auth de verdade do
+projeto e o membro só para o emulador. Quando a instância é reaproveitada por `getAuth(app)`,
+ela não é conectada de novo, porque já foi conectada quando nasceu. No SDK 12, repetir a
+chamada com o mesmo endereço não faz nada, mas ligar ao emulador um Auth que já fez
+requisições, ou trocar o endereço, lança `auth/emulator-config-failed`.
+
+— referente a src/data/criarContaDeFuncionario.ts, `obterAuthDoCadastro()` e
+`criarContaDeFuncionario()`; `configuracaoFirebase` em src/lib/firebase.ts
+
+## src/data/useEquipe.ts
+
+Nascido em 19/11/2026. É um hook, não um contexto, porque só a tela de equipe o consome. Monta
+um listener em `businesses/{businessId}/membros`, com `orderBy('nome')` e
+`{ includeMetadataChanges: true }`, só enquanto quem o consome estiver montado. Trocar de
+empresa volta a `carregando`, como no `useCarneDaEmpresa`. Cada membro chega com o uid (o id
+do documento) e com `pendente` (`hasPendingWrites`). `ativo` e as permissões são lidos com
+`=== true`, como em `acessoDoMembro()`. A ordenação por um campo só usa o índice automático, e
+`firestore.indexes.json` continua vazio.
+
+**`cadastrar(entrada)` devolve a mensagem de erro ou `null`.** É a única ação do app que
+espera o servidor (`await`), e espera só a criação da conta, porque sem o uid não há onde
+gravar o membro. Com `navigator.onLine === false`, a ação recusa antes de tentar ("Sem
+internet. Criar a conta precisa de conexão."). Um erro do Auth vira a mensagem de
+`mensagemDoErroDeCadastro()`. Nos dois casos nada é gravado e a mensagem volta para o
+formulário, que pode continuar aberto. `null` quer dizer que a conta foi criada e que o
+documento do membro entrou na fila do Firestore, ainda sem confirmação do servidor: o `setDoc`
+segue o padrão do projeto, sem `await` e com `.catch()`. A conta é criada com o e-mail já
+normalizado por `montarCamposMembro`, o mesmo que vai para o documento.
+
+`alterarPermissoes(uid, permissoes)` e `definirAtivo(uid, ativo)` fazem `updateDoc` com
+`atualizadoEm: serverTimestamp()` e `atualizadoPor: identificarDispositivo()`, sem `await`. As
+permissões passam por `copiarPermissoes()`, que grava só as três chaves.
+
+> **AVISO**
+> **`erro` junta duas coisas:** a falha de leitura do listener ("Não foi possível carregar a
+> equipe.") e a última gravação recusada pelo servidor (cadastro, permissões, ativar ou
+> desativar). Quando há as duas, a recusa da gravação aparece no lugar da falha de leitura. Ela
+> não some quando chega outro snapshot, não há ação para descartá-la e ela não é separada por
+> empresa: só some quando o hook desmonta, ou seja, quando se sai da tela. Como as `falhas` dos
+> outros hooks, vive só na memória, e fechar o app perde a recusa.
+
+**Custo no plano Spark.** Um listener na coleção `membros` inteira, só com a tela aberta: 1
+leitura por membro ao abrir online, mais 1 a cada documento alterado. A regra de leitura de
+`membros` não chama `membroAtivo()` (o dono passa por `ehDono()`), então não há leitura extra
+da regra.
+
+— referente a src/data/useEquipe.ts
+
+## src/lib/equipe.ts
+
+Nascido em 19/11/2026. A validação espelha `match /membros/{uid}` do `firestore.rules`, porque
+toda restrição da regra precisa existir também no formulário — ver
+[src/lib/venda.ts — a regra recusa, mas offline ninguém fica sabendo](#srclibvendats--a-regra-recusa-mas-offline-ninguém-fica-sabendo).
+Os números ficam em `LIMITES_MEMBRO`.
+
+- `nome`: de 1 a 80 caracteres depois do `trim`, e é o valor sem os espaços das pontas que vai
+  para o documento. A regra mede o que chega.
+- `email`: validado já normalizado, sem espaços nas pontas e em minúsculas, como
+  `montarCamposMembro` grava. Aceita até 254 caracteres, no padrão da regra,
+  `^[^@\s]+@[^@\s]+$`. O `\s` do JavaScript recusa mais espaços que o do RE2 da regra, que só
+  conhece os espaços ASCII; por isso o que passa aqui também passa lá. O mínimo de 3
+  caracteres da regra já vem do próprio padrão.
+- `permissoes`: exatamente `financeiro`, `caixaDoDia` e `exportar`, os três bool, que é o que
+  `hasOnly` e `hasAll` exigem na regra. `montarCamposMembro` e o `alterarPermissoes` do hook
+  gravam por `copiarPermissoes()`, que monta um objeto novo só com as três chaves. Um objeto
+  com mais chaves que o tipo `Permissoes` passaria pelo TypeScript e seria negado pela regra.
+- `senha`: 6 caracteres ou mais, o mínimo do Firebase Auth. Não passa por `trim` e nunca vai
+  para o Firestore: `montarCamposMembro` não a copia, e há teste para isso.
+
+`mensagemDoErroDeCadastro(codigo)` traduz os códigos do Auth com um `switch`, e não com um
+objeto indexado, para que um código como `constructor` não devolva algo do protótipo. Há teste
+para isso.
+
+— referente a src/lib/equipe.ts, `validarNovoMembro()`, `montarCamposMembro()`,
+`copiarPermissoes()` e `mensagemDoErroDeCadastro()`
 
 ## src/lib/exportacao.ts
 

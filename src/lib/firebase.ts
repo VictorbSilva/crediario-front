@@ -1,5 +1,5 @@
 import { getApp, getApps, initializeApp } from 'firebase/app'
-import type { FirebaseApp } from 'firebase/app'
+import type { FirebaseApp, FirebaseOptions } from 'firebase/app'
 import {
   browserLocalPersistence,
   connectAuthEmulator,
@@ -35,16 +35,16 @@ if (faltando.length > 0) {
   )
 }
 
+export const configuracaoFirebase: FirebaseOptions = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+}
+
 const jaInicializado = getApps().length > 0
 
-const app: FirebaseApp = jaInicializado
-  ? getApp()
-  : initializeApp({
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      appId: import.meta.env.VITE_FIREBASE_APP_ID,
-    })
+const app: FirebaseApp = jaInicializado ? getApp() : initializeApp(configuracaoFirebase)
 
 function suportaPersistencia(): boolean {
   try {
