@@ -8,7 +8,7 @@ export function EtiquetasDePermissoes({ permissoes }: Readonly<{ permissoes: Per
 
   if (ligadas.length === 0) {
     return (
-      <span className="inline-flex items-center rounded-lg border border-dashed border-slate-300 text-slate-500 px-2.5 py-1 text-xs font-semibold">
+      <span className="inline-flex items-center py-1 text-xs font-semibold text-slate-500">
         Sem permissões extras
       </span>
     )

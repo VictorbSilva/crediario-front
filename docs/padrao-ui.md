@@ -79,8 +79,9 @@ Cobrador, tudo ligado é Gerente e qualquer mistura é Personalizado. Cobrador e
 `EtiquetasDePermissoes`, no cartão do membro, abaixo do e-mail. Cada permissão ligada vira uma
 etiqueta
 `inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700`,
-com o ícone da permissão em 14 px. Sem nenhuma ligada, aparece uma etiqueta tracejada,
-`border border-dashed border-slate-300 text-slate-500`, com "Sem permissões extras".
+com o ícone da permissão em 14 px. Sem nenhuma ligada, aparece só o texto "Sem permissões
+extras", em `py-1 text-xs font-semibold text-slate-500`, sem contorno nem fundo e alinhado à
+esquerda do cartão. O contorno tracejado do desenho saiu a pedido do Victor, em 19/11/2026.
 
 ### Cartão da lista
 

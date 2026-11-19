@@ -37,11 +37,12 @@ describe('EtiquetasDePermissoes', () => {
     ])
   })
 
-  it('nenhuma ligada: uma etiqueta tracejada "Sem permissões extras"', () => {
+  it('nenhuma ligada: "Sem permissões extras" em texto cinza, sem contorno nem fundo', () => {
     render(<EtiquetasDePermissoes permissoes={NENHUMA} />)
 
     const vazia = screen.getByText('Sem permissões extras')
-    temAsClasses(vazia, 'border border-dashed border-slate-300 text-slate-500')
+    temAsClasses(vazia, 'text-xs font-semibold text-slate-500')
+    expect(vazia.className.split(/\s+/).filter((classe) => classe.startsWith('border'))).toEqual([])
     expect(vazia.className).not.toContain('bg-slate-100')
     expect(screen.queryAllByRole('listitem')).toHaveLength(0)
   })
