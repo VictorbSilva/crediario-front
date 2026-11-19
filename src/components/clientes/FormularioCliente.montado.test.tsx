@@ -61,6 +61,17 @@ afterEach(() => {
   cleanup()
 })
 
+describe('FormularioCliente — rodapé do modal', () => {
+  it('continua com Cancelar e o envio, e o X fecha sem salvar', () => {
+    render(<FormularioCliente aoFechar={aoFechar} />)
+
+    expect(screen.getByRole('button', { name: 'Fechar sem salvar' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Salvar cliente' }).getAttribute('type')).toBe('submit')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(aoFechar).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('FormularioCliente — cadastro', () => {
   it('mostra referência opcional depois de Cidade, com dica e limite da regra', () => {
     render(<FormularioCliente aoFechar={aoFechar} />)

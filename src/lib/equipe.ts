@@ -91,7 +91,7 @@ export type Membro = {
 }
 
 /** O e-mail como vai para o documento e para a conta: sem espaço em volta, minúsculo. */
-function normalizarEmail(email: string): string {
+export function normalizarEmail(email: string): string {
   return email.trim().toLowerCase()
 }
 
@@ -195,6 +195,31 @@ export function gerarSenha(
   }
 
   return caracteres.slice(0, 4).join('') + '-' + caracteres.slice(4).join('')
+}
+
+export function primeiroNome(nome: string): string {
+  return nome.trim().split(/\s+/)[0]
+}
+
+/** O texto que o dono manda ao funcionário depois de criar a conta. */
+export function mensagemDeAcesso({
+  nome,
+  email,
+  senha,
+  endereco,
+}: {
+  nome: string
+  email: string
+  senha: string
+  endereco: string
+}): string {
+  return [
+    `Oi, ${primeiroNome(nome)}! Sua conta no app da loja está pronta.`,
+    `Endereço: ${endereco}`,
+    `E-mail: ${email}`,
+    `Senha: ${senha}`,
+    'Para trocar a senha, toque em "Esqueci minha senha" na tela de entrada.',
+  ].join('\n')
 }
 
 export function mensagemDoErroDeCadastro(codigo: string): string {
