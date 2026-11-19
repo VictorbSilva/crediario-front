@@ -7,6 +7,7 @@ const simulado = vi.hoisted(() => ({
   initializeApp: vi.fn(),
   initializeAuth: vi.fn(),
   getAuth: vi.fn(),
+  connectAuthEmulator: vi.fn(),
   createUserWithEmailAndPassword: vi.fn(),
   signOut: vi.fn(),
 }))
@@ -27,6 +28,7 @@ vi.mock('firebase/auth', () => ({
   inMemoryPersistence: 'em-memoria',
   initializeAuth: simulado.initializeAuth,
   getAuth: simulado.getAuth,
+  connectAuthEmulator: simulado.connectAuthEmulator,
   createUserWithEmailAndPassword: simulado.createUserWithEmailAndPassword,
   signOut: simulado.signOut,
 }))
@@ -46,14 +48,18 @@ beforeEach(() => {
   })
   simulado.initializeAuth.mockReset().mockReturnValue(simulado.authDoCadastro)
   simulado.getAuth.mockReset().mockReturnValue(simulado.authDoCadastro)
+  simulado.connectAuthEmulator.mockReset()
   simulado.createUserWithEmailAndPassword
     .mockReset()
     .mockResolvedValue({ user: { uid: 'uid-da-maria' } })
   simulado.signOut.mockReset().mockResolvedValue(undefined)
+  // O `.env` desta máquina não existe no CI: a variável fica fixa em cada teste.
+  vi.stubEnv('VITE_USE_FIREBASE_EMULATORS', '')
   vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 })
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   vi.restoreAllMocks()
 })
 
@@ -160,5 +166,55 @@ describe('criarContaDeFuncionario', () => {
     await expect(criarContaDeFuncionario('maria@loja.com', 'segredo')).resolves.toBe('uid-da-maria')
 
     expect(console.warn).toHaveBeenCalledOnce()
+  })
+})
+
+describe('criarContaDeFuncionario — emuladores', () => {
+  it('com os emuladores ligados, conecta o Auth secundário ao emulador uma vez só', async () => {
+    vi.stubEnv('VITE_USE_FIREBASE_EMULATORS', 'true')
+    const { criarContaDeFuncionario } = await carregar()
+
+    await criarContaDeFuncionario('maria@loja.com', 'segredo')
+    await criarContaDeFuncionario('joao@loja.com', 'segredo')
+
+    expect(simulado.connectAuthEmulator).toHaveBeenCalledExactlyOnceWith(
+      simulado.authDoCadastro,
+      'http://127.0.0.1:9099',
+      { disableWarnings: true },
+    )
+    expect(simulado.connectAuthEmulator.mock.invocationCallOrder[0]).toBeLessThan(
+      simulado.createUserWithEmailAndPassword.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('sem a variável, não conecta ao emulador', async () => {
+    const { criarContaDeFuncionario } = await carregar()
+
+    await criarContaDeFuncionario('maria@loja.com', 'segredo')
+
+    expect(simulado.connectAuthEmulator).not.toHaveBeenCalled()
+  })
+
+  it('com outro valor que não "true", não conecta ao emulador', async () => {
+    vi.stubEnv('VITE_USE_FIREBASE_EMULATORS', 'false')
+    const { criarContaDeFuncionario } = await carregar()
+
+    await criarContaDeFuncionario('maria@loja.com', 'segredo')
+
+    expect(simulado.connectAuthEmulator).not.toHaveBeenCalled()
+  })
+
+  it('Auth reaproveitado por getAuth já foi conectado e não conecta de novo', async () => {
+    vi.stubEnv('VITE_USE_FIREBASE_EMULATORS', 'true')
+    simulado.apps.push(simulado.appDoCadastro)
+    simulado.initializeAuth.mockImplementation(() => {
+      throw new Error('auth/already-initialized')
+    })
+    const { criarContaDeFuncionario } = await carregar()
+
+    await criarContaDeFuncionario('maria@loja.com', 'segredo')
+
+    expect(simulado.getAuth).toHaveBeenCalledOnce()
+    expect(simulado.connectAuthEmulator).not.toHaveBeenCalled()
   })
 })

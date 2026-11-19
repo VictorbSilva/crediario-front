@@ -1,5 +1,6 @@
 import { getApps, initializeApp } from 'firebase/app'
 import {
+  connectAuthEmulator,
   createUserWithEmailAndPassword,
   getAuth,
   inMemoryPersistence,
@@ -25,15 +26,25 @@ function obterAuthDoCadastro(): Auth {
     getApps().find((existente) => existente.name === NOME_DO_APP) ??
     initializeApp(configuracaoFirebase, NOME_DO_APP)
 
+  let novo: Auth
   try {
-    authDoCadastro = initializeAuth(app, { persistence: inMemoryPersistence })
+    novo = initializeAuth(app, { persistence: inMemoryPersistence })
   } catch (erro) {
     // `initializeAuth` lança na segunda chamada (o módulo recarregou, o app não):
-    // `getAuth` devolve a instância que já existe. Ver docs/armadilhas.md, src/lib/firebase.ts.
+    // `getAuth` devolve a instância que já existe, e que já foi conectada ao emulador
+    // quando nasceu. Ver docs/armadilhas.md, src/lib/firebase.ts.
     console.warn('[equipe] Reaproveitando o Auth do cadastro de funcionário.', erro)
     authDoCadastro = getAuth(app)
+    return authDoCadastro
   }
 
+  // A mesma condição e o mesmo endereço de src/lib/firebase.ts. Sem isto, com
+  // `npm run emu`, a conta iria para o Auth de verdade e o membro só para o emulador.
+  if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true') {
+    connectAuthEmulator(novo, 'http://127.0.0.1:9099', { disableWarnings: true })
+  }
+
+  authDoCadastro = novo
   return authDoCadastro
 }
 
