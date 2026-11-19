@@ -30,6 +30,7 @@ para localizar o trecho atual, prefira o arquivo e o nome da função indicados.
 - [src/components/clientes/FormularioCliente.tsx](#srccomponentsclientesformularioclientetsx)
 - [src/data/useCarne.ts](#srcdatausecarnets)
 - [src/data/ClientesProvider.tsx](#srcdataclientesprovidertsx)
+- [src/lib/acesso.ts e src/data/AcessoProvider.tsx](#srclibacessots-e-srcdataacessoprovidertsx)
 - [src/lib/exportacao.ts](#srclibexportacaots)
 - [src/data/useCarneDaEmpresa.ts](#srcdatausecarnedaempresats)
 - [src/lib/rotas.ts](#srclibrotasts)
@@ -109,10 +110,14 @@ A ordem em `podeAcessar()` é de propósito: `ehDono() || ehTesteNoTreino() || p
 > volta `permission-denied`. Suporte em dado real continua possível pelo console do
 > Firebase, que não passa por regra.
 >
-> **Trocar o dono de novo é trocar o literal em dois lugares, no mesmo commit:** `ehDono()`
-> no `firestore.rules` e `UID_DONO` no `tests/regras/ambiente.ts`. Trocar só um dos dois
-> derruba todo teste que grava como dono, em `acesso`, `clients` e `vendas`. A conta de
-> testes é o mesmo par: `ehTesteNoTreino()` e `UID_TESTE`. E nenhuma das duas pode herdar o
+> **Trocar o dono de novo é trocar o literal em três lugares, no mesmo commit:** `ehDono()`
+> no `firestore.rules`, `UID_DONO` no `tests/regras/ambiente.ts` e `UID_DONO` no
+> `src/lib/acesso.ts`. Trocar só a regra e o teste de regra derruba todo teste que grava como
+> dono, em `acesso`, `clients` e `vendas`. Esquecer o `src/lib/acesso.ts` não derruba teste
+> de regra nenhum: o dono novo abriria o app, cairia no listener de `membros` como se fosse
+> funcionário e veria "Esta conta não tem acesso a esta loja." — e o dono antigo continuaria
+> reconhecido no app, mas recusado pela regra. A conta de testes é o mesmo trio:
+> `ehTesteNoTreino()`, e `UID_TESTE` nos dois arquivos. E nenhuma das duas pode herdar o
 > UID da outra: se `ehDono()` voltasse ao UID antigo, a conta de testes voltaria a abrir
 > todas as lojas — é isso que os testes `negado` de `acesso — a conta de testes` pegam.
 >
@@ -580,7 +585,7 @@ Projeto com prefixo `demo-`: o SDK reconhece esse prefixo como projeto de emulad
 
 — referente a tests/regras/ambiente.ts, `PROJETO`
 
-`UID_DONO` é o UID real do dono — a conta própria dele, desde 17/10/2026 —, o mesmo literal de `ehDono()` em `firestore.rules`. `UID_TESTE` é a conta de testes do Victor, o mesmo literal de `ehTesteNoTreino()`, e `EMPRESA_TREINO` é a única loja que ela abre. Trocar qualquer uma das duas contas é trocar o literal nos dois arquivos, no mesmo commit; ver a seção firestore.rules.
+`UID_DONO` é o UID real do dono — a conta própria dele, desde 17/10/2026 —, o mesmo literal de `ehDono()` em `firestore.rules`. `UID_TESTE` é a conta de testes do Victor, o mesmo literal de `ehTesteNoTreino()`, e `EMPRESA_TREINO` é a única loja que ela abre. Os três valores existem também em `src/lib/acesso.ts`. Trocar qualquer uma das duas contas é trocar o literal nos três arquivos, no mesmo commit; ver a seção firestore.rules.
 
 — referente a tests/regras/ambiente.ts, `UID_DONO`, `UID_TESTE` e `EMPRESA_TREINO`
 
@@ -950,9 +955,11 @@ aviso: já não entra no saldo.
 ## src/data/ClientesProvider.tsx
 
 O listener compartilhado de **clientes**, montado no `AppShell` autenticado, com
-`businessId` resolvido, para que lista, formulário, Rotas, Financeiro e selo reutilizem a
+`businessId` resolvido e acesso `liberado`, para que lista, formulário, Rotas, Financeiro e selo reutilizem a
 mesma assinatura. `orderBy('numero')` usa o índice automático de campo único;
 `firestore.indexes.json` continua vazio de propósito. Há outros `onSnapshot`:
+`AcessoProvider` monta um no próprio documento de `membros` de quem não é dono (ver a seção
+[src/lib/acesso.ts e src/data/AcessoProvider.tsx](#srclibacessots-e-srcdataacessoprovidertsx)),
 `useCarne` monta três por cliente aberto (página ou painel desktop), e
 `useCarneDaEmpresa` monta os das coleções pedidas enquanto Financeiro ou exportação
 estiverem abertos. Cada efeito devolve o encerramento de suas assinaturas.
@@ -999,6 +1006,61 @@ O efeito não chama `setState` de forma síncrona: `carregando` já nasce `true`
 `react-hooks/set-state-in-effect`, evita um passe de render extra a cada montagem.
 
 — referente a src/data/ClientesProvider.tsx, arquivo inteiro
+
+## src/lib/acesso.ts e src/data/AcessoProvider.tsx
+
+Nascidos em 19/11/2026. O `AppShell` monta o `AcessoProvider` por fora de tudo e decide pelo
+estado dele: `carregando` mostra "Carregando…", `sem-acesso` mostra a mensagem e o botão de
+sair, e só `liberado` monta o `ClientesProvider` e o layout.
+
+**O dono é reconhecido pelo UID literal, sem ler nada.** `ehDonoNoApp(uid, businessId)`
+espelha `ehDono() || ehTesteNoTreino(businessId)` do `firestore.rules`: o dono em qualquer
+loja, a conta de testes só na `loja-treino`. Para essas duas contas o provider entrega
+`liberado` com `PERMISSOES_DO_DONO` no primeiro render, sem listener. É o que mantém o app do
+dono igual ao de antes: abre offline na hora, sem depender de cache de documento nenhum, e não
+gasta leitura. A contrapartida é o UID morar em três lugares — ver o AVISO de troca do dono na
+seção [firestore.rules](#firestorerules).
+
+> **AVISO**
+> **Ausente no cache não é "sem cadastro".** `acessoDoMembro()` só devolve `sem-cadastro`
+> quando o snapshot sem documento veio do **servidor**. Sem documento e `fromCache: true`
+> continua `carregando`: o cache local pode simplesmente nunca ter recebido o documento —
+> primeira abertura no aparelho, ou cache apagado. Tratar isso como `sem-cadastro` trancaria
+> o funcionário para fora a cada abertura, até o servidor responder, e para sempre se estiver
+> offline. O preço é o outro lado: funcionário que nunca abriu o app online neste aparelho, e
+> abre offline, fica em "Carregando…" até a conexão voltar.
+
+Quem já abriu online tem o documento no cache persistente, e o snapshot do cache já libera:
+documento presente vale o que diz, venha de onde vier. `ativo` é lido com `=== true`, como a
+regra lê `.get('ativo', false) == true`: campo ausente ou que não é bool é `desativado`. Cada
+permissão vale `true` só se for exatamente `true`; o resto, inclusive mapa ausente, vale
+`false`. As permissões só escondem telas — ver o AVISO "As permissões não são barreira de
+segurança" em [firestore.rules — membros](#firestorerules--membros).
+
+Erro do listener vira `sem-acesso` com motivo `erro`, e a tela mostra a mesma mensagem de
+`sem-cadastro`: "Esta conta não tem acesso a esta loja." O Firestore encerra o listener depois
+do erro; quem tenta de novo é a próxima abertura do app.
+
+O funcionário lê o próprio documento mesmo desativado (a leitura depende só do uid), então o
+`ativo: false` gravado pelo dono chega como snapshot ao app aberto e a tela fecha, desmontando
+o `ClientesProvider`. Offline, isso só acontece quando a conexão voltar.
+
+Sem `usuario` ou sem `businessId`, o provider não assina nada e fica em `carregando`. Dentro do
+`RequireAuth` isso não acontece; é só para o tipo.
+
+O estado lido fica marcado com a chave `businessId/uid`, e o que pertence a outra chave é
+ignorado na leitura, como no `useCarneDaEmpresa`: trocar de conta ou de empresa volta a
+`carregando` em vez de mostrar o acesso anterior, e o efeito não chama `setState` de forma
+síncrona (`react-hooks/set-state-in-effect`). `{ includeMetadataChanges: true }` pelo mesmo
+motivo do `ClientesProvider`.
+
+**Custo no plano Spark.** Um listener num documento só, para quem não é dono: 1 leitura ao
+abrir online, mais 1 a cada atualização desse documento. A regra de leitura de `membros` não
+chama `membroAtivo()`, então esse listener não paga a leitura extra da regra; ela continua
+sendo cobrada nas requisições do funcionário às quatro coleções. O dono não paga nada.
+
+— referente a src/lib/acesso.ts, `ehDonoNoApp()` e `acessoDoMembro()`;
+src/data/AcessoProvider.tsx; src/components/layout/AppShell.tsx
 
 ## src/lib/exportacao.ts
 
