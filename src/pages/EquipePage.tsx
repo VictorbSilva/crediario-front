@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { SubmitEvent } from 'react'
 import { Plus } from 'lucide-react'
+import { EtiquetasDePermissoes } from '@/components/equipe/EtiquetasDePermissoes'
+import { SeletorDePermissoes } from '@/components/equipe/SeletorDePermissoes'
 import { Campo } from '@/components/ui/Campo'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ModalDeFormulario } from '@/components/ui/ModalDeFormulario'
@@ -11,18 +13,6 @@ import type { Equipe } from '@/data/useEquipe'
 import type { Permissoes } from '@/lib/acesso'
 import { LIMITES_MEMBRO, validarNovoMembro } from '@/lib/equipe'
 import type { EntradaNovoMembro, Membro } from '@/lib/equipe'
-
-// Na ordem e no jeito que o dono fala. O `resumo` é o que vai depois de "Vê:" no cartão.
-const PERMISSOES: ReadonlyArray<{ chave: keyof Permissoes; rotulo: string; resumo: string }> = [
-  { chave: 'financeiro', rotulo: 'Ver o Financeiro geral', resumo: 'Financeiro geral' },
-  { chave: 'caixaDoDia', rotulo: 'Ver o Caixa do dia', resumo: 'Caixa do dia' },
-  { chave: 'exportar', rotulo: 'Exportar dados', resumo: 'Exportar dados' },
-]
-
-function oQueVe(permissoes: Permissoes): string {
-  const vistos = PERMISSOES.filter(({ chave }) => permissoes[chave]).map(({ resumo }) => resumo)
-  return vistos.length > 0 ? `Vê: ${vistos.join(', ')}` : 'Sem acesso ao Financeiro nem a Exportar'
-}
 
 const ENTRADA_VAZIA: EntradaNovoMembro = {
   nome: '',
@@ -35,28 +25,6 @@ type CampoDeTexto = 'nome' | 'email' | 'senha'
 
 const BOTAO_SECUNDARIO =
   'min-h-11 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50'
-
-function CaixasDePermissoes({
-  permissoes,
-  aoMudar,
-}: Readonly<{ permissoes: Permissoes; aoMudar: (permissoes: Permissoes) => void }>) {
-  return (
-    <fieldset className="flex flex-col gap-3">
-      <legend className="mb-1.5 text-sm font-medium text-slate-700">Permissões</legend>
-      {PERMISSOES.map(({ chave, rotulo }) => (
-        <label key={chave} className="flex w-fit cursor-pointer items-center gap-2.5 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={permissoes[chave]}
-            onChange={(evento) => aoMudar({ ...permissoes, [chave]: evento.target.checked })}
-            className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-brand-600"
-          />
-          {rotulo}
-        </label>
-      ))}
-    </fieldset>
-  )
-}
 
 function FormularioNovoFuncionario({
   cadastrar,
@@ -150,7 +118,7 @@ function FormularioNovoFuncionario({
         aoSair={sair('senha')}
       />
 
-      <CaixasDePermissoes
+      <SeletorDePermissoes
         permissoes={entrada.permissoes}
         aoMudar={(permissoes) => setEntrada((atual) => ({ ...atual, permissoes }))}
       />
@@ -181,7 +149,7 @@ function FormularioPermissoes({
       aoEnviar={enviar}
       aoFechar={aoFechar}
     >
-      <CaixasDePermissoes permissoes={permissoes} aoMudar={setPermissoes} />
+      <SeletorDePermissoes permissoes={permissoes} aoMudar={setPermissoes} />
     </ModalDeFormulario>
   )
 }
@@ -282,7 +250,9 @@ export function EquipePage() {
                     {membro.pendente ? <StatusPill tom="marca">Pendente</StatusPill> : null}
                   </div>
                   <div className="mt-0.5 truncate text-sm text-slate-500">{membro.email}</div>
-                  <div className="mt-0.5 text-xs text-slate-500">{oQueVe(membro.permissoes)}</div>
+                  <div className="mt-2">
+                    <EtiquetasDePermissoes permissoes={membro.permissoes} />
+                  </div>
                 </div>
 
                 <div className="flex shrink-0 gap-2">

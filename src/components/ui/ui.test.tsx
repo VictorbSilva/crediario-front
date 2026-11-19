@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { instalarDialogo } from '@/test/dialogo'
 import { Avatar } from './Avatar'
 import { Campo } from './Campo'
+import { Interruptor } from './Interruptor'
 import { Kpi } from './Kpi'
 import { ModalDeFormulario } from './ModalDeFormulario'
 import { Nota } from './Nota'
@@ -105,6 +106,67 @@ describe('Campo', () => {
     render(<Campo {...props} multilinha />)
 
     expect(screen.getByLabelText(/^Nome/).getAttribute('aria-describedby')).toBeNull()
+  })
+})
+
+describe('Interruptor', () => {
+  function montar(props: Partial<Parameters<typeof Interruptor>[0]> = {}) {
+    const aoMudar = vi.fn()
+    render(
+      <>
+        <span id="rotulo">Caixa do dia</span>
+        <Interruptor ligado={false} aoMudar={aoMudar} idDoRotulo="rotulo" {...props} />
+      </>,
+    )
+    return { aoMudar, botao: screen.getByRole('switch', { name: 'Caixa do dia' }) }
+  }
+
+  it('é um botão switch de 48×28, com nome vindo do rótulo e foco visível', () => {
+    const { botao } = montar()
+
+    expect(botao.tagName).toBe('BUTTON')
+    expect(botao.getAttribute('type')).toBe('button')
+    expect(botao.getAttribute('aria-labelledby')).toBe('rotulo')
+    expect(botao.className).toContain('h-7')
+    expect(botao.className).toContain('w-12')
+    expect(botao.className).toContain('focus-visible:ring-2')
+    expect(botao.className).toContain('focus-visible:ring-brand-600')
+    expect(botao.className).toContain('focus-visible:ring-offset-2')
+  })
+
+  it('desligado: aria-checked false, trilho cinza, bolinha à esquerda; o toque pede para ligar', () => {
+    const { aoMudar, botao } = montar()
+    const bolinha = botao.firstElementChild as HTMLElement
+
+    expect(botao.getAttribute('aria-checked')).toBe('false')
+    expect(botao.className).toContain('bg-slate-300')
+    expect(botao.className).not.toContain('bg-brand-600')
+    expect(bolinha.className).toContain('h-[22px]')
+    expect(bolinha.className).toContain('bg-white')
+    expect(bolinha.className).toContain('translate-x-[3px]')
+
+    fireEvent.click(botao)
+    expect(aoMudar).toHaveBeenCalledExactlyOnceWith(true)
+  })
+
+  it('ligado: aria-checked true, trilho da marca, bolinha à direita; o toque pede para desligar', () => {
+    const { aoMudar, botao } = montar({ ligado: true })
+
+    expect(botao.getAttribute('aria-checked')).toBe('true')
+    expect(botao.className).toContain('bg-brand-600')
+    expect(botao.className).not.toContain('bg-slate-300')
+    expect((botao.firstElementChild as HTMLElement).className).toContain('translate-x-[23px]')
+
+    fireEvent.click(botao)
+    expect(aoMudar).toHaveBeenCalledExactlyOnceWith(false)
+  })
+
+  it('desabilitado não muda', () => {
+    const { aoMudar, botao } = montar({ desabilitado: true })
+
+    expect((botao as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(botao)
+    expect(aoMudar).not.toHaveBeenCalled()
   })
 })
 
