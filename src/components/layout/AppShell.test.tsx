@@ -73,8 +73,8 @@ describe('AppShell', () => {
     const [lateral, inferior] = screen.getAllByRole('navigation')
     for (const nav of [lateral, inferior]) {
       const links = within(nav).getAllByRole('link')
-      expect(links.map((l) => l.textContent)).toEqual(['Clientes', 'Rotas', 'Financeiro'])
-      expect(links.map((l) => l.getAttribute('href'))).toEqual(['/clientes', '/rotas', '/financeiro'])
+      expect(links.map((l) => l.textContent)).toEqual(['Clientes', 'Rotas', 'Financeiro', 'Equipe'])
+      expect(links.map((l) => l.getAttribute('href'))).toEqual(['/clientes', '/rotas', '/financeiro', '/equipe'])
     }
     expect(within(lateral).getByRole('link', { name: 'Rotas' }).className).toContain('bg-brand-50')
     expect(within(lateral).getByRole('link', { name: 'Clientes' }).className).not.toContain('bg-brand-50')

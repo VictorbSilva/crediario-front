@@ -129,6 +129,10 @@ export function mensagemDoErroDeCadastro(codigo: string): string {
       return 'Senha fraca: use 6 caracteres ou mais.'
     case 'auth/network-request-failed':
       return 'Sem internet. Criar a conta precisa de conexão.'
+    // A opção "Ativar criação (inscrição)" desligada no console. Ver docs/armadilhas.md,
+    // src/data/criarContaDeFuncionario.ts.
+    case 'auth/admin-restricted-operation':
+      return 'A criação de contas está desligada no Firebase. Ligue em Authentication → Configurações → Ações do usuário.'
     default:
       return 'Não foi possível criar a conta.'
   }
