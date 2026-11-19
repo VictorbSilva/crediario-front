@@ -331,6 +331,31 @@ describe('ModalDeFormulario', () => {
     expect(aoFechar).toHaveBeenCalledTimes(1)
   })
 
+  it('cabecalho aparece abaixo do título, na faixa branca do topo, antes do corpo', () => {
+    render(
+      <ModalDeFormulario titulo="Gerenciar funcionário" rotuloDeEnvio="Salvar" idDoTitulo="t7" cabecalho={<p>dados do membro</p>} aoEnviar={vi.fn()} aoFechar={vi.fn()}>
+        <span>corpo</span>
+      </ModalDeFormulario>,
+    )
+    const titulo = document.getElementById('t7') as HTMLElement
+    const cabecalho = screen.getByText('dados do membro')
+    const faixa = (document.querySelector('form') as HTMLFormElement).firstElementChild as HTMLElement
+
+    expect(faixa.contains(titulo)).toBe(true)
+    expect(faixa.contains(cabecalho)).toBe(true)
+    expect(faixa.contains(screen.getByRole('button', { name: 'Fechar sem salvar' }))).toBe(true)
+    expect(faixa.className).toContain('bg-white')
+    expect(titulo.compareDocumentPosition(cabecalho) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(faixa.contains(screen.getByText('corpo'))).toBe(false)
+  })
+
+  it('sem cabecalho, a faixa do topo só tem o título e o X', () => {
+    montar()
+    const faixa = (document.querySelector('form') as HTMLFormElement).firstElementChild as HTMLElement
+
+    expect(faixa.textContent).toBe('Novo clienteDados da ficha')
+  })
+
   it('sem subtítulo, não desenha a linha vazia', () => {
     render(
       <ModalDeFormulario titulo="Editar" rotuloDeEnvio="Salvar" idDoTitulo="t2" aoEnviar={vi.fn()} aoFechar={vi.fn()}>

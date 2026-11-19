@@ -27,6 +27,7 @@ para localizar o trecho atual, prefira o arquivo e o nome da função indicados.
 - [src/pages/ClientesPage.tsx](#srcpagesclientespagetsx)
 - [src/pages/FinanceiroPage.tsx](#srcpagesfinanceiropagetsx)
 - [src/pages/RotasPage.tsx e src/components/rotas/](#srcpagesrotaspagetsx-e-srccomponentsrotas)
+- [src/pages/EquipePage.tsx](#srcpagesequipepagetsx)
 - [src/components/clientes/FormularioCliente.tsx](#srccomponentsclientesformularioclientetsx)
 - [src/data/useCarne.ts](#srcdatausecarnets)
 - [src/data/ClientesProvider.tsx](#srcdataclientesprovidertsx)
@@ -802,6 +803,24 @@ visitado fica esmaecido só no texto — alça e botões continuam com contraste
 > a correção é segurar a ordem na tela até o snapshot chegar — e não gravar duas vezes.
 
 — referente a src/pages/RotasPage.tsx, src/components/rotas/ e, em src/data/ClientesProvider.tsx, `marcarNaRota` e `reordenarRota`
+
+## src/pages/EquipePage.tsx
+
+Nascido em 19/11/2026. O padrão visual da tela está em `docs/padrao-ui.md`, seção Equipe; aqui
+fica o que não aparece olhando a tela.
+
+> **AVISO**
+> **Um `<dialog>` dentro do outro fecha os dois.** No React 19, fechar um `<dialog>` aninhado
+> na árvore do React dispara também o `onClose` do `<dialog>` de fora: o evento `close` não
+> borbulha no DOM, mas o React o propaga pelos componentes pais. Foi conferido num teste
+> descartável em 19/11/2026. Por isso a `ConfirmarDesativacao` é renderizada **ao lado** do
+> `ModalDeFormulario` do `GerenciarFuncionario`, num fragmento, e não como filha dele. Se ela
+> ficasse dentro do card, tocar em "Voltar" na confirmação fecharia o card junto. O teste
+> `Voltar fecha só a confirmação, sem desativar, e o card continua aberto`, em
+> src/pages/EquipePage.test.tsx, garante isso. Vale para qualquer confirmação nova aberta de
+> dentro de um modal.
+
+— referente a src/pages/EquipePage.tsx, `GerenciarFuncionario` e `ConfirmarDesativacao`
 
 ## src/components/clientes/FormularioCliente.tsx
 

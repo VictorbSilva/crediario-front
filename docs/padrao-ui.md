@@ -79,14 +79,32 @@ Cobrador, tudo ligado é Gerente e qualquer mistura é Personalizado. Cobrador e
 `EtiquetasDePermissoes`, no cartão do membro, abaixo do e-mail. Cada permissão ligada vira uma
 etiqueta
 `inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700`,
-com o ícone da permissão em 14 px. Sem nenhuma ligada, aparece uma etiqueta tracejada,
-`border border-dashed border-slate-300 text-slate-500`, com "Sem permissões extras".
+com o ícone da permissão em 14 px. Sem nenhuma ligada, aparece só o texto "Sem permissões
+extras", em `py-1 text-xs font-semibold text-slate-500`, sem contorno nem fundo e alinhado à
+esquerda do cartão. O contorno tracejado do desenho saiu a pedido do Victor, em 19/11/2026.
+
+### Cartão da lista
+
+Um cartão por membro, `flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3.5`,
+de cima para baixo:
+
+- `Avatar` de 40 px (`h-10 w-10`) com `iniciaisDe(nome)`, destacado quando ativo; ao lado, o
+  nome em `text-[15px] font-semibold` (cinza, `text-slate-600`, quando desativado), o
+  `StatusPill` Ativo (sucesso) ou Desativado (neutro), "Pendente" (marca) quando há gravação
+  sem confirmação, e o e-mail em `text-[13px] text-slate-500 truncate`;
+- `EtiquetasDePermissoes`, só para quem está ativo;
+- um único botão secundário "Gerenciar", alinhado à direita, com texto `text-brand-600` e
+  `aria-label` "Gerenciar {nome}", para o leitor de tela saber de quem é cada botão.
+
+Desativar, reativar e mudar permissões ficam todos dentro do card "Gerenciar funcionário",
+nunca soltos no cartão.
 
 ### Botões
 
 - Primário: `bg-brand-600`, texto branco.
 - Secundário: `border border-slate-200 bg-white`.
 - Perigo: `border border-red-200 text-danger`.
+- Desabilitado (envio do modal): `disabled:bg-slate-200 disabled:text-slate-600`.
 
 ### Toque
 
@@ -95,5 +113,70 @@ Todo alvo de toque tem no mínimo 44 px de altura (`min-h-11`). A linha de permi
 
 ### Modal
 
-Os dois modais da Equipe usam `ModalDeFormulario`: tela cheia no celular e caixa no
-computador, com o rodapé fixo e o botão de salvar sempre visível, acima da barra do iPhone.
+Os modais da Equipe usam `ModalDeFormulario`: tela cheia no celular e caixa no computador,
+com o rodapé fixo e o botão de salvar sempre visível, acima da barra do iPhone. Sem as props
+opcionais abaixo, ele é o mesmo de todos os formulários do app: X "Fechar sem salvar" no topo e
+"Cancelar" mais o botão de envio no rodapé.
+
+| Prop | O que faz |
+| --- | --- |
+| `envioDesabilitado` | Desabilita só o botão de envio. Cancelar e o X continuam fechando. |
+| `rodape` | Conteúdo no rodapé fixo, acima dos botões (aviso de internet, "Alterações não salvas."). |
+| `acoes` | Substitui "Cancelar" e o botão de envio. Botões aqui são `type="button"`. |
+| `rotuloDeFechar` | O `aria-label` do X. O padrão é "Fechar sem salvar". |
+| `cabecalho` | Conteúdo abaixo do título, ainda na faixa branca do topo. |
+
+O miolo fica dentro de um `<form>`: todo botão que não envia é `type="button"`.
+
+### Novo funcionário
+
+- Seção "Acesso" (título de seção) com um cartão branco
+  (`rounded-xl border border-slate-200 bg-white p-4`) com Nome, E-mail e `CampoDeSenha`. Abaixo,
+  o `SeletorDePermissoes`.
+- `CampoDeSenha` (`src/components/equipe/CampoDeSenha.tsx`): rótulo "Senha", botão de olho
+  dentro do campo ("Mostrar a senha" e "Esconder a senha", alternando `type` entre password e
+  text) e botão "Gerar" ao lado, com `RefreshCw`, que preenche com `gerarSenha()` e mostra a
+  senha. A dica é "Mínimo de 6 caracteres. No fim, você vê a senha de novo para enviar a ele.".
+  Continua `autoComplete="new-password"` mesmo visível, para o navegador não preencher a senha
+  salva do dono, e sem maiúscula automática, correção nem verificação ortográfica.
+- No `rodape`, o ícone `Wifi` com "Criar a conta precisa de internet.", em
+  `text-[13px] text-slate-500`. Sem internet (`useEstaOnline`), o texto vira "Sem internet agora.
+  Conecte para criar a conta." e o envio fica desabilitado com o rótulo "Sem internet".
+
+### Conta criada
+
+Criada a conta, o mesmo `<dialog>` troca o conteúdo: o `FormularioNovoFuncionario` devolve o
+mesmo `ModalDeFormulario` na mesma posição, e o React reaproveita o diálogo aberto.
+
+- Título "Conta criada" e o nome como subtítulo; `rotuloDeFechar="Fechar"`; `acoes` com um só
+  botão secundário "Concluir", de largura inteira.
+- Miolo `ContaCriada` (`src/components/equipe/ContaCriada.tsx`): `CircleCheck` num círculo
+  `h-14 w-14 rounded-full bg-success-soft text-success`, o título "A conta de {primeiro nome}
+  está pronta", o aviso de que a senha só aparece desta vez, um cartão com E-mail e Senha
+  (cada um com botão de copiar só com ícone, de 44 px), a caixa cinza "Mensagem pronta"
+  (`bg-slate-100 whitespace-pre-line`), o link primário "Enviar pelo WhatsApp" e o botão
+  secundário "Copiar mensagem".
+- Todos os botões são `type="button"`, porque estão dentro do `<form>`.
+- Copiar usa `navigator.clipboard.writeText` e o botão mostra "Copiado" por 2 s. Se falhar, ou
+  se o navegador não tiver a área de transferência, aparece "Não deu para copiar. Selecione o
+  texto e copie.".
+
+### Gerenciar funcionário
+
+- Título "Gerenciar funcionário" e, no `cabecalho`, o `CabecalhoDoMembro`
+  (`src/components/equipe/CabecalhoDoMembro.tsx`): `Avatar` de 48 px (`h-12 w-12 text-base`),
+  destacado quando ativo, o nome em `text-base font-semibold`, o `StatusPill`, "Pendente" e o
+  e-mail em `text-[13px] text-slate-500 truncate`. O card recebe o membro da lista, então o
+  cabeçalho acompanha o servidor com o card aberto; os interruptores guardam o que foi mexido.
+- O miolo é o `SeletorDePermissoes`. "Salvar alterações" fica com `envioDesabilitado` enquanto
+  `mesmasPermissoes(atuais, do membro)`, e o `rodape` diz "Nenhuma alteração para salvar." ou
+  "Alterações não salvas.", em `text-xs text-slate-500`.
+- Membro ativo: seção "Zona de risco", com o título de seção em `text-danger` e um cartão
+  `rounded-xl border border-red-200 bg-white p-3.5`: "Desativar o acesso de {primeiro nome}", o
+  texto em `text-[13px] text-slate-500` e o botão de perigo "Desativar acesso", que abre a
+  confirmação. Ver `docs/armadilhas.md`, src/pages/EquipePage.tsx.
+- Membro desativado: no lugar da zona de risco, a seção "Acesso desativado", com o texto
+  "{primeiro nome} não entra no app. Ao reativar, volta com as permissões marcadas acima." e o
+  botão secundário "Reativar acesso".
+- Desativar e reativar gravam e fecham o card. Se os interruptores foram mexidos, as permissões
+  são gravadas antes, para a mudança não se perder sem aviso.

@@ -1,10 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { SubmitEvent } from 'react'
 import { Plus, Wifi } from 'lucide-react'
+import { CabecalhoDoMembro } from '@/components/equipe/CabecalhoDoMembro'
 import { CampoDeSenha } from '@/components/equipe/CampoDeSenha'
 import { ContaCriada } from '@/components/equipe/ContaCriada'
 import { EtiquetasDePermissoes } from '@/components/equipe/EtiquetasDePermissoes'
 import { SeletorDePermissoes } from '@/components/equipe/SeletorDePermissoes'
+import { Avatar } from '@/components/ui/Avatar'
 import { Campo } from '@/components/ui/Campo'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ModalDeFormulario } from '@/components/ui/ModalDeFormulario'
@@ -14,8 +16,9 @@ import { useEquipe } from '@/data/useEquipe'
 import type { Equipe } from '@/data/useEquipe'
 import { useEstaOnline } from '@/data/useEstaOnline'
 import type { Permissoes } from '@/lib/acesso'
-import { LIMITES_MEMBRO, normalizarEmail, validarNovoMembro } from '@/lib/equipe'
+import { LIMITES_MEMBRO, mesmasPermissoes, normalizarEmail, primeiroNome, validarNovoMembro } from '@/lib/equipe'
 import type { EntradaNovoMembro, Membro } from '@/lib/equipe'
+import { iniciaisDe } from '@/lib/texto'
 
 const ENTRADA_VAZIA: EntradaNovoMembro = {
   nome: '',
@@ -167,31 +170,108 @@ function FormularioNovoFuncionario({
   )
 }
 
-function FormularioPermissoes({
+const TITULO_DE_SECAO = 'text-xs font-bold uppercase tracking-wider'
+
+function GerenciarFuncionario({
   membro,
   aoSalvar,
+  aoDefinirAtivo,
   aoFechar,
-}: Readonly<{ membro: Membro; aoSalvar: (permissoes: Permissoes) => void; aoFechar: () => void }>) {
+}: Readonly<{
+  membro: Membro
+  aoSalvar: (permissoes: Permissoes) => void
+  aoDefinirAtivo: (ativo: boolean) => void
+  aoFechar: () => void
+}>) {
   const base = useId()
   const [permissoes, setPermissoes] = useState<Permissoes>(() => ({ ...membro.permissoes }))
+  const [confirmando, setConfirmando] = useState(false)
+
+  const semMudanca = mesmasPermissoes(permissoes, membro.permissoes)
 
   function enviar(evento: SubmitEvent<HTMLFormElement>) {
     evento.preventDefault()
+    if (semMudanca) return
     aoSalvar(permissoes)
     aoFechar()
   }
 
+  // Desativar e reativar fecham o card: o que foi mexido nos interruptores vai antes,
+  // para não se perder sem aviso.
+  function definirAtivo(ativo: boolean) {
+    if (!semMudanca) aoSalvar(permissoes)
+    aoDefinirAtivo(ativo)
+    aoFechar()
+  }
+
+  // A confirmação fica ao lado do card, não dentro: o `onClose` de um `<dialog>` dentro
+  // do outro subiria pela árvore do React e fecharia o card junto.
   return (
-    <ModalDeFormulario
-      titulo="Permissões"
-      subtitulo={membro.nome}
-      rotuloDeEnvio="Salvar permissões"
-      idDoTitulo={base + '-titulo'}
-      aoEnviar={enviar}
-      aoFechar={aoFechar}
-    >
-      <SeletorDePermissoes permissoes={permissoes} aoMudar={setPermissoes} />
-    </ModalDeFormulario>
+    <>
+      <ModalDeFormulario
+        titulo="Gerenciar funcionário"
+        cabecalho={<CabecalhoDoMembro membro={membro} />}
+        rotuloDeEnvio="Salvar alterações"
+        idDoTitulo={base + '-titulo'}
+        envioDesabilitado={semMudanca}
+        rodape={
+          <p aria-live="polite" className="text-xs text-slate-500">
+            {semMudanca ? 'Nenhuma alteração para salvar.' : 'Alterações não salvas.'}
+          </p>
+        }
+        aoEnviar={enviar}
+        aoFechar={aoFechar}
+      >
+        <SeletorDePermissoes permissoes={permissoes} aoMudar={setPermissoes} />
+
+        {membro.ativo ? (
+          <section aria-labelledby={base + '-risco'} className="flex flex-col gap-2.5">
+            <h3 id={base + '-risco'} className={TITULO_DE_SECAO + ' text-danger'}>
+              Zona de risco
+            </h3>
+            <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-white p-3.5">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">
+                  Desativar o acesso de {primeiroNome(membro.nome)}
+                </div>
+                <p className="mt-0.5 text-[13px] text-slate-500">
+                  Fica sem acesso aos dados da loja na hora. A conta não é apagada e dá para reativar
+                  depois.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmando(true)}
+                className="min-h-11 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-danger transition-colors hover:bg-danger-soft"
+              >
+                Desativar acesso
+              </button>
+            </div>
+          </section>
+        ) : (
+          <section aria-labelledby={base + '-desativado'} className="flex flex-col gap-2.5">
+            <h3 id={base + '-desativado'} className={TITULO_DE_SECAO + ' text-slate-600'}>
+              Acesso desativado
+            </h3>
+            <p className="text-[13px] text-slate-500">
+              {primeiroNome(membro.nome)} não entra no app. Ao reativar, volta com as permissões marcadas
+              acima.
+            </p>
+            <button type="button" onClick={() => definirAtivo(true)} className={BOTAO_SECUNDARIO}>
+              Reativar acesso
+            </button>
+          </section>
+        )}
+      </ModalDeFormulario>
+
+      {confirmando ? (
+        <ConfirmarDesativacao
+          membro={membro}
+          aoConfirmar={() => definirAtivo(false)}
+          aoFechar={() => setConfirmando(false)}
+        />
+      ) : null}
+    </>
   )
 }
 
@@ -247,8 +327,9 @@ export function EquipePage() {
   const { membros, carregando, erro, cadastrar, alterarPermissoes, definirAtivo } = useEquipe()
 
   const [cadastrando, setCadastrando] = useState(false)
-  const [editando, setEditando] = useState<Membro | null>(null)
-  const [desativando, setDesativando] = useState<Membro | null>(null)
+  // Só o uid: o card recebe o membro da lista, para o cabeçalho acompanhar o servidor.
+  const [editandoUid, setEditandoUid] = useState<string | null>(null)
+  const editando = editandoUid === null ? undefined : membros.find((membro) => membro.uid === editandoUid)
 
   return (
     <>
@@ -280,44 +361,36 @@ export function EquipePage() {
       ) : (
         <ul className="flex flex-col gap-2">
           {membros.map((membro) => (
-            <li key={membro.uid} className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
+            <li key={membro.uid} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3.5">
+              <div className="flex items-center gap-3">
+                <Avatar iniciais={iniciaisDe(membro.nome)} destacado={membro.ativo} className="h-10 w-10" />
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-slate-900">{membro.nome}</span>
+                    <span
+                      className={`text-[15px] font-semibold ${membro.ativo ? 'text-slate-900' : 'text-slate-600'}`}
+                    >
+                      {membro.nome}
+                    </span>
                     <StatusPill tom={membro.ativo ? 'sucesso' : 'neutro'}>
                       {membro.ativo ? 'Ativo' : 'Desativado'}
                     </StatusPill>
                     {membro.pendente ? <StatusPill tom="marca">Pendente</StatusPill> : null}
                   </div>
-                  <div className="mt-0.5 truncate text-sm text-slate-500">{membro.email}</div>
-                  <div className="mt-2">
-                    <EtiquetasDePermissoes permissoes={membro.permissoes} />
-                  </div>
+                  <div className="mt-0.5 truncate text-[13px] text-slate-500">{membro.email}</div>
                 </div>
+              </div>
 
-                <div className="flex shrink-0 gap-2">
-                  <button type="button" onClick={() => setEditando(membro)} className={BOTAO_SECUNDARIO}>
-                    Permissões
-                  </button>
-                  {membro.ativo ? (
-                    <button
-                      type="button"
-                      onClick={() => setDesativando(membro)}
-                      className="min-h-11 rounded-lg border border-danger/30 bg-white px-4 text-sm font-semibold text-danger transition-colors hover:bg-danger-soft"
-                    >
-                      Desativar
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => definirAtivo(membro.uid, true)}
-                      className={BOTAO_SECUNDARIO}
-                    >
-                      Reativar
-                    </button>
-                  )}
-                </div>
+              {membro.ativo ? <EtiquetasDePermissoes permissoes={membro.permissoes} /> : null}
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  aria-label={`Gerenciar ${membro.nome}`}
+                  onClick={() => setEditandoUid(membro.uid)}
+                  className="min-h-11 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-600 transition-colors hover:bg-slate-50"
+                >
+                  Gerenciar
+                </button>
               </div>
             </li>
           ))}
@@ -328,17 +401,11 @@ export function EquipePage() {
         <FormularioNovoFuncionario cadastrar={cadastrar} aoFechar={() => setCadastrando(false)} />
       ) : null}
       {editando ? (
-        <FormularioPermissoes
+        <GerenciarFuncionario
           membro={editando}
           aoSalvar={(permissoes) => alterarPermissoes(editando.uid, permissoes)}
-          aoFechar={() => setEditando(null)}
-        />
-      ) : null}
-      {desativando ? (
-        <ConfirmarDesativacao
-          membro={desativando}
-          aoConfirmar={() => definirAtivo(desativando.uid, false)}
-          aoFechar={() => setDesativando(null)}
+          aoDefinirAtivo={(ativo) => definirAtivo(editando.uid, ativo)}
+          aoFechar={() => setEditandoUid(null)}
         />
       ) : null}
     </>
