@@ -9,7 +9,7 @@ function membro(permissoes: Permissoes): Acesso {
 const rotulos = (acesso: Acesso) => itensDeNavegacao(acesso).map(({ label }) => label)
 
 describe('itensDeNavegacao', () => {
-  it('o dono vê os três itens, na ordem de navItems', () => {
+  it('o dono vê todos os itens, na ordem de navItems', () => {
     const dono: Acesso = {
       estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true },
     }

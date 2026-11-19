@@ -7,7 +7,7 @@ type CampoProps = Readonly<{
   dica?: string
   obrigatorio?: boolean
   multilinha?: boolean
-  tipo?: 'text' | 'date'
+  tipo?: 'text' | 'date' | 'password'
   inputMode?: 'numeric' | 'decimal' | 'tel' | 'text'
   focoInicial?: boolean
   aoMudar: (valor: string) => void

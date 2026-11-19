@@ -20,6 +20,7 @@ vi.mock('@/pages/ClientesPage', () => ({ ClientesPage: () => <p>página de clien
 vi.mock('@/pages/ClientePage', () => ({ ClientePage: () => <p>página de um cliente</p> }))
 vi.mock('@/pages/RotasPage', () => ({ RotasPage: () => <p>página de rotas</p> }))
 vi.mock('@/pages/FinanceiroPage', () => ({ FinanceiroPage: () => <p>página do financeiro</p> }))
+vi.mock('@/pages/EquipePage', () => ({ EquipePage: () => <p>página da equipe</p> }))
 
 function abrir(caminho: string) {
   window.history.replaceState(null, '', caminho)
@@ -53,6 +54,7 @@ describe('App — rotas', () => {
     ['/clientes/ana', 'página de um cliente'],
     ['/rotas', 'página de rotas'],
     ['/financeiro', 'página do financeiro'],
+    ['/equipe', 'página da equipe'],
   ])('%s abre a %s', (caminho, pagina) => {
     abrir(caminho)
 
@@ -89,6 +91,17 @@ describe('App — guarda do financeiro', () => {
     abrir('/financeiro')
 
     expect(screen.queryByText('página do financeiro')).toBeNull()
+    expect(screen.getByText('página de clientes')).toBeTruthy()
+    expect(window.location.pathname).toBe('/clientes')
+  })
+})
+
+describe('App — guarda da equipe', () => {
+  it('membro que digita /equipe cai na lista de clientes, mesmo com todas as permissões', () => {
+    simulado.acesso = membro({ financeiro: true, caixaDoDia: true, exportar: true })
+    abrir('/equipe')
+
+    expect(screen.queryByText('página da equipe')).toBeNull()
     expect(screen.getByText('página de clientes')).toBeTruthy()
     expect(window.location.pathname).toBe('/clientes')
   })
