@@ -10,8 +10,10 @@ import {
   UID_INTRUSO,
   UID_TESTE,
   caminhoCliente,
+  caminhoMembro,
   clienteValido,
   criarAmbiente,
+  membroValido,
   veredito,
 } from './ambiente.ts'
 
@@ -166,6 +168,50 @@ describe('acesso — funcionário com claim businessId', () => {
   it('não escreve no documento da empresa — isso é só do dono', async () => {
     const contexto = ambiente.authenticatedContext('funcionario-1', { businessId: EMPRESA })
     expect(await veredito(setDoc(doc(bancoDe(contexto), `businesses/${EMPRESA}`), { nome: 'Loja renomeada' }))).toBe('negado')
+  })
+})
+
+async function semearMembro(uid: string, empresa = EMPRESA, ativo = true) {
+  await ambiente.withSecurityRulesDisabled(async (contexto) => {
+    await setDoc(doc(bancoDe(contexto), caminhoMembro(uid, empresa)), {
+      ...membroValido({ ativo }),
+      criadoEm: new Date('2026-11-01T12:00:00Z'),
+      atualizadoEm: new Date('2026-11-01T12:00:00Z'),
+    })
+  })
+}
+
+describe('acesso — funcionário via membros', () => {
+  // Sem claim nenhum: é a situação real do funcionário em produção, onde só o
+  // documento em membros/{uid} abre a porta.
+  it('membro ativo lê e cria cliente', async () => {
+    await semearMembro('funcionario-1')
+    await semearCliente('c1')
+    const banco = bancoDe(ambiente.authenticatedContext('funcionario-1', {}))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1'))))).toBe('permitido')
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c2')), clienteValido()))).toBe('permitido')
+  })
+
+  it('membro com ativo: false não lê nem cria cliente', async () => {
+    await semearMembro('funcionario-1', EMPRESA, false)
+    await semearCliente('c1')
+    const banco = bancoDe(ambiente.authenticatedContext('funcionario-1', {}))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1'))))).toBe('negado')
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c2')), clienteValido()))).toBe('negado')
+  })
+
+  it('membro de outra empresa não alcança esta', async () => {
+    await semearMembro('funcionario-1', OUTRA_EMPRESA)
+    await semearCliente('c1')
+    const banco = bancoDe(ambiente.authenticatedContext('funcionario-1', {}))
+    expect(await veredito(getDoc(doc(banco, caminhoCliente('c1'))))).toBe('negado')
+    expect(await veredito(setDoc(doc(banco, caminhoCliente('c2')), clienteValido()))).toBe('negado')
+  })
+
+  it('membro ativo não escreve no documento da empresa — isso é só do dono', async () => {
+    await semearMembro('funcionario-1')
+    const banco = bancoDe(ambiente.authenticatedContext('funcionario-1', {}))
+    expect(await veredito(setDoc(doc(banco, `businesses/${EMPRESA}`), { nome: 'Loja renomeada' }))).toBe('negado')
   })
 })
 

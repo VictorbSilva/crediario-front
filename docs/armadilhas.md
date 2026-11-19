@@ -19,6 +19,7 @@ para localizar o trecho atual, prefira o arquivo e o nome da função indicados.
 
 - [firestore.rules](#firestorerules)
 - [firestore.rules — sales, installments e payments](#firestorerules--sales-installments-e-payments)
+- [firestore.rules — membros](#firestorerules--membros)
 - [tests/regras/ambiente.ts — `veredito`](#testsregrasambientets--veredito)
 - [tests/regras/ambiente.ts](#testsregrasambientets)
 - [tests/regras/clients.test.ts](#testsregrasclientstestts)
@@ -93,7 +94,9 @@ para localizar o trecho atual, prefira o arquivo e o nome da função indicados.
 
 Este projeto não tem Cloud Functions e não vai ter (plano Spark), nem service account: não existe credencial administrativa que ignore estas regras. Elas são a validação completa dos dados, não a primeira de várias camadas.
 
-**ACESSO, HOJE:** duas contas abrem porta, as duas por UID literal e nenhuma por claim. `ehDono()` é a conta do dono (`zQKH3lJ6mtYu5uE32PeHcUGZEEs1`, conta própria dele desde 17/10/2026) e abre todas as lojas. `ehTesteNoTreino(businessId)` é a conta de testes do Victor (`B3HGx0RggpXWzy400742432aLw72`, que até 17/10/2026 era o literal de `ehDono()`) e abre só `loja-treino`. `pertenceAEmpresa()` depende do custom claim `businessId`, e custom claim só o Admin SDK grava — que este projeto não tem. O caminho do funcionário está escrito e testado (o emulador forja o claim à vontade), mas não tem como existir em produção. Múltiplos usuários são atualização pós-MVP.
+**ACESSO, HOJE:** três caminhos abrem porta, e nenhum deles é claim. `ehDono()` é a conta do dono (`zQKH3lJ6mtYu5uE32PeHcUGZEEs1`, conta própria dele desde 17/10/2026) e abre todas as lojas. `ehTesteNoTreino(businessId)` é a conta de testes do Victor (`B3HGx0RggpXWzy400742432aLw72`, que até 17/10/2026 era o literal de `ehDono()`) e abre só `loja-treino`. As duas são UID literal. Desde 19/11/2026, `membroAtivo(businessId)` abre a loja para a conta cujo uid tem documento em `businesses/{businessId}/membros/{uid}` com `ativo: true`: é o caminho do funcionário, e custa 1 leitura por requisição dele (ver a seção [firestore.rules — membros](#firestorerules--membros)). `pertenceAEmpresa()` depende do custom claim `businessId`, e custom claim só o Admin SDK grava — que este projeto não tem. Ele continua escrito e testado (o emulador forja o claim à vontade), mas não tem como existir em produção.
+
+A ordem em `podeAcessar()` é de propósito: `ehDono() || ehTesteNoTreino() || pertenceAEmpresa() || membroAtivo()`. O `||` das regras para no primeiro verdadeiro, então o `get()` de `membroAtivo()` só roda quando nenhum dos outros abriu. O dono e a conta de testes não pagam leitura extra. Pôr `membroAtivo()` na frente cobraria 1 leitura a mais em cada requisição do dono.
 
 > **AVISO**
 > **A conta de testes fica presa à `loja-treino` de propósito.** Ela existe para suporte e
@@ -472,6 +475,81 @@ teste `cancela uma venda com versaoCalculo 3`. Ler `anterior().primeiroVenciment
 
 — referente a firestore.rules, `match /sales/{saleId}`, e tests/regras/vendas.test.ts,
 `describe('sales — primeira parcela escolhida (versão 3)')`
+
+## firestore.rules — membros
+
+Nascida em 19/11/2026, com regra e teste no mesmo commit. `businesses/{businessId}/membros/{uid}`
+é a equipe da loja: o **id do documento é o uid da conta do Firebase Auth do funcionário**. É
+o que permite à regra achar o documento sem consulta, com o caminho montado a partir de
+`request.auth.uid`.
+
+Campos, todos obrigatórios e numa lista fechada:
+
+- `nome` — string de 1 a 80 caracteres.
+- `email` — string de 3 a 254 caracteres que casa com `^[^@\s]+@[^@\s]+$`: um `@` só, sem
+  espaço. Imutável depois de criado.
+- `ativo` — bool. É o que abre ou fecha a loja para o funcionário.
+- `permissoes` — mapa com exatamente `financeiro`, `caixaDoDia` e `exportar`, os três bool.
+  Chave a mais ou a menos é negada.
+- `criadoEm`, `atualizadoEm`, `atualizadoPor` — os mesmos carimbos e a mesma autoria das outras
+  coleções. `criadoEm` é imutável.
+
+**Quem faz o quê:**
+
+| Quem                                  | Lê                         | Cria e altera | Apaga |
+| ------------------------------------- | -------------------------- | ------------- | ----- |
+| dono (`ehDono()`)                     | todos, em qualquer loja    | sim           | não   |
+| conta de testes, na `loja-treino`     | todos                      | sim           | não   |
+| conta de testes, em outra loja        | nada                       | não           | não   |
+| funcionário                           | só o próprio documento     | não           | não   |
+| intruso, sem autenticação             | nada                       | não           | não   |
+
+O funcionário lê o próprio documento mesmo desativado: a leitura depende só do uid, não de
+`ativo`. Ele não lista a equipe e não escreve em membro nenhum, nem no próprio: se pudesse, bastava um `update`
+para se dar `financeiro: true` ou se reativar. Não há `delete`, pelo mesmo motivo do resto do
+projeto: desligar um funcionário é `ativo: false`, e o documento continua lá como histórico.
+
+> **AVISO**
+> **As permissões não são barreira de segurança.** `financeiro`, `caixaDoDia` e `exportar` só
+> escondem telas no app. A regra das quatro coleções confere apenas se a conta é membro ativo,
+> porque o funcionário precisa ler `sales` e `payments` para ver o carnê do cliente que está
+> cobrando. Um funcionário com `financeiro: false` que chame a API direto lê as vendas e os
+> pagamentos da loja toda. Se um dia for preciso barrar isso de verdade, a mudança é na regra
+> de cada coleção, não no mapa.
+
+**Custo no plano Spark.** `membroAtivo()` faz `exists()` e `get()` do documento do membro, e
+isso conta **1 leitura por requisição do funcionário**, somada às leituras dos documentos que
+ele pediu. Para o dono não muda nada, pela ordem de `podeAcessar()` explicada em "ACESSO,
+HOJE", acima. `ativo` é lido com `.get('ativo', false) == true`: documento sem o campo (que só
+o console consegue gravar) ou com valor que não é bool não abre a porta.
+
+> **AVISO**
+> **Desativar barra as escritas na hora, mas não fecha um listener já aberto.** Cada escrita
+> reavalia a regra, então a primeira depois do `ativo: false` volta `permission-denied`,
+> inclusive as que estavam na fila offline e só sobem depois. Um listener aberto antes da
+> desativação pode continuar recebendo atualizações até o app ser reaberto.
+
+> **AVISO**
+> **A regra não confere que `email` é o e-mail da conta `uid`.** Quem grava é o dono, e a regra
+> só vê o token dele, não o do funcionário. O vínculo entre o uid e a conta certa é
+> responsabilidade de quem cadastra.
+
+> **AVISO**
+> **Ordem de publicação.** A regra é publicada à mão (`firebase deploy --only firestore:rules`)
+> e **antes** de qualquer código gravar ou ler `membros`. O `firestore.rules` é um arquivo só e
+> o deploy publica o arquivo inteiro da branch em que se está: publicar de uma branch que não
+> tem uma regra já no ar apaga essa regra.
+
+Nos testes, `caminhoMembro(uid, empresa)` e `membroValido(extra)` estão em
+`tests/regras/ambiente.ts`. `membroValido()` é o documento que passa (testes `cria um membro` e
+`aceita nome com 80 caracteres`), e os testes de campo estragam um campo por vez a partir dele,
+como `clienteValido()`. Os membros semeados com `withSecurityRulesDisabled` levam `criadoEm` em
+data fixa, para o teste `recusa trocar criadoEm no update` comparar com um valor diferente de
+`request.time`.
+
+— referente a firestore.rules, `membroAtivo()` e `match /membros/{uid}`;
+tests/regras/membros.test.ts; tests/regras/acesso.test.ts,
+`describe('acesso — funcionário via membros')`
 
 ## tests/regras/ambiente.ts — `veredito`
 
