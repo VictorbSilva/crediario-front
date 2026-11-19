@@ -103,6 +103,27 @@ describe('EquipePage — lista', () => {
     expect(within(cartao('Ana Lima')).queryByText('Pendente')).toBeNull()
   })
 
+  it('mostra o que cada membro vê, na ordem das permissões', () => {
+    simulado.equipe = equipe({
+      membros: [
+        membro('caio', 'Caio Melo', { permissoes: { financeiro: false, caixaDoDia: true, exportar: true } }),
+        membro('dora', 'Dora Luz', { permissoes: { financeiro: true, caixaDoDia: false, exportar: false } }),
+      ],
+    })
+    render(<EquipePage />)
+
+    expect(within(cartao('Caio Melo')).getByText('Vê: Caixa do dia, Exportar dados')).toBeTruthy()
+    expect(within(cartao('Dora Luz')).getByText('Vê: Financeiro geral')).toBeTruthy()
+  })
+
+  it('sem nenhuma permissão, diz que não vê Financeiro nem Exportar', () => {
+    render(<EquipePage />)
+
+    const bruno = cartao('Bruno Reis')
+    expect(within(bruno).getByText('Sem acesso ao Financeiro nem a Exportar')).toBeTruthy()
+    expect(within(bruno).queryByText(/^Vê:/)).toBeNull()
+  })
+
   it('avisa enquanto carrega e quando não há ninguém', () => {
     simulado.equipe = equipe({ membros: [], carregando: true })
     const { rerender } = render(<EquipePage />)
@@ -134,6 +155,32 @@ describe('EquipePage — novo funcionário', () => {
     }
     expect(within(dialogo).getByText(/precisa de internet/)).toBeTruthy()
     expect(within(dialogo).getByText(/Esqueci minha senha/)).toBeTruthy()
+  })
+
+  it('a senha pede "new-password", para o navegador não preencher a senha salva do dono', () => {
+    render(<EquipePage />)
+    abrirCadastro()
+
+    expect(campo(/^Senha/).getAttribute('autocomplete')).toBe('new-password')
+    expect(campo(/^Nome/).getAttribute('autocomplete')).toBe('off')
+    expect(campo(/^E-mail/).getAttribute('autocomplete')).toBe('off')
+  })
+
+  it('o e-mail abre o teclado de e-mail, sem maiúscula, correção nem verificação ortográfica', () => {
+    render(<EquipePage />)
+    abrirCadastro()
+
+    const email = campo(/^E-mail/)
+    expect(email.getAttribute('inputmode')).toBe('email')
+    expect(email.getAttribute('autocapitalize')).toBe('none')
+    expect(email.getAttribute('autocorrect')).toBe('off')
+    expect(email.getAttribute('spellcheck')).toBe('false')
+
+    const nome = campo(/^Nome/)
+    expect(nome.getAttribute('inputmode')).toBe('text')
+    expect(nome.hasAttribute('autocapitalize')).toBe(false)
+    expect(nome.hasAttribute('autocorrect')).toBe(false)
+    expect(nome.hasAttribute('spellcheck')).toBe(false)
   })
 
   it('mostra o erro de validação no campo e não cadastra', () => {

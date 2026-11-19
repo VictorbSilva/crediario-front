@@ -8,7 +8,7 @@ type CampoProps = Readonly<{
   obrigatorio?: boolean
   multilinha?: boolean
   tipo?: 'text' | 'date' | 'password'
-  inputMode?: 'numeric' | 'decimal' | 'tel' | 'text'
+  inputMode?: 'numeric' | 'decimal' | 'tel' | 'text' | 'email'
   focoInicial?: boolean
   aoMudar: (valor: string) => void
   aoSair: () => void
@@ -29,6 +29,12 @@ export function Campo({
   aoMudar,
   aoSair,
 }: CampoProps) {
+  // Navegador ignora "off" em campo de senha e pode preencher a senha salva de quem
+  // está logado; "new-password" diz que é uma senha nova.
+  const autoComplete = tipo === 'password' ? 'new-password' : 'off'
+  // No celular, e-mail sem maiúscula automática nem correção que troca o endereço.
+  const email = inputMode === 'email'
+
   const idErro = id + '-erro'
   const idDica = id + '-dica'
   const descrito = [erro ? idErro : null, dica ? idDica : null].filter(Boolean).join(' ')
@@ -66,7 +72,10 @@ export function Campo({
           inputMode={tipo === 'date' ? undefined : inputMode}
           maxLength={maxLength}
           autoFocus={focoInicial}
-          autoComplete="off"
+          autoComplete={autoComplete}
+          autoCapitalize={email ? 'none' : undefined}
+          autoCorrect={email ? 'off' : undefined}
+          spellCheck={email ? false : undefined}
           aria-invalid={erro ? true : undefined}
           aria-describedby={descrito || undefined}
           onChange={(evento) => aoMudar(evento.target.value)}

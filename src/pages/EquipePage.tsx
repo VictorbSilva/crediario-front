@@ -12,12 +12,17 @@ import type { Permissoes } from '@/lib/acesso'
 import { LIMITES_MEMBRO, validarNovoMembro } from '@/lib/equipe'
 import type { EntradaNovoMembro, Membro } from '@/lib/equipe'
 
-// Na ordem e no jeito que o dono fala.
-const PERMISSOES: ReadonlyArray<{ chave: keyof Permissoes; rotulo: string }> = [
-  { chave: 'financeiro', rotulo: 'Ver o Financeiro geral' },
-  { chave: 'caixaDoDia', rotulo: 'Ver o Caixa do dia' },
-  { chave: 'exportar', rotulo: 'Exportar dados' },
+// Na ordem e no jeito que o dono fala. O `resumo` é o que vai depois de "Vê:" no cartão.
+const PERMISSOES: ReadonlyArray<{ chave: keyof Permissoes; rotulo: string; resumo: string }> = [
+  { chave: 'financeiro', rotulo: 'Ver o Financeiro geral', resumo: 'Financeiro geral' },
+  { chave: 'caixaDoDia', rotulo: 'Ver o Caixa do dia', resumo: 'Caixa do dia' },
+  { chave: 'exportar', rotulo: 'Exportar dados', resumo: 'Exportar dados' },
 ]
+
+function oQueVe(permissoes: Permissoes): string {
+  const vistos = PERMISSOES.filter(({ chave }) => permissoes[chave]).map(({ resumo }) => resumo)
+  return vistos.length > 0 ? `Vê: ${vistos.join(', ')}` : 'Sem acesso ao Financeiro nem a Exportar'
+}
 
 const ENTRADA_VAZIA: EntradaNovoMembro = {
   nome: '',
@@ -127,6 +132,7 @@ function FormularioNovoFuncionario({
         rotulo="E-mail"
         valor={entrada.email}
         maxLength={LIMITES_MEMBRO.email}
+        inputMode="email"
         obrigatorio
         erro={mostrar('email')}
         aoMudar={mudar('email')}
@@ -276,6 +282,7 @@ export function EquipePage() {
                     {membro.pendente ? <StatusPill tom="marca">Pendente</StatusPill> : null}
                   </div>
                   <div className="mt-0.5 truncate text-sm text-slate-500">{membro.email}</div>
+                  <div className="mt-0.5 text-xs text-slate-500">{oQueVe(membro.permissoes)}</div>
                 </div>
 
                 <div className="flex shrink-0 gap-2">
