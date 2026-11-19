@@ -1099,6 +1099,18 @@ instância que só serve para cadastrar.
 > resolver, apague a conta desse e-mail no console do Firebase (Authentication → Usuários) e
 > cadastre o funcionário de novo pelo app. A mensagem de erro do `useEquipe` já diz isso.
 
+> **AVISO**
+> **A criação de contas precisa estar ligada no console.** Em Authentication → Configurações →
+> Ações do usuário, a opção "Ativar criação (inscrição)" tem de estar marcada. Desmarcada, o
+> login continua funcionando, mas `createUserWithEmailAndPassword` falha com
+> `auth/admin-restricted-operation` e nenhuma conta nasce pelo app, só pelo console. A
+> configuração fica no projeto do Firebase, não no repositório: estava desligada até
+> 19/11/2026, e o primeiro cadastro pela tela Equipe falhou por isso. Ligada, qualquer pessoa
+> com a chave web pública pode criar uma conta no Auth, mas essa conta não tem acesso a dado
+> nenhum: a regra só libera o dono, a conta de testes na `loja-treino` e quem tem documento
+> ativo em `membros`, que só o dono grava. `mensagemDoErroDeCadastro()` traduz esse código
+> para a tela dizer onde ligar.
+
 **Emuladores.** Com `VITE_USE_FIREBASE_EMULATORS=true`, o Auth secundário é ligado ao
 emulador (`connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })`)
 logo depois de criado, com a mesma condição e o mesmo endereço do Auth principal em
@@ -1173,7 +1185,11 @@ Os números ficam em `LIMITES_MEMBRO`.
 
 `mensagemDoErroDeCadastro(codigo)` traduz os códigos do Auth com um `switch`, e não com um
 objeto indexado, para que um código como `constructor` não devolva algo do protótipo. Há teste
-para isso.
+para isso. Traduz cinco códigos: e-mail já usado, e-mail inválido, senha fraca, sem internet e
+`auth/admin-restricted-operation`, a criação de contas desligada no console (ver
+[src/data/criarContaDeFuncionario.ts](#srcdatacriarcontadefuncionariots)). Qualquer outro
+código vira "Não foi possível criar a conta.", e o código real fica no console do navegador,
+na linha `[equipe] A conta não foi criada.`.
 
 — referente a src/lib/equipe.ts, `validarNovoMembro()`, `montarCamposMembro()`,
 `copiarPermissoes()` e `mensagemDoErroDeCadastro()`

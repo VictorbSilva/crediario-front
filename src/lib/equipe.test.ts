@@ -144,6 +144,10 @@ describe('mensagemDoErroDeCadastro', () => {
     ['auth/invalid-email', 'E-mail inválido.'],
     ['auth/weak-password', 'Senha fraca: use 6 caracteres ou mais.'],
     ['auth/network-request-failed', 'Sem internet. Criar a conta precisa de conexão.'],
+    [
+      'auth/admin-restricted-operation',
+      'A criação de contas está desligada no Firebase. Ligue em Authentication → Configurações → Ações do usuário.',
+    ],
     ['auth/too-many-requests', 'Não foi possível criar a conta.'],
     ['', 'Não foi possível criar a conta.'],
     ['constructor', 'Não foi possível criar a conta.'],
