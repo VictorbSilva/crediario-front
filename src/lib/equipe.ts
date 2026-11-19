@@ -173,6 +173,30 @@ export function montarCamposMembro(
   }
 }
 
+// Sem 0, O, o, 1, l e I, que se confundem lidos em voz alta ou na tela do celular.
+const ALFABETO_DA_SENHA = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+// 224, o maior múltiplo de 56 que cabe num byte. Os bytes de 224 a 255 são descartados:
+// com o resto da divisão, eles dariam peso maior aos 32 primeiros caracteres.
+const LIMITE_SEM_VIES = 256 - (256 % ALFABETO_DA_SENHA.length)
+const TAMANHO_DA_SENHA = 8
+
+/** Senha inicial do funcionário, como "k7Rm-q4Tz": 8 caracteres em dois blocos de 4. */
+export function gerarSenha(
+  aleatorio: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n)),
+): string {
+  const caracteres: string[] = []
+
+  while (caracteres.length < TAMANHO_DA_SENHA) {
+    for (const byte of aleatorio(TAMANHO_DA_SENHA - caracteres.length)) {
+      if (byte < LIMITE_SEM_VIES && caracteres.length < TAMANHO_DA_SENHA) {
+        caracteres.push(ALFABETO_DA_SENHA[byte % ALFABETO_DA_SENHA.length])
+      }
+    }
+  }
+
+  return caracteres.slice(0, 4).join('') + '-' + caracteres.slice(4).join('')
+}
+
 export function mensagemDoErroDeCadastro(codigo: string): string {
   switch (codigo) {
     case 'auth/email-already-in-use':

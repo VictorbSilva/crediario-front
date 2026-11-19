@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DESCRICAO_DAS_PERMISSOES,
   LIMITES_MEMBRO,
+  gerarSenha,
   mensagemDoErroDeCadastro,
   montarCamposMembro,
   perfilDe,
@@ -216,5 +217,57 @@ describe('perfilDe', () => {
   it('reconhece de volta o que cada perfil aplica', () => {
     expect(perfilDe(permissoesDoPerfil('cobrador'))).toBe('cobrador')
     expect(perfilDe(permissoesDoPerfil('gerente'))).toBe('gerente')
+  })
+})
+
+describe('gerarSenha', () => {
+  const AMBIGUOS = ['0', 'O', 'o', '1', 'l', 'I']
+
+  /** Entrega os bytes da fila, na ordem, quantos forem pedidos. */
+  function fila(...bytes: number[]) {
+    const restantes = [...bytes]
+    return (n: number) => Uint8Array.from(restantes.splice(0, n))
+  }
+
+  it('são 8 caracteres em dois blocos de 4 separados por hífen', () => {
+    expect(gerarSenha(fila(0, 1, 2, 3, 4, 5, 6, 7))).toMatch(/^[^-]{4}-[^-]{4}$/)
+  })
+
+  it('o mesmo sorteio dá a mesma senha, e sorteios diferentes dão senhas diferentes', () => {
+    const bytes = [9, 30, 51, 2, 44, 17, 26, 38]
+
+    expect(gerarSenha(fila(...bytes))).toBe(gerarSenha(fila(...bytes)))
+    expect(gerarSenha(fila(...bytes))).not.toBe(gerarSenha(fila(...bytes.toReversed())))
+  })
+
+  it('nenhum byte produz caractere ambíguo, e o alfabeto tem 56 caracteres', () => {
+    const vistos = new Set<string>()
+    for (let inicio = 0; inicio < 224; inicio += 8) {
+      const bytes = Array.from({ length: 8 }, (_, i) => inicio + i)
+      for (const caractere of gerarSenha(fila(...bytes)).replace('-', '')) vistos.add(caractere)
+    }
+
+    expect(vistos.size).toBe(56)
+    for (const ambiguo of AMBIGUOS) expect(vistos.has(ambiguo)).toBe(false)
+    expect(vistos.has('-')).toBe(false)
+  })
+
+  it('descarta os bytes de 224 para cima, que dariam peso maior aos primeiros caracteres', () => {
+    const comDescarte = gerarSenha(fila(224, 0, 1, 255, 2, 3, 4, 5, 230, 6, 7))
+
+    expect(comDescarte).toBe(gerarSenha(fila(0, 1, 2, 3, 4, 5, 6, 7)))
+  })
+
+  it('a senha gerada passa na validação do cadastro', () => {
+    const senha = gerarSenha(fila(5, 60, 11, 200, 33, 99, 150, 7))
+
+    expect(validarNovoMembro(entrada({ senha }))).toEqual({})
+  })
+
+  it('sem sorteio injetado, usa o crypto do navegador', () => {
+    const senha = gerarSenha()
+
+    expect(senha).toMatch(/^[^-]{4}-[^-]{4}$/)
+    expect(validarNovoMembro(entrada({ senha })).senha).toBeUndefined()
   })
 })

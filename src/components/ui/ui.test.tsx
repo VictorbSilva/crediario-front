@@ -241,6 +241,48 @@ describe('ModalDeFormulario', () => {
     expect(aoEnviar).toHaveBeenCalledTimes(1)
   })
 
+  it('sem envioDesabilitado nem rodape, o envio fica habilitado e só os dois botões ficam embaixo', () => {
+    montar()
+    const salvar = screen.getByRole('button', { name: 'Salvar' }) as HTMLButtonElement
+
+    expect(salvar.disabled).toBe(false)
+    expect(salvar.closest('form')?.lastElementChild?.textContent).toBe('CancelarSalvar')
+  })
+
+  it('envioDesabilitado desabilita só o botão de envio, com o estilo de desabilitado', () => {
+    const aoEnviar = vi.fn()
+    const aoFechar = vi.fn()
+    render(
+      <ModalDeFormulario titulo="Novo" rotuloDeEnvio="Sem internet" idDoTitulo="t3" envioDesabilitado aoEnviar={aoEnviar} aoFechar={aoFechar}>
+        <span />
+      </ModalDeFormulario>,
+    )
+    const enviar = screen.getByRole('button', { name: 'Sem internet' }) as HTMLButtonElement
+
+    expect(enviar.disabled).toBe(true)
+    expect(enviar.className).toContain('disabled:bg-slate-200')
+    expect(enviar.className).toContain('disabled:text-slate-600')
+    fireEvent.click(enviar)
+    expect(aoEnviar).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(aoFechar).toHaveBeenCalledTimes(1)
+  })
+
+  it('rodape aparece acima dos dois botões', () => {
+    render(
+      <ModalDeFormulario titulo="Novo" rotuloDeEnvio="Salvar" idDoTitulo="t4" rodape={<p>aviso do rodapé</p>} aoEnviar={vi.fn()} aoFechar={vi.fn()}>
+        <span />
+      </ModalDeFormulario>,
+    )
+    const aviso = screen.getByText('aviso do rodapé')
+    const salvar = screen.getByRole('button', { name: 'Salvar' })
+
+    expect(aviso.compareDocumentPosition(salvar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(aviso.compareDocumentPosition(screen.getByRole('button', { name: 'Cancelar' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(salvar.closest('form')?.lastElementChild?.contains(aviso)).toBe(true)
+  })
+
   it('sem subtítulo, não desenha a linha vazia', () => {
     render(
       <ModalDeFormulario titulo="Editar" rotuloDeEnvio="Salvar" idDoTitulo="t2" aoEnviar={vi.fn()} aoFechar={vi.fn()}>
