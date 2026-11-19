@@ -168,6 +168,7 @@ describe('EquipePage — lista', () => {
 
       const botoes = within(item).getAllByRole('button')
       expect(botoes.map((botao) => botao.textContent)).toEqual(['Gerenciar'])
+      expect(botoes[0].getAttribute('aria-label')).toBe(`Gerenciar ${nome}`)
       expect(botoes[0].className).toContain('border-slate-200')
     }
     expect(screen.queryByRole('button', { name: 'Permissões' })).toBeNull()
@@ -469,8 +470,12 @@ describe('EquipePage — novo funcionário', () => {
 })
 
 function gerenciar(nome: string): HTMLElement {
-  fireEvent.click(within(cartao(nome)).getByRole('button', { name: 'Gerenciar' }))
+  fireEvent.click(within(cartao(nome)).getByRole('button', { name: `Gerenciar ${nome}` }))
   return screen.getByRole('dialog')
+}
+
+function ordemDe(funcao: unknown): number {
+  return vi.mocked(funcao as () => void).mock.invocationCallOrder[0]
 }
 
 function salvar(dialogo: HTMLElement): HTMLButtonElement {
@@ -530,6 +535,21 @@ describe('EquipePage — gerenciar funcionário', () => {
     expect(screen.getByRole('dialog')).toBe(dialogo)
   })
 
+  it('com o card aberto, o cabeçalho acompanha a lista e os interruptores mantêm o que foi mexido', () => {
+    const { rerender } = render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
+    expect(within(dialogo).queryByText('Pendente')).toBeNull()
+
+    fireEvent.click(interruptor(dialogo, 'Exportar dados'))
+    simulado.equipe = equipe({ membros: [{ ...ANA, pendente: true }, BRUNO] })
+    rerender(<EquipePage />)
+
+    expect(screen.getByRole('dialog')).toBe(dialogo)
+    expect(within(dialogo).getByText('Pendente')).toBeTruthy()
+    expect(interruptor(dialogo, 'Exportar dados').getAttribute('aria-checked')).toBe('true')
+    expect(salvar(dialogo).disabled).toBe(false)
+  })
+
   it('Cancelar fecha sem alterar', () => {
     render(<EquipePage />)
     const dialogo = gerenciar('Ana Lima')
@@ -572,7 +592,26 @@ describe('EquipePage — zona de risco e reativação', () => {
     fireEvent.click(within(confirmacao).getByRole('button', { name: 'Desativar' }))
 
     expect(simulado.equipe.definirAtivo).toHaveBeenCalledExactlyOnceWith('ana', false)
+    expect(simulado.equipe.alterarPermissoes).not.toHaveBeenCalled()
     expect(screen.queryAllByRole('dialog')).toHaveLength(0)
+  })
+
+  it('desativar com interruptor mexido grava primeiro as permissões e depois desativa', () => {
+    render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
+
+    fireEvent.click(interruptor(dialogo, 'Exportar dados'))
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Desativar acesso' }))
+    const confirmacao = screen.getAllByRole('dialog').find((elemento) => elemento !== dialogo) as HTMLElement
+    expect(simulado.equipe.alterarPermissoes).not.toHaveBeenCalled()
+
+    fireEvent.click(within(confirmacao).getByRole('button', { name: 'Desativar' }))
+
+    expect(simulado.equipe.alterarPermissoes).toHaveBeenCalledExactlyOnceWith('ana', {
+      financeiro: false, caixaDoDia: true, exportar: true,
+    })
+    expect(simulado.equipe.definirAtivo).toHaveBeenCalledExactlyOnceWith('ana', false)
+    expect(ordemDe(simulado.equipe.alterarPermissoes)).toBeLessThan(ordemDe(simulado.equipe.definirAtivo))
   })
 
   it('Voltar fecha só a confirmação, sem desativar, e o card continua aberto', () => {
@@ -602,6 +641,32 @@ describe('EquipePage — zona de risco e reativação', () => {
     fireEvent.click(reativar)
 
     expect(simulado.equipe.definirAtivo).toHaveBeenCalledExactlyOnceWith('bruno', true)
+    expect(simulado.equipe.alterarPermissoes).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('"Acesso desativado" explica que a pessoa não entra e volta com as permissões marcadas', () => {
+    render(<EquipePage />)
+    const dialogo = gerenciar('Bruno Reis')
+
+    const secao = within(dialogo).getByRole('region', { name: 'Acesso desativado' })
+    const texto = within(secao).getByText('Bruno não entra no app. Ao reativar, volta com as permissões marcadas acima.')
+    expect(texto.className).toContain('text-[13px]')
+    expect(texto.className).toContain('text-slate-500')
+  })
+
+  it('reativar com interruptor mexido grava primeiro as permissões e depois reativa', () => {
+    render(<EquipePage />)
+    const dialogo = gerenciar('Bruno Reis')
+
+    fireEvent.click(interruptor(dialogo, 'Financeiro geral'))
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Reativar acesso' }))
+
+    expect(simulado.equipe.alterarPermissoes).toHaveBeenCalledExactlyOnceWith('bruno', {
+      financeiro: true, caixaDoDia: false, exportar: false,
+    })
+    expect(simulado.equipe.definirAtivo).toHaveBeenCalledExactlyOnceWith('bruno', true)
+    expect(ordemDe(simulado.equipe.alterarPermissoes)).toBeLessThan(ordemDe(simulado.equipe.definirAtivo))
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 })

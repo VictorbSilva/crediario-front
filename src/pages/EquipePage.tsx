@@ -196,6 +196,14 @@ function GerenciarFuncionario({
     aoFechar()
   }
 
+  // Desativar e reativar fecham o card: o que foi mexido nos interruptores vai antes,
+  // para não se perder sem aviso.
+  function definirAtivo(ativo: boolean) {
+    if (!semMudanca) aoSalvar(permissoes)
+    aoDefinirAtivo(ativo)
+    aoFechar()
+  }
+
   // A confirmação fica ao lado do card, não dentro: o `onClose` de um `<dialog>` dentro
   // do outro subiria pela árvore do React e fecharia o card junto.
   return (
@@ -245,14 +253,11 @@ function GerenciarFuncionario({
             <h3 id={base + '-desativado'} className={TITULO_DE_SECAO + ' text-slate-600'}>
               Acesso desativado
             </h3>
-            <button
-              type="button"
-              onClick={() => {
-                aoDefinirAtivo(true)
-                aoFechar()
-              }}
-              className={BOTAO_SECUNDARIO}
-            >
+            <p className="text-[13px] text-slate-500">
+              {primeiroNome(membro.nome)} não entra no app. Ao reativar, volta com as permissões marcadas
+              acima.
+            </p>
+            <button type="button" onClick={() => definirAtivo(true)} className={BOTAO_SECUNDARIO}>
               Reativar acesso
             </button>
           </section>
@@ -262,10 +267,7 @@ function GerenciarFuncionario({
       {confirmando ? (
         <ConfirmarDesativacao
           membro={membro}
-          aoConfirmar={() => {
-            aoDefinirAtivo(false)
-            aoFechar()
-          }}
+          aoConfirmar={() => definirAtivo(false)}
           aoFechar={() => setConfirmando(false)}
         />
       ) : null}
@@ -325,7 +327,9 @@ export function EquipePage() {
   const { membros, carregando, erro, cadastrar, alterarPermissoes, definirAtivo } = useEquipe()
 
   const [cadastrando, setCadastrando] = useState(false)
-  const [editando, setEditando] = useState<Membro | null>(null)
+  // Só o uid: o card recebe o membro da lista, para o cabeçalho acompanhar o servidor.
+  const [editandoUid, setEditandoUid] = useState<string | null>(null)
+  const editando = editandoUid === null ? undefined : membros.find((membro) => membro.uid === editandoUid)
 
   return (
     <>
@@ -381,7 +385,8 @@ export function EquipePage() {
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setEditando(membro)}
+                  aria-label={`Gerenciar ${membro.nome}`}
+                  onClick={() => setEditandoUid(membro.uid)}
                   className="min-h-11 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-600 transition-colors hover:bg-slate-50"
                 >
                   Gerenciar
@@ -400,7 +405,7 @@ export function EquipePage() {
           membro={editando}
           aoSalvar={(permissoes) => alterarPermissoes(editando.uid, permissoes)}
           aoDefinirAtivo={(ativo) => definirAtivo(editando.uid, ativo)}
-          aoFechar={() => setEditando(null)}
+          aoFechar={() => setEditandoUid(null)}
         />
       ) : null}
     </>
