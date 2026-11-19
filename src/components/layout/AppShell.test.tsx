@@ -82,6 +82,17 @@ describe('AppShell', () => {
     expect(within(inferior).getByRole('link', { name: 'Clientes' }).className).toContain('text-slate-500')
   })
 
+  it('membro sem financeiro nem caixa do dia não vê Financeiro em nenhuma das duas navegações', () => {
+    simulado.acesso = {
+      estado: 'liberado', dono: false, permissoes: { financeiro: false, caixaDoDia: false, exportar: true },
+    }
+    montar('/rotas')
+
+    for (const nav of screen.getAllByRole('navigation')) {
+      expect(within(nav).getAllByRole('link').map((l) => l.textContent)).toEqual(['Clientes', 'Rotas'])
+    }
+  })
+
   it('a marca aparece no topo e na lateral, com nome para o leitor de tela', () => {
     montar('/rotas')
 

@@ -3,13 +3,17 @@ import { cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { Outlet } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Acesso, Permissoes } from '@/lib/acesso'
 import App from './App'
+
+const simulado = vi.hoisted(() => ({ acesso: null as Acesso | null }))
 
 vi.mock('@/auth/AuthProvider', () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))
 vi.mock('@/auth/RequireAuth', () => ({ RequireAuth: () => <Outlet /> }))
 vi.mock('@/components/layout/AppShell', () => ({ AppShell: () => <Outlet /> }))
+vi.mock('@/data/useAcesso', () => ({ useAcesso: () => simulado.acesso }))
 vi.mock('@/components/pwa/PwaPrompt', () => ({ PwaPrompt: () => <p>aviso do pwa</p> }))
 vi.mock('@/pages/LoginPage', () => ({ LoginPage: () => <p>página de login</p> }))
 vi.mock('@/pages/ClientesPage', () => ({ ClientesPage: () => <p>página de clientes</p> }))
@@ -25,7 +29,17 @@ function abrir(caminho: string) {
 beforeEach(() => {
   vi.stubEnv('VITE_BUSINESS_ID', 'loja-treino')
   vi.stubEnv('VITE_USE_FIREBASE_EMULATORS', '')
+  simulado.acesso = {
+    estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true },
+  }
 })
+
+function membro(permissoes: Partial<Permissoes>): Acesso {
+  return {
+    estado: 'liberado', dono: false,
+    permissoes: { financeiro: false, caixaDoDia: false, exportar: false, ...permissoes },
+  }
+}
 
 afterEach(() => {
   cleanup()
@@ -56,6 +70,27 @@ describe('App — rotas', () => {
     abrir('/login')
 
     expect(screen.getByText('aviso do pwa')).toBeTruthy()
+  })
+})
+
+describe('App — guarda do financeiro', () => {
+  it.each([
+    ['só financeiro', { financeiro: true }],
+    ['só caixa do dia', { caixaDoDia: true }],
+  ])('membro com %s abre /financeiro', (_rotulo, permissoes) => {
+    simulado.acesso = membro(permissoes)
+    abrir('/financeiro')
+
+    expect(screen.getByText('página do financeiro')).toBeTruthy()
+  })
+
+  it('membro sem financeiro nem caixa do dia que digita /financeiro cai na lista de clientes', () => {
+    simulado.acesso = membro({ exportar: true })
+    abrir('/financeiro')
+
+    expect(screen.queryByText('página do financeiro')).toBeNull()
+    expect(screen.getByText('página de clientes')).toBeTruthy()
+    expect(window.location.pathname).toBe('/clientes')
   })
 })
 

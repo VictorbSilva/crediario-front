@@ -1,12 +1,14 @@
 import { NavLink } from 'react-router-dom'
 import { BrandMark } from '@/components/BrandMark'
-import { navItems } from './navItems'
+import { itensDeNavegacao } from './navItems'
 import { SignOutButton } from './SignOutButton'
 import { SyncBadge } from './SyncBadge'
+import { useAcesso } from '@/data/useAcesso'
 import { useClientes } from '@/data/useClientes'
 
 export function Sidebar() {
   const { estadoSync } = useClientes()
+  const itens = itensDeNavegacao(useAcesso())
 
   return (
     <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-white md:sticky md:top-0 md:flex md:h-dvh md:flex-col">
@@ -18,7 +20,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-col gap-1 p-3">
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {itens.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

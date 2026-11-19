@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClientesContextValue } from '@/data/clientes-context'
 import type { CarneDaEmpresa } from '@/data/useCarneDaEmpresa'
+import type { Acesso } from '@/lib/acesso'
 import type { DocumentoExportavel } from '@/lib/exportacao'
 import { instalarDialogo } from '@/test/dialogo'
 import type { Cliente } from '@/types/cliente'
@@ -15,9 +16,11 @@ const simulado = vi.hoisted(() => ({
   useCarne: vi.fn(),
   carneDaEmpresa: {} as CarneDaEmpresa,
   useCarneDaEmpresa: vi.fn(),
+  acesso: null as Acesso | null,
 }))
 
 vi.mock('@/data/useClientes', () => ({ useClientes: () => simulado.clientes }))
+vi.mock('@/data/useAcesso', () => ({ useAcesso: () => simulado.acesso }))
 vi.mock('@/components/layout/useTelaLarga', () => ({ useTelaLarga: () => simulado.larga }))
 vi.mock('@/data/useCarne', () => ({ useCarne: simulado.useCarne }))
 vi.mock('@/data/useCarneDaEmpresa', () => ({
@@ -96,6 +99,9 @@ beforeEach(() => {
   instalarDialogo()
   simulado.larga = true
   simulado.clientes = estado([JOAO, MARIA, ZECA])
+  simulado.acesso = {
+    estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true },
+  }
   simulado.useCarne.mockReset().mockReturnValue({ carnes: [], carregando: false, erro: null })
   simulado.carneDaEmpresa = {
     vendas: [], parcelas: [], pagamentos: [], carregando: false, pendentes: 0,
@@ -430,6 +436,25 @@ describe('ClientesPage — avisos e diálogos', () => {
     // O X do topo e o botão do rodapé fecham igual; aqui, o do rodapé.
     fireEvent.click(screen.getAllByRole('button', { name: 'Fechar' }).at(-1) as HTMLElement)
     expect(screen.queryByText('Exportar clientes')).toBeNull()
+  })
+
+  it('sem a permissão de exportar, o botão some e o "Novo cliente" continua', () => {
+    simulado.acesso = {
+      estado: 'liberado', dono: false, permissoes: { financeiro: true, caixaDoDia: true, exportar: false },
+    }
+    montar()
+
+    expect(screen.queryByRole('button', { name: 'Exportar' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Novo cliente' })).toBeTruthy()
+  })
+
+  it('com a permissão de exportar, o membro vê o botão', () => {
+    simulado.acesso = {
+      estado: 'liberado', dono: false, permissoes: { financeiro: false, caixaDoDia: false, exportar: true },
+    }
+    montar()
+
+    expect(screen.getByRole('button', { name: 'Exportar' })).toBeTruthy()
   })
 })
 
