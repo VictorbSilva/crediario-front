@@ -35,6 +35,8 @@ This is a Vite + React 19 + TypeScript project for **Crediário**, the applicati
 
 Styling conventions: Tailwind classes only — `src/index.css` is the **only** `.css` file in the project and holds just `@tailwind` directives plus a short `@layer base` block. Design tokens (the `brand` colour scale, `success`/`warning`/`danger`, font family) live in `tailwind.config.js`, which is the single source of truth; do not introduce a parallel CSS-variable token layer. The app is **light-theme only** (`color-scheme: light`); do not add `dark:` variants.
 
+Toda mudança na Equipe segue docs/padrao-ui.md.
+
 ## Commands
 
 Node **22** is required (`.nvmrc`, `package.json` engines `>=22 <23`, `.npmrc` engine-strict).

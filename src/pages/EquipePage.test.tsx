@@ -46,6 +46,14 @@ function cartao(nome: string): HTMLElement {
   return item
 }
 
+function etiquetas(item: HTMLElement): string[] {
+  return within(item).queryAllByRole('listitem').map((etiqueta) => etiqueta.textContent ?? '')
+}
+
+function interruptor(dialogo: HTMLElement, nome: string): HTMLElement {
+  return within(dialogo).getByRole('switch', { name: nome })
+}
+
 function campo(rotulo: RegExp): HTMLInputElement {
   return screen.getByLabelText(rotulo) as HTMLInputElement
 }
@@ -103,7 +111,7 @@ describe('EquipePage — lista', () => {
     expect(within(cartao('Ana Lima')).queryByText('Pendente')).toBeNull()
   })
 
-  it('mostra o que cada membro vê, na ordem das permissões', () => {
+  it('mostra no cartão uma etiqueta por permissão ligada, na ordem das permissões', () => {
     simulado.equipe = equipe({
       membros: [
         membro('caio', 'Caio Melo', { permissoes: { financeiro: false, caixaDoDia: true, exportar: true } }),
@@ -112,16 +120,16 @@ describe('EquipePage — lista', () => {
     })
     render(<EquipePage />)
 
-    expect(within(cartao('Caio Melo')).getByText('Vê: Caixa do dia, Exportar dados')).toBeTruthy()
-    expect(within(cartao('Dora Luz')).getByText('Vê: Financeiro geral')).toBeTruthy()
+    expect(etiquetas(cartao('Caio Melo'))).toEqual(['Caixa do dia', 'Exportar dados'])
+    expect(etiquetas(cartao('Dora Luz'))).toEqual(['Financeiro geral'])
   })
 
-  it('sem nenhuma permissão, diz que não vê Financeiro nem Exportar', () => {
+  it('sem nenhuma permissão, o cartão diz "Sem permissões extras"', () => {
     render(<EquipePage />)
 
     const bruno = cartao('Bruno Reis')
-    expect(within(bruno).getByText('Sem acesso ao Financeiro nem a Exportar')).toBeTruthy()
-    expect(within(bruno).queryByText(/^Vê:/)).toBeNull()
+    expect(within(bruno).getByText('Sem permissões extras')).toBeTruthy()
+    expect(etiquetas(bruno)).toEqual([])
   })
 
   it('avisa enquanto carrega e quando não há ninguém', () => {
@@ -150,9 +158,10 @@ describe('EquipePage — novo funcionário', () => {
     expect(campo(/^Nome/).value).toBe('')
     expect(campo(/^E-mail/).value).toBe('')
     expect(campo(/^Senha/).type).toBe('password')
-    for (const rotulo of ['Ver o Financeiro geral', 'Ver o Caixa do dia', 'Exportar dados']) {
-      expect((within(dialogo).getByLabelText(rotulo) as HTMLInputElement).checked).toBe(false)
+    for (const rotulo of ['Financeiro geral', 'Caixa do dia', 'Exportar dados']) {
+      expect(interruptor(dialogo, rotulo).getAttribute('aria-checked')).toBe('false')
     }
+    expect(within(dialogo).getByRole('button', { name: 'Cobrador' }).getAttribute('aria-pressed')).toBe('true')
     expect(within(dialogo).getByText(/precisa de internet/)).toBeTruthy()
     expect(within(dialogo).getByText(/Esqueci minha senha/)).toBeTruthy()
   })
@@ -214,7 +223,7 @@ describe('EquipePage — novo funcionário', () => {
     const dialogo = abrirCadastro()
 
     preencherCadastro()
-    fireEvent.click(within(dialogo).getByLabelText('Ver o Caixa do dia'))
+    fireEvent.click(interruptor(dialogo, 'Caixa do dia'))
     fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
 
     expect(simulado.equipe.cadastrar).toHaveBeenCalledTimes(1)
@@ -275,12 +284,12 @@ describe('EquipePage — permissões', () => {
     fireEvent.click(within(cartao('Ana Lima')).getByRole('button', { name: 'Permissões' }))
     const dialogo = screen.getByRole('dialog')
 
-    const caixa = within(dialogo).getByLabelText('Ver o Caixa do dia') as HTMLInputElement
-    expect(caixa.checked).toBe(true)
-    expect((within(dialogo).getByLabelText('Ver o Financeiro geral') as HTMLInputElement).checked).toBe(false)
+    const caixa = interruptor(dialogo, 'Caixa do dia')
+    expect(caixa.getAttribute('aria-checked')).toBe('true')
+    expect(interruptor(dialogo, 'Financeiro geral').getAttribute('aria-checked')).toBe('false')
 
     fireEvent.click(caixa)
-    fireEvent.click(within(dialogo).getByLabelText('Exportar dados'))
+    fireEvent.click(interruptor(dialogo, 'Exportar dados'))
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Salvar permissões' }))
 
     expect(simulado.equipe.alterarPermissoes).toHaveBeenCalledWith('ana', {
@@ -293,7 +302,7 @@ describe('EquipePage — permissões', () => {
     render(<EquipePage />)
 
     fireEvent.click(within(cartao('Ana Lima')).getByRole('button', { name: 'Permissões' }))
-    fireEvent.click(within(screen.getByRole('dialog')).getByLabelText('Exportar dados'))
+    fireEvent.click(interruptor(screen.getByRole('dialog'), 'Exportar dados'))
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(simulado.equipe.alterarPermissoes).not.toHaveBeenCalled()

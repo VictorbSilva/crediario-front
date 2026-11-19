@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DESCRICAO_DAS_PERMISSOES,
   LIMITES_MEMBRO,
   mensagemDoErroDeCadastro,
   montarCamposMembro,
+  perfilDe,
+  permissoesDoPerfil,
   validarNovoMembro,
 } from './equipe'
 import type { EntradaNovoMembro } from './equipe'
@@ -153,5 +156,65 @@ describe('mensagemDoErroDeCadastro', () => {
     ['constructor', 'Não foi possível criar a conta.'],
   ])('%j vira %j', (codigo, mensagem) => {
     expect(mensagemDoErroDeCadastro(codigo)).toBe(mensagem)
+  })
+})
+
+describe('DESCRICAO_DAS_PERMISSOES', () => {
+  it('descreve as três permissões, na ordem da tela, com grupo e sem risco', () => {
+    expect(DESCRICAO_DAS_PERMISSOES).toEqual([
+      {
+        chave: 'financeiro',
+        rotulo: 'Financeiro geral',
+        descricao: 'Total a receber, vencidos e clientes em atraso',
+        grupo: 'ver',
+      },
+      {
+        chave: 'caixaDoDia',
+        rotulo: 'Caixa do dia',
+        descricao: 'Quanto entrou em cada dia, por Pix, dinheiro e cartão',
+        grupo: 'ver',
+      },
+      {
+        chave: 'exportar',
+        rotulo: 'Exportar dados',
+        descricao: 'Planilha de clientes e backup completo',
+        grupo: 'fazer',
+      },
+    ])
+  })
+})
+
+describe('permissoesDoPerfil', () => {
+  it('Cobrador desliga todas as permissões', () => {
+    expect(permissoesDoPerfil('cobrador')).toEqual({ financeiro: false, caixaDoDia: false, exportar: false })
+  })
+
+  it('Gerente liga todas as permissões', () => {
+    expect(permissoesDoPerfil('gerente')).toEqual({ financeiro: true, caixaDoDia: true, exportar: true })
+  })
+
+  it('devolve um objeto novo a cada chamada', () => {
+    expect(permissoesDoPerfil('gerente')).not.toBe(permissoesDoPerfil('gerente'))
+  })
+})
+
+describe('perfilDe', () => {
+  it('tudo desligado é Cobrador e tudo ligado é Gerente', () => {
+    expect(perfilDe({ financeiro: false, caixaDoDia: false, exportar: false })).toBe('cobrador')
+    expect(perfilDe({ financeiro: true, caixaDoDia: true, exportar: true })).toBe('gerente')
+  })
+
+  it.each([
+    { financeiro: true, caixaDoDia: false, exportar: false },
+    { financeiro: false, caixaDoDia: true, exportar: false },
+    { financeiro: false, caixaDoDia: false, exportar: true },
+    { financeiro: true, caixaDoDia: true, exportar: false },
+  ])('qualquer mistura é Personalizado: %j', (permissoes) => {
+    expect(perfilDe(permissoes)).toBe('personalizado')
+  })
+
+  it('reconhece de volta o que cada perfil aplica', () => {
+    expect(perfilDe(permissoesDoPerfil('cobrador'))).toBe('cobrador')
+    expect(perfilDe(permissoesDoPerfil('gerente'))).toBe('gerente')
   })
 })

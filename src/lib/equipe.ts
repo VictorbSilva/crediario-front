@@ -10,6 +10,60 @@ const PADRAO_EMAIL = /^[^@\s]+@[^@\s]+$/
 
 const CHAVES_DE_PERMISSOES = ['financeiro', 'caixaDoDia', 'exportar'] as const
 
+export type GrupoDePermissao = 'ver' | 'fazer'
+
+export type DescricaoDePermissao = {
+  chave: keyof Permissoes
+  rotulo: string
+  descricao: string
+  grupo: GrupoDePermissao
+  /** Pinta a linha no tom de perigo. Nenhuma permissão de hoje usa. */
+  risco?: true
+}
+
+/**
+ * As permissões na ordem da tela. Permissão nova entra aqui, com grupo, e ganha ícone em
+ * src/components/equipe/iconesDePermissoes.ts; os perfis se montam a partir desta lista.
+ * Ver docs/padrao-ui.md, seção Equipe.
+ */
+export const DESCRICAO_DAS_PERMISSOES: readonly DescricaoDePermissao[] = [
+  {
+    chave: 'financeiro',
+    rotulo: 'Financeiro geral',
+    descricao: 'Total a receber, vencidos e clientes em atraso',
+    grupo: 'ver',
+  },
+  {
+    chave: 'caixaDoDia',
+    rotulo: 'Caixa do dia',
+    descricao: 'Quanto entrou em cada dia, por Pix, dinheiro e cartão',
+    grupo: 'ver',
+  },
+  {
+    chave: 'exportar',
+    rotulo: 'Exportar dados',
+    descricao: 'Planilha de clientes e backup completo',
+    grupo: 'fazer',
+  },
+]
+
+export type Perfil = 'cobrador' | 'gerente' | 'personalizado'
+
+/** Cobrador desliga tudo e Gerente liga tudo. Personalizado não tem permissões próprias. */
+export function permissoesDoPerfil(perfil: Exclude<Perfil, 'personalizado'>): Permissoes {
+  const valor = perfil === 'gerente'
+  return Object.fromEntries(
+    DESCRICAO_DAS_PERMISSOES.map(({ chave }) => [chave, valor]),
+  ) as Permissoes
+}
+
+export function perfilDe(permissoes: Permissoes): Perfil {
+  const valores = DESCRICAO_DAS_PERMISSOES.map(({ chave }) => permissoes[chave])
+  if (valores.every((valor) => !valor)) return 'cobrador'
+  if (valores.every((valor) => valor)) return 'gerente'
+  return 'personalizado'
+}
+
 export type EntradaNovoMembro = {
   nome: string
   email: string
