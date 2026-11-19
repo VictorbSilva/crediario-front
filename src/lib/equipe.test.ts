@@ -3,6 +3,9 @@ import {
   DESCRICAO_DAS_PERMISSOES,
   LIMITES_MEMBRO,
   gerarSenha,
+  mensagemDeAcesso,
+  normalizarEmail,
+  primeiroNome,
   mensagemDoErroDeCadastro,
   montarCamposMembro,
   perfilDe,
@@ -269,5 +272,47 @@ describe('gerarSenha', () => {
 
     expect(senha).toMatch(/^[^-]{4}-[^-]{4}$/)
     expect(validarNovoMembro(entrada({ senha })).senha).toBeUndefined()
+  })
+})
+
+describe('primeiroNome', () => {
+  it.each([
+    ['Joana Souza Lima', 'Joana'],
+    ['  Joana   Souza ', 'Joana'],
+    ['Joana', 'Joana'],
+  ])('%j vira %j', (nome, primeiro) => {
+    expect(primeiroNome(nome)).toBe(primeiro)
+  })
+})
+
+describe('normalizarEmail', () => {
+  it('tira os espaços das pontas e passa para minúsculas, como a conta é criada', () => {
+    expect(normalizarEmail('  Joana@Loja.COM ')).toBe('joana@loja.com')
+    expect(normalizarEmail('  Joana@Loja.COM ')).toBe(
+      montarCamposMembro(entrada({ email: '  Joana@Loja.COM ' }), { dispositivo: 'x' }).email,
+    )
+  })
+})
+
+describe('mensagemDeAcesso', () => {
+  it('monta a mensagem com o primeiro nome, o endereço, o e-mail e a senha', () => {
+    expect(mensagemDeAcesso({
+      nome: 'Joana Souza',
+      email: 'joana@loja.com',
+      senha: 'k7Rm-q4Tz',
+      endereco: 'https://crediario.example',
+    })).toBe(
+      'Oi, Joana! Sua conta no app da loja está pronta.\n' +
+        'Endereço: https://crediario.example\n' +
+        'E-mail: joana@loja.com\n' +
+        'Senha: k7Rm-q4Tz\n' +
+        'Para trocar a senha, toque em "Esqueci minha senha" na tela de entrada.',
+    )
+  })
+
+  it('usa o primeiro nome mesmo com espaços sobrando', () => {
+    const mensagem = mensagemDeAcesso({ nome: '  Joana  Souza ', email: 'a@b', senha: 'x', endereco: 'e' })
+
+    expect(mensagem.startsWith('Oi, Joana! ')).toBe(true)
   })
 })

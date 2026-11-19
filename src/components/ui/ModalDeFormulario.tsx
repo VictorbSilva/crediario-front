@@ -12,6 +12,10 @@ type ModalDeFormularioProps = Readonly<{
   envioDesabilitado?: boolean
   /** Conteúdo mostrado no rodapé fixo, acima dos dois botões. */
   rodape?: ReactNode
+  /** Substitui Cancelar e o botão de envio, abaixo do `rodape`. Botões aqui são `type="button"`. */
+  acoes?: ReactNode
+  /** O nome do X para o leitor de tela. */
+  rotuloDeFechar?: string
   aoEnviar: (evento: SubmitEvent<HTMLFormElement>) => void
   aoFechar: () => void
 }>
@@ -29,6 +33,8 @@ export function ModalDeFormulario({
   children,
   envioDesabilitado = false,
   rodape,
+  acoes,
+  rotuloDeFechar = 'Fechar sem salvar',
   aoEnviar,
   aoFechar,
 }: ModalDeFormularioProps) {
@@ -56,7 +62,7 @@ export function ModalDeFormulario({
           <button
             type="button"
             onClick={aoFechar}
-            aria-label="Fechar sem salvar"
+            aria-label={rotuloDeFechar}
             className="-m-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100"
           >
             <X size={18} aria-hidden />
@@ -68,20 +74,24 @@ export function ModalDeFormulario({
         <div className="shrink-0 border-t border-slate-200 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:rounded-b-2xl md:pb-4">
           {rodape ? <div className="mb-3">{rodape}</div> : null}
           <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={aoFechar}
-              className="min-h-11 flex-1 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 md:flex-none"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={envioDesabilitado}
-              className="min-h-11 flex-1 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600"
-            >
-              {rotuloDeEnvio}
-            </button>
+            {acoes ?? (
+              <>
+                <button
+                  type="button"
+                  onClick={aoFechar}
+                  className="min-h-11 flex-1 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 md:flex-none"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={envioDesabilitado}
+                  className="min-h-11 flex-1 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600"
+                >
+                  {rotuloDeEnvio}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </form>

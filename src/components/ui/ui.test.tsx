@@ -283,6 +283,54 @@ describe('ModalDeFormulario', () => {
     expect(salvar.closest('form')?.lastElementChild?.contains(aviso)).toBe(true)
   })
 
+  it('sem acoes nem rotuloDeFechar, o X é "Fechar sem salvar" e o rodapé tem Cancelar e o envio', () => {
+    montar()
+
+    expect(screen.getByRole('button', { name: 'Fechar sem salvar' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Salvar' }).getAttribute('type')).toBe('submit')
+  })
+
+  it('acoes substitui Cancelar e o envio, e o rodape continua acima delas', () => {
+    const aoFechar = vi.fn()
+    render(
+      <ModalDeFormulario
+        titulo="Conta criada"
+        rotuloDeEnvio="Salvar"
+        idDoTitulo="t5"
+        rodape={<p>aviso do rodapé</p>}
+        acoes={<button type="button" onClick={aoFechar}>Concluir</button>}
+        aoEnviar={vi.fn()}
+        aoFechar={aoFechar}
+      >
+        <span />
+      </ModalDeFormulario>,
+    )
+    const concluir = screen.getByRole('button', { name: 'Concluir' })
+
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Salvar' })).toBeNull()
+    expect(concluir.closest('form')?.lastElementChild?.contains(concluir)).toBe(true)
+    expect(screen.getByText('aviso do rodapé').compareDocumentPosition(concluir) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy()
+
+    fireEvent.click(concluir)
+    expect(aoFechar).toHaveBeenCalledTimes(1)
+  })
+
+  it('rotuloDeFechar troca o nome do X, que continua fechando', () => {
+    const aoFechar = vi.fn()
+    render(
+      <ModalDeFormulario titulo="Conta criada" rotuloDeEnvio="Salvar" idDoTitulo="t6" rotuloDeFechar="Fechar" aoEnviar={vi.fn()} aoFechar={aoFechar}>
+        <span />
+      </ModalDeFormulario>,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Fechar sem salvar' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar' }))
+    expect(aoFechar).toHaveBeenCalledTimes(1)
+  })
+
   it('sem subtítulo, não desenha a linha vazia', () => {
     render(
       <ModalDeFormulario titulo="Editar" rotuloDeEnvio="Salvar" idDoTitulo="t2" aoEnviar={vi.fn()} aoFechar={vi.fn()}>

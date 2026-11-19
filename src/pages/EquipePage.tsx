@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { SubmitEvent } from 'react'
 import { Plus, Wifi } from 'lucide-react'
 import { CampoDeSenha } from '@/components/equipe/CampoDeSenha'
+import { ContaCriada } from '@/components/equipe/ContaCriada'
 import { EtiquetasDePermissoes } from '@/components/equipe/EtiquetasDePermissoes'
 import { SeletorDePermissoes } from '@/components/equipe/SeletorDePermissoes'
 import { Campo } from '@/components/ui/Campo'
@@ -13,7 +14,7 @@ import { useEquipe } from '@/data/useEquipe'
 import type { Equipe } from '@/data/useEquipe'
 import { useEstaOnline } from '@/data/useEstaOnline'
 import type { Permissoes } from '@/lib/acesso'
-import { LIMITES_MEMBRO, validarNovoMembro } from '@/lib/equipe'
+import { LIMITES_MEMBRO, normalizarEmail, validarNovoMembro } from '@/lib/equipe'
 import type { EntradaNovoMembro, Membro } from '@/lib/equipe'
 
 const ENTRADA_VAZIA: EntradaNovoMembro = {
@@ -38,6 +39,8 @@ function FormularioNovoFuncionario({
   const [tentouSalvar, setTentouSalvar] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [falha, setFalha] = useState<string | null>(null)
+  // A senha fica só aqui, enquanto o card está aberto: fechar o card a perde.
+  const [criada, setCriada] = useState<{ nome: string; email: string; senha: string } | null>(null)
   // Só evita a tentativa: `cadastrar` já recusa sem internet.
   const online = useEstaOnline()
 
@@ -67,9 +70,36 @@ function FormularioNovoFuncionario({
     setFalha(null)
     void cadastrar(entrada).then((mensagem) => {
       setEnviando(false)
-      if (mensagem) setFalha(mensagem)
-      else aoFechar()
+      if (mensagem) {
+        setFalha(mensagem)
+        return
+      }
+      // Nome e e-mail como a conta foi criada (`montarCamposMembro`); a senha, como digitada.
+      setCriada({ nome: entrada.nome.trim(), email: normalizarEmail(entrada.email), senha: entrada.senha })
     })
+  }
+
+  // O mesmo `ModalDeFormulario` na mesma posição: o React reaproveita o `<dialog>` aberto e
+  // só troca o conteúdo.
+  if (criada) {
+    return (
+      <ModalDeFormulario
+        titulo="Conta criada"
+        subtitulo={criada.nome}
+        rotuloDeEnvio="Concluir"
+        idDoTitulo={base + '-titulo'}
+        rotuloDeFechar="Fechar"
+        acoes={
+          <button type="button" onClick={aoFechar} className={BOTAO_SECUNDARIO + ' w-full'}>
+            Concluir
+          </button>
+        }
+        aoEnviar={(evento) => evento.preventDefault()}
+        aoFechar={aoFechar}
+      >
+        <ContaCriada {...criada} />
+      </ModalDeFormulario>
+    )
   }
 
   return (

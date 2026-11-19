@@ -70,6 +70,17 @@ function montar() {
   render(<FormularioVenda aoSalvar={aoSalvar} aoFechar={aoFechar} />)
 }
 
+describe('FormularioVenda — rodapé do modal', () => {
+  it('continua com Cancelar e o envio, e o X fecha sem salvar', () => {
+    montar()
+
+    expect(screen.getByRole('button', { name: 'Fechar sem salvar' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Lançar venda' }).getAttribute('type')).toBe('submit')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(aoFechar).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('FormularioVenda — Cobrar a partir de', () => {
   it('nasce vazio, opcional, do tipo data e logo depois da data da venda', () => {
     montar()

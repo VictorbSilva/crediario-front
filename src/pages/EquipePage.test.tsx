@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BottomNav } from '@/components/layout/BottomNav'
@@ -306,7 +306,7 @@ describe('EquipePage — novo funcionário', () => {
     expect(erroDe(/^E-mail/)).toBeNull()
   })
 
-  it('cadastra com o que foi digitado e as permissões marcadas, e fecha', async () => {
+  it('cadastra com o que foi digitado e as permissões marcadas', async () => {
     render(<EquipePage />)
     const dialogo = abrirCadastro()
 
@@ -321,7 +321,71 @@ describe('EquipePage — novo funcionário', () => {
       senha: 'segredo1',
       permissoes: { financeiro: false, caixaDoDia: true, exportar: false },
     })
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(await screen.findByText('A conta de Carla está pronta')).toBeTruthy()
+  })
+
+  it('criada a conta, o mesmo card mostra o acesso, com o e-mail como a conta foi criada', async () => {
+    render(<EquipePage />)
+    const dialogo = abrirCadastro()
+
+    preencherCadastro()
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    await screen.findByText('A conta de Carla está pronta')
+
+    expect(screen.getByRole('dialog')).toBe(dialogo)
+    expect(within(dialogo).getByRole('heading', { name: 'Conta criada' })).toBeTruthy()
+    expect(within(dialogo).getByText('Carla Dias')).toBeTruthy()
+    expect(within(dialogo).getByText('carla@loja.com')).toBeTruthy()
+    expect(within(dialogo).getByText('segredo1')).toBeTruthy()
+    expect(within(dialogo).queryByRole('region', { name: 'Acesso' })).toBeNull()
+    expect(within(dialogo).queryByText(/precisa de internet/)).toBeNull()
+
+    expect(within(dialogo).queryByRole('button', { name: 'Cancelar' })).toBeNull()
+    expect(within(dialogo).queryByRole('button', { name: 'Fechar sem salvar' })).toBeNull()
+    expect(within(dialogo).getByRole('button', { name: 'Fechar' })).toBeTruthy()
+    expect(within(dialogo).getByRole('button', { name: 'Concluir' }).getAttribute('type')).toBe('button')
+  })
+
+  it('Concluir fecha, e o próximo cadastro começa vazio, sem a senha anterior', async () => {
+    render(<EquipePage />)
+    abrirCadastro()
+
+    preencherCadastro()
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Concluir' }))
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    abrirCadastro()
+    expect(campo(/^Nome/).value).toBe('')
+    expect(campo(/^Senha/).value).toBe('')
+    expect(screen.queryByText('segredo1')).toBeNull()
+  })
+
+  it('um envio do formulário na tela de sucesso não cadastra de novo nem fecha', async () => {
+    render(<EquipePage />)
+    const dialogo = abrirCadastro()
+
+    preencherCadastro()
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    await screen.findByText('A conta de Carla está pronta')
+
+    fireEvent.submit(dialogo.querySelector('form') as HTMLFormElement)
+
+    expect(simulado.equipe.cadastrar).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('dialog')).toBe(dialogo)
+    expect(screen.getByText('A conta de Carla está pronta')).toBeTruthy()
+  })
+
+  it('o X da tela de sucesso também fecha', async () => {
+    render(<EquipePage />)
+    abrirCadastro()
+
+    preencherCadastro()
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Fechar' }))
+
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('mostra a mensagem de erro da criação e continua aberto', async () => {
@@ -351,7 +415,7 @@ describe('EquipePage — novo funcionário', () => {
     expect(cadastrar).toHaveBeenCalledTimes(1)
 
     responder(null)
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(await screen.findByText('A conta de Carla está pronta')).toBeTruthy()
   })
 
   it('Cancelar fecha sem cadastrar', () => {
