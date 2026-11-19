@@ -1,10 +1,13 @@
 import { NavLink } from 'react-router-dom'
-import { navItems } from './navItems'
+import { useAcesso } from '@/data/useAcesso'
+import { itensDeNavegacao } from './navItems'
 
 export function BottomNav() {
+  const itens = itensDeNavegacao(useAcesso())
+
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
-      {navItems.map(({ to, label, icon: Icon }) => (
+    <nav className="fixed inset-x-0 bottom-0 z-20 grid auto-cols-fr grid-flow-col border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
+      {itens.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}

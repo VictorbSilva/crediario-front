@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CarneDaEmpresa } from '@/data/useCarneDaEmpresa'
+import type { Acesso, Permissoes } from '@/lib/acesso'
 import { formatarCentavos } from '@/lib/dinheiro'
 import type { DocumentoExportavel } from '@/lib/exportacao'
 import type { Cliente } from '@/types/cliente'
@@ -12,6 +13,7 @@ const simulado = vi.hoisted(() => ({
   carne: {} as CarneDaEmpresa,
   pedidas: [] as unknown[],
   clientes: [] as Cliente[],
+  acesso: null as Acesso | null,
 }))
 
 vi.mock('@/data/useCarneDaEmpresa', () => ({
@@ -21,6 +23,18 @@ vi.mock('@/data/useCarneDaEmpresa', () => ({
   },
 }))
 vi.mock('@/data/useClientes', () => ({ useClientes: () => ({ clientes: simulado.clientes }) }))
+vi.mock('@/data/useAcesso', () => ({ useAcesso: () => simulado.acesso }))
+
+const DONO: Acesso = {
+  estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true },
+}
+
+function membro(permissoes: Partial<Permissoes>): Acesso {
+  return {
+    estado: 'liberado', dono: false,
+    permissoes: { financeiro: false, caixaDoDia: false, exportar: false, ...permissoes },
+  }
+}
 
 // O `getByText` normaliza o espaço não separável do Intl na página, não na string procurada.
 const reais = (centavos: number) => formatarCentavos(centavos).replace(/\s/g, ' ')
@@ -108,6 +122,7 @@ beforeEach(() => {
   simulado.carne = carne()
   simulado.pedidas = []
   simulado.clientes = CLIENTES
+  simulado.acesso = DONO
 })
 
 afterEach(() => {
@@ -433,5 +448,51 @@ describe('FinanceiroPage — busca', () => {
 
     expect(lista('Clientes em atraso')).toHaveLength(3)
     expect(lista('A receber em Outubro de 2026')).toHaveLength(3)
+  })
+})
+
+describe('FinanceiroPage — permissões', () => {
+  it('só com caixa do dia, mostra o caixa e esconde KPIs, mês de recebimento e as duas listas', () => {
+    simulado.acesso = membro({ caixaDoDia: true })
+    render(<Pagina />)
+
+    expect(screen.getByRole('region', { name: 'Caixa do dia' })).toBeTruthy()
+    expect(screen.queryByText('A receber', { selector: 'div' })).toBeNull()
+    expect(screen.queryByText('Vencido', { selector: 'div' })).toBeNull()
+    expect(screen.queryByText('Recebido no mês', { selector: 'div' })).toBeNull()
+    expect(screen.queryByLabelText('Mês de recebimento')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Clientes em atraso' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'A receber em Outubro de 2026' })).toBeNull()
+    expect(screen.queryByLabelText('Buscar por nome ou número')).toBeNull()
+  })
+
+  it('só com caixa do dia, o aviso de venda de versão nova some: os pagamentos dela entram no caixa', () => {
+    simulado.acesso = membro({ caixaDoDia: true })
+    simulado.carne = carne({ confianca: 'parcial' })
+    render(<Pagina />)
+
+    expect(screen.getByText(/ainda não baixou todas as vendas e pagamentos/)).toBeTruthy()
+    expect(screen.queryByText(/versão mais nova/)).toBeNull()
+  })
+
+  it('só com financeiro, mostra KPIs e as duas listas e esconde o caixa do dia', () => {
+    simulado.acesso = membro({ financeiro: true })
+    render(<Pagina />)
+
+    expect(screen.queryByRole('region', { name: 'Caixa do dia' })).toBeNull()
+    expect(kpi('A receber').textContent).toBe(formatarCentavos(53000))
+    expect(screen.getByLabelText('Mês de recebimento')).toBeTruthy()
+    expect(lista('Clientes em atraso')).toHaveLength(3)
+    expect(lista('A receber em Outubro de 2026')).toHaveLength(3)
+    expect(screen.getByText(/^1 venda\(s\) foram lançadas por uma versão mais nova do app/)).toBeTruthy()
+  })
+
+  it('com as duas, mostra tudo, como para o dono', () => {
+    simulado.acesso = membro({ financeiro: true, caixaDoDia: true })
+    render(<Pagina />)
+
+    expect(screen.getByRole('region', { name: 'Caixa do dia' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Clientes em atraso' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'A receber em Outubro de 2026' })).toBeTruthy()
   })
 })

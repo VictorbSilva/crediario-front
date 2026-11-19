@@ -4,11 +4,18 @@ import { RequireAuth } from '@/auth/RequireAuth'
 import { FaixaDeTreino } from '@/components/FaixaDeTreino'
 import { AppShell } from '@/components/layout/AppShell'
 import { PwaPrompt } from '@/components/pwa/PwaPrompt'
+import { useAcesso } from '@/data/useAcesso'
+import { veFinanceiro } from '@/lib/acesso'
 import { ClientePage } from '@/pages/ClientePage'
 import { ClientesPage } from '@/pages/ClientesPage'
 import { FinanceiroPage } from '@/pages/FinanceiroPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { RotasPage } from '@/pages/RotasPage'
+
+// Quem não vê Financeiro nem pelo menu não deve abri-lo digitando o endereço.
+function GuardaDoFinanceiro() {
+  return veFinanceiro(useAcesso()) ? <FinanceiroPage /> : <Navigate to="/clientes" replace />
+}
 
 export default function App() {
   return (
@@ -24,7 +31,7 @@ export default function App() {
               <Route path="/clientes" element={<ClientesPage />} />
               <Route path="/clientes/:id" element={<ClientePage />} />
               <Route path="/rotas" element={<RotasPage />} />
-              <Route path="/financeiro" element={<FinanceiroPage />} />
+              <Route path="/financeiro" element={<GuardaDoFinanceiro />} />
               <Route path="*" element={<Navigate to="/clientes" replace />} />
             </Route>
           </Route>

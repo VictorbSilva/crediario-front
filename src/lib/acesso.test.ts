@@ -6,7 +6,10 @@ import {
   UID_TESTE,
   acessoDoMembro,
   ehDonoNoApp,
+  podeVer,
+  veFinanceiro,
 } from './acesso'
+import type { Acesso, Permissoes } from './acesso'
 
 const permissoes = { financeiro: false, caixaDoDia: true, exportar: false }
 
@@ -106,5 +109,59 @@ describe('acessoDoMembro', () => {
       estado: 'sem-acesso',
       motivo: 'desativado',
     })
+  })
+})
+
+function membro(permissoes: Permissoes): Acesso {
+  return { estado: 'liberado', dono: false, permissoes }
+}
+
+const NENHUMA: Permissoes = { financeiro: false, caixaDoDia: false, exportar: false }
+
+describe('podeVer', () => {
+  it('o dono vê tudo', () => {
+    const dono: Acesso = { estado: 'liberado', dono: true, permissoes: PERMISSOES_DO_DONO }
+
+    expect(podeVer(dono, 'financeiro')).toBe(true)
+    expect(podeVer(dono, 'caixaDoDia')).toBe(true)
+    expect(podeVer(dono, 'exportar')).toBe(true)
+  })
+
+  it.each(['financeiro', 'caixaDoDia', 'exportar'] as const)('o membro vê %s só quando ela é true', (chave) => {
+    expect(podeVer(membro({ ...NENHUMA, [chave]: true }), chave)).toBe(true)
+    expect(podeVer(membro(NENHUMA), chave)).toBe(false)
+  })
+
+  it('uma permissão não libera as outras', () => {
+    const soExportar = membro({ ...NENHUMA, exportar: true })
+
+    expect(podeVer(soExportar, 'financeiro')).toBe(false)
+    expect(podeVer(soExportar, 'caixaDoDia')).toBe(false)
+  })
+
+  it.each<Acesso>([
+    { estado: 'carregando' },
+    { estado: 'sem-acesso', motivo: 'desativado' },
+  ])('sem acesso liberado ($estado), não vê nada', (acesso) => {
+    expect(podeVer(acesso, 'financeiro')).toBe(false)
+    expect(podeVer(acesso, 'caixaDoDia')).toBe(false)
+    expect(podeVer(acesso, 'exportar')).toBe(false)
+  })
+})
+
+describe('veFinanceiro', () => {
+  it('basta financeiro ou caixa do dia para ver a tela', () => {
+    expect(veFinanceiro(membro({ ...NENHUMA, financeiro: true }))).toBe(true)
+    expect(veFinanceiro(membro({ ...NENHUMA, caixaDoDia: true }))).toBe(true)
+    expect(veFinanceiro(membro({ ...NENHUMA, financeiro: true, caixaDoDia: true }))).toBe(true)
+  })
+
+  it('sem as duas não vê, mesmo podendo exportar', () => {
+    expect(veFinanceiro(membro(NENHUMA))).toBe(false)
+    expect(veFinanceiro(membro({ ...NENHUMA, exportar: true }))).toBe(false)
+  })
+
+  it('carregando não vê', () => {
+    expect(veFinanceiro({ estado: 'carregando' })).toBe(false)
   })
 })

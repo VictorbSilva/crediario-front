@@ -41,3 +41,12 @@ export function acessoDoMembro({
   if (dados?.ativo !== true) return { estado: 'sem-acesso', motivo: 'desativado' }
   return { estado: 'liberado', dono: false, permissoes: permissoesLidas(dados.permissoes) }
 }
+
+// Restrição de tela, não de dado: a regra libera o carnê inteiro a qualquer membro ativo.
+export function podeVer(acesso: Acesso, chave: keyof Permissoes): boolean {
+  return acesso.estado === 'liberado' && acesso.permissoes[chave]
+}
+
+export function veFinanceiro(acesso: Acesso): boolean {
+  return podeVer(acesso, 'financeiro') || podeVer(acesso, 'caixaDoDia')
+}

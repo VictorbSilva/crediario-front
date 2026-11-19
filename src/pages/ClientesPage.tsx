@@ -9,9 +9,11 @@ import { useTelaLarga } from '@/components/layout/useTelaLarga'
 import { Kpi } from '@/components/ui/Kpi'
 import { Nota } from '@/components/ui/Nota'
 import { SearchInput } from '@/components/ui/SearchInput'
+import { useAcesso } from '@/data/useAcesso'
 import { useCarneDaEmpresa } from '@/data/useCarneDaEmpresa'
 import type { CarneDaEmpresa } from '@/data/useCarneDaEmpresa'
 import { useClientes } from '@/data/useClientes'
+import { podeVer } from '@/lib/acesso'
 import { enderecoDoCliente } from '@/lib/cliente'
 import { dataLocalISO } from '@/lib/data'
 import { contagemDeClientes, documentosParaFinanceiro, listaDeAtrasados, situacaoFinanceira } from '@/lib/financeiro'
@@ -59,6 +61,7 @@ export function ClientesPage() {
     descartarFalha,
     alternarArquivo,
   } = useClientes()
+  const acesso = useAcesso()
   const [consultandoContadores, setConsultandoContadores] = useState(false)
   const [dadosDosContadores, setDadosDosContadores] = useState(CONTADORES_NAO_CARREGADOS)
   const { vendas, pagamentos, confianca, erro: erroDoCarne } = dadosDosContadores
@@ -122,14 +125,16 @@ export function ClientesPage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setExportando(true)}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-          >
-            <Download size={17} aria-hidden />
-            <span className="hidden sm:inline">Exportar</span>
-          </button>
+          {podeVer(acesso, 'exportar') ? (
+            <button
+              type="button"
+              onClick={() => setExportando(true)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              <Download size={17} aria-hidden />
+              <span className="hidden sm:inline">Exportar</span>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setCadastrando(true)}
