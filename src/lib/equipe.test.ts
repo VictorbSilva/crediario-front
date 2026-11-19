@@ -4,6 +4,7 @@ import {
   LIMITES_MEMBRO,
   gerarSenha,
   mensagemDeAcesso,
+  mesmasPermissoes,
   normalizarEmail,
   primeiroNome,
   mensagemDoErroDeCadastro,
@@ -314,5 +315,23 @@ describe('mensagemDeAcesso', () => {
     const mensagem = mensagemDeAcesso({ nome: '  Joana  Souza ', email: 'a@b', senha: 'x', endereco: 'e' })
 
     expect(mensagem.startsWith('Oi, Joana! ')).toBe(true)
+  })
+})
+
+describe('mesmasPermissoes', () => {
+  const BASE = { financeiro: true, caixaDoDia: false, exportar: true }
+
+  it('iguais chave por chave são as mesmas, mesmo em objetos diferentes', () => {
+    expect(mesmasPermissoes(BASE, { ...BASE })).toBe(true)
+  })
+
+  it.each(['financeiro', 'caixaDoDia', 'exportar'] as const)('uma diferença em %s já basta', (chave) => {
+    expect(mesmasPermissoes(BASE, { ...BASE, [chave]: !BASE[chave] })).toBe(false)
+  })
+
+  it('só compara as chaves descritas em DESCRICAO_DAS_PERMISSOES', () => {
+    const comSobra = { ...BASE, extra: true } as unknown as typeof BASE
+
+    expect(mesmasPermissoes(BASE, comSobra)).toBe(true)
   })
 })

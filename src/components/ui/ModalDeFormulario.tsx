@@ -5,6 +5,8 @@ import { X } from 'lucide-react'
 type ModalDeFormularioProps = Readonly<{
   titulo: string
   subtitulo?: string
+  /** Conteúdo mostrado abaixo do título, ainda na faixa branca do topo. */
+  cabecalho?: ReactNode
   rotuloDeEnvio: string
   idDoTitulo: string
   children: ReactNode
@@ -28,6 +30,7 @@ type ModalDeFormularioProps = Readonly<{
 export function ModalDeFormulario({
   titulo,
   subtitulo,
+  cabecalho,
   rotuloDeEnvio,
   idDoTitulo,
   children,
@@ -52,21 +55,24 @@ export function ModalDeFormulario({
       className="m-0 h-dvh max-h-none w-full max-w-none bg-slate-50 p-0 backdrop:bg-slate-900/40 md:m-auto md:h-auto md:max-h-[90dvh] md:w-[34rem] md:rounded-2xl md:bg-white"
     >
       <form onSubmit={aoEnviar} className="flex h-full flex-col md:max-h-[90dvh]">
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white p-4 md:rounded-t-2xl">
-          <div>
-            <h2 id={idDoTitulo} className="text-lg font-semibold text-slate-900">
-              {titulo}
-            </h2>
-            {subtitulo ? <p className="mt-0.5 text-sm text-slate-500">{subtitulo}</p> : null}
+        <div className="shrink-0 border-b border-slate-200 bg-white p-4 md:rounded-t-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 id={idDoTitulo} className="text-lg font-semibold text-slate-900">
+                {titulo}
+              </h2>
+              {subtitulo ? <p className="mt-0.5 text-sm text-slate-500">{subtitulo}</p> : null}
+            </div>
+            <button
+              type="button"
+              onClick={aoFechar}
+              aria-label={rotuloDeFechar}
+              className="-m-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100"
+            >
+              <X size={18} aria-hidden />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={aoFechar}
-            aria-label={rotuloDeFechar}
-            className="-m-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100"
-          >
-            <X size={18} aria-hidden />
-          </button>
+          {cabecalho ? <div className="mt-3.5">{cabecalho}</div> : null}
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">{children}</div>

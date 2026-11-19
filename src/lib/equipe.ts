@@ -64,6 +64,11 @@ export function perfilDe(permissoes: Permissoes): Perfil {
   return 'personalizado'
 }
 
+/** Compara só as permissões descritas: é o que a tela mostra e o que a regra aceita. */
+export function mesmasPermissoes(a: Permissoes, b: Permissoes): boolean {
+  return DESCRICAO_DAS_PERMISSOES.every(({ chave }) => a[chave] === b[chave])
+}
+
 export type EntradaNovoMembro = {
   nome: string
   email: string

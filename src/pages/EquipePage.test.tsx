@@ -136,12 +136,51 @@ describe('EquipePage — lista', () => {
     expect(etiquetas(cartao('Dora Luz'))).toEqual(['Financeiro geral'])
   })
 
-  it('sem nenhuma permissão, o cartão diz "Sem permissões extras"', () => {
+  it('ativo sem nenhuma permissão: o cartão diz "Sem permissões extras"', () => {
+    simulado.equipe = equipe({ membros: [membro('caio', 'Caio Melo')] })
+    render(<EquipePage />)
+
+    const caio = cartao('Caio Melo')
+    expect(within(caio).getByText('Sem permissões extras')).toBeTruthy()
+    expect(etiquetas(caio)).toEqual([])
+  })
+
+  it('desativado: o cartão não mostra etiquetas', () => {
+    simulado.equipe = equipe({
+      membros: [membro('bruno', 'Bruno Reis', { ativo: false, permissoes: { financeiro: true, caixaDoDia: false, exportar: false } })],
+    })
     render(<EquipePage />)
 
     const bruno = cartao('Bruno Reis')
-    expect(within(bruno).getByText('Sem permissões extras')).toBeTruthy()
     expect(etiquetas(bruno)).toEqual([])
+    expect(within(bruno).queryByText('Sem permissões extras')).toBeNull()
+  })
+
+  it('cada cartão tem avatar de 40 px com as iniciais e um único botão, Gerenciar', () => {
+    render(<EquipePage />)
+
+    for (const [nome, iniciais] of [['Ana Lima', 'AL'], ['Bruno Reis', 'BR']]) {
+      const item = cartao(nome)
+      const avatar = item.querySelector('[aria-hidden="true"]') as HTMLElement
+      expect(avatar.textContent).toBe(iniciais)
+      expect(avatar.className).toContain('h-10')
+      expect(avatar.className).toContain('w-10')
+
+      const botoes = within(item).getAllByRole('button')
+      expect(botoes.map((botao) => botao.textContent)).toEqual(['Gerenciar'])
+      expect(botoes[0].className).toContain('border-slate-200')
+    }
+    expect(screen.queryByRole('button', { name: 'Permissões' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Desativar' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reativar' })).toBeNull()
+  })
+
+  it('o avatar fica destacado só para quem está ativo', () => {
+    render(<EquipePage />)
+
+    const destaque = (nome: string) => (cartao(nome).querySelector('[aria-hidden="true"]') as HTMLElement).className
+    expect(destaque('Ana Lima')).toContain('bg-brand-50')
+    expect(destaque('Bruno Reis')).not.toContain('bg-brand-50')
   })
 
   it('avisa enquanto carrega e quando não há ninguém', () => {
@@ -429,72 +468,140 @@ describe('EquipePage — novo funcionário', () => {
   })
 })
 
-describe('EquipePage — permissões', () => {
-  it('abre com as permissões atuais e salva as alteradas', () => {
+function gerenciar(nome: string): HTMLElement {
+  fireEvent.click(within(cartao(nome)).getByRole('button', { name: 'Gerenciar' }))
+  return screen.getByRole('dialog')
+}
+
+function salvar(dialogo: HTMLElement): HTMLButtonElement {
+  return within(dialogo).getByRole('button', { name: 'Salvar alterações' }) as HTMLButtonElement
+}
+
+describe('EquipePage — gerenciar funcionário', () => {
+  it('abre com o cabeçalho do funcionário e as permissões atuais', () => {
     render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
 
-    fireEvent.click(within(cartao('Ana Lima')).getByRole('button', { name: 'Permissões' }))
-    const dialogo = screen.getByRole('dialog')
-
-    const caixa = interruptor(dialogo, 'Caixa do dia')
-    expect(caixa.getAttribute('aria-checked')).toBe('true')
+    expect(within(dialogo).getByRole('heading', { name: 'Gerenciar funcionário' })).toBeTruthy()
+    expect(within(dialogo).getByText('Ana Lima')).toBeTruthy()
+    expect(within(dialogo).getByText('ana@loja.com')).toBeTruthy()
+    expect(within(dialogo).getByText('Ativo')).toBeTruthy()
+    expect(interruptor(dialogo, 'Caixa do dia').getAttribute('aria-checked')).toBe('true')
     expect(interruptor(dialogo, 'Financeiro geral').getAttribute('aria-checked')).toBe('false')
+  })
 
-    fireEvent.click(caixa)
+  it('Salvar só habilita com mudança, e o rodapé diz se há alteração', () => {
+    render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
+
+    expect(salvar(dialogo).disabled).toBe(true)
+    expect(within(dialogo).getByText('Nenhuma alteração para salvar.')).toBeTruthy()
+
     fireEvent.click(interruptor(dialogo, 'Exportar dados'))
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Salvar permissões' }))
+    expect(salvar(dialogo).disabled).toBe(false)
+    expect(within(dialogo).getByText('Alterações não salvas.')).toBeTruthy()
 
-    expect(simulado.equipe.alterarPermissoes).toHaveBeenCalledWith('ana', {
+    fireEvent.click(interruptor(dialogo, 'Exportar dados'))
+    expect(salvar(dialogo).disabled).toBe(true)
+    expect(within(dialogo).getByText('Nenhuma alteração para salvar.')).toBeTruthy()
+  })
+
+  it('salva as permissões alteradas e fecha', () => {
+    render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
+
+    fireEvent.click(interruptor(dialogo, 'Caixa do dia'))
+    fireEvent.click(interruptor(dialogo, 'Exportar dados'))
+    fireEvent.click(salvar(dialogo))
+
+    expect(simulado.equipe.alterarPermissoes).toHaveBeenCalledExactlyOnceWith('ana', {
       financeiro: false, caixaDoDia: false, exportar: true,
     })
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('sem mudança, um envio do formulário não grava', () => {
+    render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
+
+    fireEvent.submit(dialogo.querySelector('form') as HTMLFormElement)
+
+    expect(simulado.equipe.alterarPermissoes).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBe(dialogo)
+  })
+
   it('Cancelar fecha sem alterar', () => {
     render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
 
-    fireEvent.click(within(cartao('Ana Lima')).getByRole('button', { name: 'Permissões' }))
-    fireEvent.click(interruptor(screen.getByRole('dialog'), 'Exportar dados'))
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(interruptor(dialogo, 'Exportar dados'))
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
 
     expect(simulado.equipe.alterarPermissoes).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
 
-describe('EquipePage — desativar e reativar', () => {
-  it('desativar pede confirmação antes de gravar', () => {
+describe('EquipePage — zona de risco e reativação', () => {
+  it('ativo: a zona de risco oferece desativar o acesso', () => {
     render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
 
-    fireEvent.click(within(cartao('Ana Lima')).getByRole('button', { name: 'Desativar' }))
-
-    const dialogo = screen.getByRole('dialog')
-    expect(within(dialogo).getByText(/Desativar Ana Lima\?/)).toBeTruthy()
-    expect(simulado.equipe.definirAtivo).not.toHaveBeenCalled()
-
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Desativar' }))
-
-    expect(simulado.equipe.definirAtivo).toHaveBeenCalledWith('ana', false)
-    expect(screen.queryByRole('dialog')).toBeNull()
+    const titulo = within(dialogo).getByRole('heading', { name: 'Zona de risco' })
+    expect(titulo.className).toContain('text-danger')
+    const zona = within(dialogo).getByRole('region', { name: 'Zona de risco' })
+    expect(within(zona).getByText('Desativar o acesso de Ana')).toBeTruthy()
+    expect(within(zona).getByText(
+      'Fica sem acesso aos dados da loja na hora. A conta não é apagada e dá para reativar depois.',
+    )).toBeTruthy()
+    expect((within(zona).getByText('Desativar o acesso de Ana').closest('.rounded-xl') as HTMLElement).className)
+      .toContain('border-red-200')
+    expect(within(dialogo).queryByRole('button', { name: 'Reativar acesso' })).toBeNull()
   })
 
-  it('Voltar fecha a confirmação sem desativar', () => {
+  it('Desativar acesso pede confirmação; confirmado, grava e fecha o card', () => {
     render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
 
-    fireEvent.click(within(cartao('Ana Lima')).getByRole('button', { name: 'Desativar' }))
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Voltar' }))
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Desativar acesso' }))
 
+    const confirmacao = screen.getAllByRole('dialog').find((elemento) => elemento !== dialogo) as HTMLElement
+    expect(within(confirmacao).getByText(/Desativar Ana Lima\?/)).toBeTruthy()
     expect(simulado.equipe.definirAtivo).not.toHaveBeenCalled()
-    expect(screen.queryByRole('dialog')).toBeNull()
+
+    fireEvent.click(within(confirmacao).getByRole('button', { name: 'Desativar' }))
+
+    expect(simulado.equipe.definirAtivo).toHaveBeenCalledExactlyOnceWith('ana', false)
+    expect(screen.queryAllByRole('dialog')).toHaveLength(0)
   })
 
-  it('reativar grava direto, sem confirmação', () => {
+  it('Voltar fecha só a confirmação, sem desativar, e o card continua aberto', () => {
     render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
 
-    expect(within(cartao('Bruno Reis')).queryByRole('button', { name: 'Desativar' })).toBeNull()
-    fireEvent.click(within(cartao('Bruno Reis')).getByRole('button', { name: 'Reativar' }))
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Desativar acesso' }))
+    const confirmacao = screen.getAllByRole('dialog').find((elemento) => elemento !== dialogo) as HTMLElement
+    fireEvent.click(within(confirmacao).getByRole('button', { name: 'Voltar' }))
 
-    expect(simulado.equipe.definirAtivo).toHaveBeenCalledWith('bruno', true)
+    expect(simulado.equipe.definirAtivo).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('dialog')).toEqual([dialogo])
+    expect(within(dialogo).getByRole('heading', { name: 'Gerenciar funcionário' })).toBeTruthy()
+  })
+
+  it('desativado: no lugar da zona de risco, "Acesso desativado" com Reativar acesso, que grava e fecha', () => {
+    render(<EquipePage />)
+    const dialogo = gerenciar('Bruno Reis')
+
+    expect(within(dialogo).queryByRole('heading', { name: 'Zona de risco' })).toBeNull()
+    expect(within(dialogo).queryByRole('button', { name: 'Desativar acesso' })).toBeNull()
+    const secao = within(dialogo).getByRole('region', { name: 'Acesso desativado' })
+    const reativar = within(secao).getByRole('button', { name: 'Reativar acesso' })
+    expect(reativar.getAttribute('type')).toBe('button')
+    expect(reativar.className).toContain('border-slate-200')
+
+    fireEvent.click(reativar)
+
+    expect(simulado.equipe.definirAtivo).toHaveBeenCalledExactlyOnceWith('bruno', true)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
