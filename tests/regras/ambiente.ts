@@ -124,3 +124,20 @@ export function pagamentoValido(extra: Record<string, unknown> = {}) {
     ...extra,
   }
 }
+
+export function caminhoMembro(uid: string, empresa = EMPRESA): string {
+  return `businesses/${empresa}/membros/${uid}`
+}
+
+export function membroValido(extra: Record<string, unknown> = {}) {
+  return {
+    nome: 'João Batista Lima',
+    email: 'joao.lima@example.com',
+    ativo: true,
+    permissoes: { financeiro: false, caixaDoDia: true, exportar: false },
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+    atualizadoPor: 'a1b2c3d4',
+    ...extra,
+  }
+}

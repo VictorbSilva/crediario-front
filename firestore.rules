@@ -23,8 +23,14 @@ service cloud.firestore {
         && request.auth.token.businessId == businessId;
     }
 
+    function membroAtivo(businessId) {
+      let caminho = /databases/$(database)/documents/businesses/$(businessId)/membros/$(request.auth.uid);
+      return autenticado() && exists(caminho) && get(caminho).data.get('ativo', false) == true;
+    }
+
     function podeAcessar(businessId) {
-      return ehDono() || ehTesteNoTreino(businessId) || pertenceAEmpresa(businessId);
+      return ehDono() || ehTesteNoTreino(businessId) || pertenceAEmpresa(businessId)
+        || membroAtivo(businessId);
     }
 
     match /businesses/{businessId} {
@@ -79,6 +85,68 @@ service cloud.firestore {
 
       allow read: if podeAcessar(businessId);
       allow write: if ehDono();
+
+      match /membros/{uid} {
+
+        function podeGerirEquipe() {
+          return ehDono() || ehTesteNoTreino(businessId);
+        }
+
+        function camposConhecidos() {
+          return dados().keys().hasOnly([
+            'nome', 'email', 'ativo', 'permissoes',
+            'criadoEm', 'atualizadoEm', 'atualizadoPor'
+          ]);
+        }
+
+        function obrigatoriosPresentes() {
+          return dados().keys().hasAll([
+            'nome', 'email', 'ativo', 'permissoes',
+            'criadoEm', 'atualizadoEm', 'atualizadoPor'
+          ]);
+        }
+
+        function tiposValidos() {
+          return dados().nome is string
+            && dados().nome.size() >= 1
+            && dados().nome.size() <= 80
+            && dados().email is string
+            && dados().email.size() >= 3
+            && dados().email.size() <= 254
+            && dados().email.matches('^[^@\\s]+@[^@\\s]+$')
+            && dados().ativo is bool
+            && dados().permissoes is map
+            && dados().permissoes.keys().hasOnly(['financeiro', 'caixaDoDia', 'exportar'])
+            && dados().permissoes.keys().hasAll(['financeiro', 'caixaDoDia', 'exportar'])
+            && dados().permissoes.financeiro is bool
+            && dados().permissoes.caixaDoDia is bool
+            && dados().permissoes.exportar is bool
+            && autoriaValida();
+        }
+
+        function imutaveisPreservados() {
+          return dados().email == anterior().email
+            && dados().criadoEm == anterior().criadoEm;
+        }
+
+        allow read: if podeGerirEquipe()
+          || (autenticado() && request.auth.uid == uid);
+
+        allow create: if podeGerirEquipe()
+          && camposConhecidos()
+          && obrigatoriosPresentes()
+          && tiposValidos()
+          && carimboDeCriacao();
+
+        allow update: if podeGerirEquipe()
+          && camposConhecidos()
+          && obrigatoriosPresentes()
+          && tiposValidos()
+          && carimboDeEdicao()
+          && imutaveisPreservados();
+
+        allow delete: if false;
+      }
 
       match /clients/{clientId} {
 
