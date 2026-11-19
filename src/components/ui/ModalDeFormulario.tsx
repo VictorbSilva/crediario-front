@@ -8,6 +8,10 @@ type ModalDeFormularioProps = Readonly<{
   rotuloDeEnvio: string
   idDoTitulo: string
   children: ReactNode
+  /** Desabilita só o botão de envio; Cancelar e o X continuam fechando. */
+  envioDesabilitado?: boolean
+  /** Conteúdo mostrado no rodapé fixo, acima dos dois botões. */
+  rodape?: ReactNode
   aoEnviar: (evento: SubmitEvent<HTMLFormElement>) => void
   aoFechar: () => void
 }>
@@ -23,6 +27,8 @@ export function ModalDeFormulario({
   rotuloDeEnvio,
   idDoTitulo,
   children,
+  envioDesabilitado = false,
+  rodape,
   aoEnviar,
   aoFechar,
 }: ModalDeFormularioProps) {
@@ -59,20 +65,24 @@ export function ModalDeFormulario({
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">{children}</div>
 
-        <div className="flex shrink-0 gap-3 border-t border-slate-200 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:rounded-b-2xl md:pb-4">
-          <button
-            type="button"
-            onClick={aoFechar}
-            className="min-h-11 flex-1 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 md:flex-none"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="min-h-11 flex-1 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
-          >
-            {rotuloDeEnvio}
-          </button>
+        <div className="shrink-0 border-t border-slate-200 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:rounded-b-2xl md:pb-4">
+          {rodape ? <div className="mb-3">{rodape}</div> : null}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={aoFechar}
+              className="min-h-11 flex-1 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 md:flex-none"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={envioDesabilitado}
+              className="min-h-11 flex-1 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600"
+            >
+              {rotuloDeEnvio}
+            </button>
+          </div>
         </div>
       </form>
     </dialog>

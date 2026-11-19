@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { SubmitEvent } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Wifi } from 'lucide-react'
+import { CampoDeSenha } from '@/components/equipe/CampoDeSenha'
 import { EtiquetasDePermissoes } from '@/components/equipe/EtiquetasDePermissoes'
 import { SeletorDePermissoes } from '@/components/equipe/SeletorDePermissoes'
 import { Campo } from '@/components/ui/Campo'
@@ -10,6 +11,7 @@ import { Nota } from '@/components/ui/Nota'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { useEquipe } from '@/data/useEquipe'
 import type { Equipe } from '@/data/useEquipe'
+import { useEstaOnline } from '@/data/useEstaOnline'
 import type { Permissoes } from '@/lib/acesso'
 import { LIMITES_MEMBRO, validarNovoMembro } from '@/lib/equipe'
 import type { EntradaNovoMembro, Membro } from '@/lib/equipe'
@@ -36,6 +38,8 @@ function FormularioNovoFuncionario({
   const [tentouSalvar, setTentouSalvar] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [falha, setFalha] = useState<string | null>(null)
+  // Só evita a tentativa: `cadastrar` já recusa sem internet.
+  const online = useEstaOnline()
 
   const erros = validarNovoMembro(entrada)
 
@@ -72,51 +76,58 @@ function FormularioNovoFuncionario({
     <ModalDeFormulario
       titulo="Novo funcionário"
       subtitulo="Cria a conta com que o funcionário entra no app."
-      rotuloDeEnvio={enviando ? 'Criando conta…' : 'Criar conta'}
+      rotuloDeEnvio={!online ? 'Sem internet' : enviando ? 'Criando conta…' : 'Criar conta'}
       idDoTitulo={base + '-titulo'}
+      envioDesabilitado={!online}
+      rodape={
+        <p aria-live="polite" className="flex items-center gap-2 text-[13px] text-slate-500">
+          <Wifi size={16} aria-hidden className="shrink-0" />
+          {online ? 'Criar a conta precisa de internet.' : 'Sem internet agora. Conecte para criar a conta.'}
+        </p>
+      }
       aoEnviar={enviar}
       aoFechar={aoFechar}
     >
-      <Nota tom="info">
-        Criar a conta precisa de internet. Depois, o funcionário pode trocar a senha pelo
-        “Esqueci minha senha”, na tela de entrada.
-      </Nota>
       {falha ? <Nota tom="alerta">{falha}</Nota> : null}
 
-      <Campo
-        id={base + '-nome'}
-        rotulo="Nome"
-        valor={entrada.nome}
-        maxLength={LIMITES_MEMBRO.nome}
-        focoInicial
-        obrigatorio
-        erro={mostrar('nome')}
-        aoMudar={mudar('nome')}
-        aoSair={sair('nome')}
-      />
+      <section aria-labelledby={base + '-acesso'} className="flex flex-col gap-4">
+        <h3 id={base + '-acesso'} className="text-xs font-bold uppercase tracking-wider text-slate-600">
+          Acesso
+        </h3>
+        <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4">
+          <Campo
+            id={base + '-nome'}
+            rotulo="Nome"
+            valor={entrada.nome}
+            maxLength={LIMITES_MEMBRO.nome}
+            focoInicial
+            obrigatorio
+            erro={mostrar('nome')}
+            aoMudar={mudar('nome')}
+            aoSair={sair('nome')}
+          />
 
-      <Campo
-        id={base + '-email'}
-        rotulo="E-mail"
-        valor={entrada.email}
-        maxLength={LIMITES_MEMBRO.email}
-        inputMode="email"
-        obrigatorio
-        erro={mostrar('email')}
-        aoMudar={mudar('email')}
-        aoSair={sair('email')}
-      />
+          <Campo
+            id={base + '-email'}
+            rotulo="E-mail"
+            valor={entrada.email}
+            maxLength={LIMITES_MEMBRO.email}
+            inputMode="email"
+            obrigatorio
+            erro={mostrar('email')}
+            aoMudar={mudar('email')}
+            aoSair={sair('email')}
+          />
 
-      <Campo
-        id={base + '-senha'}
-        rotulo="Senha"
-        valor={entrada.senha}
-        tipo="password"
-        obrigatorio
-        erro={mostrar('senha')}
-        aoMudar={mudar('senha')}
-        aoSair={sair('senha')}
-      />
+          <CampoDeSenha
+            id={base + '-senha'}
+            valor={entrada.senha}
+            erro={mostrar('senha')}
+            aoMudar={mudar('senha')}
+            aoSair={sair('senha')}
+          />
+        </div>
+      </section>
 
       <SeletorDePermissoes
         permissoes={entrada.permissoes}

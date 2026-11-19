@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BottomNav } from '@/components/layout/BottomNav'
@@ -78,14 +78,26 @@ function preencherCadastro() {
   digitar(/^Senha/, 'segredo1')
 }
 
+let conectado = true
+
+function mudarConexao(online: boolean) {
+  act(() => {
+    conectado = online
+    window.dispatchEvent(new Event(online ? 'online' : 'offline'))
+  })
+}
+
 beforeEach(() => {
   instalarDialogo()
   simulado.equipe = equipe()
   simulado.acesso = null
+  conectado = true
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => conectado })
 })
 
 afterEach(() => {
   cleanup()
+  Reflect.deleteProperty(navigator, 'onLine')
 })
 
 describe('EquipePage — lista', () => {
@@ -162,8 +174,84 @@ describe('EquipePage — novo funcionário', () => {
       expect(interruptor(dialogo, rotulo).getAttribute('aria-checked')).toBe('false')
     }
     expect(within(dialogo).getByRole('button', { name: 'Cobrador' }).getAttribute('aria-pressed')).toBe('true')
-    expect(within(dialogo).getByText(/precisa de internet/)).toBeTruthy()
-    expect(within(dialogo).getByText(/Esqueci minha senha/)).toBeTruthy()
+    expect(within(dialogo).queryByText(/Esqueci minha senha/)).toBeNull()
+  })
+
+  it('a seção Acesso traz nome, e-mail e senha num cartão, e as permissões vêm abaixo', () => {
+    render(<EquipePage />)
+    const dialogo = abrirCadastro()
+
+    const acesso = within(dialogo).getByRole('region', { name: 'Acesso' })
+    expect(within(acesso).getByLabelText(/^Nome/)).toBeTruthy()
+    expect(within(acesso).getByLabelText(/^E-mail/)).toBeTruthy()
+    expect(within(acesso).getByLabelText(/^Senha/)).toBeTruthy()
+    expect(within(acesso).queryByRole('switch')).toBeNull()
+
+    const cartaoBranco = within(acesso).getByLabelText(/^Nome/).closest('.rounded-xl') as HTMLElement
+    expect(cartaoBranco.className).toContain('bg-white')
+    expect(cartaoBranco.className).toContain('border-slate-200')
+
+    const permissoes = within(dialogo).getByRole('heading', { name: 'Permissões' })
+    expect(acesso.compareDocumentPosition(permissoes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('no rodapé, avisa que criar a conta precisa de internet', () => {
+    render(<EquipePage />)
+    const dialogo = abrirCadastro()
+
+    const aviso = within(dialogo).getByText('Criar a conta precisa de internet.')
+    expect(aviso.querySelector('svg')).not.toBeNull()
+    const criar = within(dialogo).getByRole('button', { name: 'Criar conta' }) as HTMLButtonElement
+    expect(criar.disabled).toBe(false)
+    expect(aviso.compareDocumentPosition(criar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('aberto sem internet, o botão vira "Sem internet", desabilitado, e volta ao reconectar', () => {
+    conectado = false
+    render(<EquipePage />)
+    const dialogo = abrirCadastro()
+
+    const semInternet = within(dialogo).getByRole('button', { name: 'Sem internet' }) as HTMLButtonElement
+    expect(semInternet.disabled).toBe(true)
+    expect(within(dialogo).getByText('Sem internet agora. Conecte para criar a conta.')).toBeTruthy()
+    expect(within(dialogo).queryByText('Criar a conta precisa de internet.')).toBeNull()
+
+    preencherCadastro()
+    fireEvent.click(semInternet)
+    expect(simulado.equipe.cadastrar).not.toHaveBeenCalled()
+
+    mudarConexao(true)
+
+    const criar = within(dialogo).getByRole('button', { name: 'Criar conta' }) as HTMLButtonElement
+    expect(criar.disabled).toBe(false)
+    expect(within(dialogo).getByText('Criar a conta precisa de internet.')).toBeTruthy()
+  })
+
+  it('perder a internet com o card aberto desabilita o botão', () => {
+    render(<EquipePage />)
+    const dialogo = abrirCadastro()
+
+    mudarConexao(false)
+
+    expect((within(dialogo).getByRole('button', { name: 'Sem internet' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(dialogo).getByText('Sem internet agora. Conecte para criar a conta.')).toBeTruthy()
+  })
+
+  it('Gerar preenche a senha e ela vai para o cadastro', () => {
+    render(<EquipePage />)
+    abrirCadastro()
+
+    digitar(/^Nome/, 'Carla Dias')
+    digitar(/^E-mail/, 'carla@loja.com')
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar' }))
+    const gerada = campo(/^Senha/).value
+    expect(gerada).toMatch(/^[^-]{4}-[^-]{4}$/)
+    expect(campo(/^Senha/).type).toBe('text')
+    expect(campo(/^Senha/).getAttribute('autocomplete')).toBe('new-password')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+
+    expect(simulado.equipe.cadastrar).toHaveBeenCalledWith(expect.objectContaining({ senha: gerada }))
   })
 
   it('a senha pede "new-password", para o navegador não preencher a senha salva do dono', () => {
