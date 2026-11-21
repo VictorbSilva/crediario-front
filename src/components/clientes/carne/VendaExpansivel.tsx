@@ -98,7 +98,13 @@ export function VendaExpansivel({
 
         <span className="shrink-0 text-right">
           <span className="block text-sm font-bold tabular-nums text-slate-900">
-            {formatarCentavos(venda.valorTotalCentavos)}
+            {formatarCentavos(
+              carne.cancelada
+                ? venda.valorTotalCentavos
+                : simulando
+                  ? resumo.totalComEncargosCentavos
+                  : resumo.abertoCentavos,
+            )}
           </span>
           <span className="mt-0.5 block text-sm text-slate-600">
             {carne.cancelada && venda.canceladaEm

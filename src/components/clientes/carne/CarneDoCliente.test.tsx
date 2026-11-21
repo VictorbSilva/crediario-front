@@ -173,13 +173,13 @@ describe('CarneDoCliente — estados da tela', () => {
   })
 })
 
-describe('CarneDoCliente — indicadores', () => {
-  function kpi(rotulo: string): HTMLElement {
-    const elemento = screen.getByText(rotulo).nextElementSibling
-    if (!(elemento instanceof HTMLElement)) throw new Error(`Sem KPI ${rotulo}`)
-    return elemento
-  }
+function kpi(rotulo: string): HTMLElement {
+  const elemento = screen.getByText(rotulo).nextElementSibling
+  if (!(elemento instanceof HTMLElement)) throw new Error(`Sem KPI ${rotulo}`)
+  return elemento
+}
 
+describe('CarneDoCliente — indicadores', () => {
   it('vendas em aberto não contam quitada nem cancelada; vencidas ficam em vermelho', () => {
     // Duas abertas, uma quitada, uma cancelada: contar só a cancelada, ou só a quitada,
     // daria 1; só o critério certo dá 2.
@@ -206,6 +206,25 @@ describe('CarneDoCliente — indicadores', () => {
 
     expect(kpi('Parcelas vencidas').textContent).toBe('0')
     expect(kpi('Parcelas vencidas').className).toContain('text-slate-900')
+    expect(kpi('Em atraso').textContent).toBe(formatarCentavos(0))
+    expect(kpi('Em atraso').className).toContain('text-slate-900')
+  })
+
+  it('em atraso é o que falta nas vencidas, em vermelho; a parcela a vencer não entra', () => {
+    render(<CarneDoCliente dados={PADRAO()} />)
+
+    // A 2ª parcela venceu com R$ 50 em aberto; os R$ 100 da 3ª ainda não venceram.
+    expect(kpi('Em atraso').textContent).toBe(formatarCentavos(5000))
+    expect(kpi('Em atraso').className).toContain('text-danger')
+  })
+
+  it('com a simulação ligada, o atraso soma multa e juros, como o saldo', () => {
+    render(<CarneDoCliente dados={PADRAO()} />)
+
+    fireEvent.click(screen.getByRole('checkbox'))
+
+    // R$ 50 + multa de R$ 1,00 + juros de R$ 0,25.
+    expect(kpi('Em atraso').textContent).toBe(formatarCentavos(5125))
   })
 
   it('o saldo simulado muda de cor, para não passar por valor a cobrar', () => {
@@ -223,7 +242,7 @@ describe('CarneDoCliente — saldo e simulação', () => {
 
     const simular = screen.getByRole('checkbox') as HTMLInputElement
     expect(simular.checked).toBe(false)
-    expect(screen.getByText(reais(15000))).toBeTruthy()
+    expect(kpi('Saldo devedor').textContent).toBe(formatarCentavos(15000))
     expect(screen.getByText('Mostra quanto a dívida daria com os encargos. Não é o valor a cobrar.')).toBeTruthy()
   })
 
@@ -233,7 +252,7 @@ describe('CarneDoCliente — saldo e simulação', () => {
     fireEvent.click(screen.getByRole('checkbox'))
 
     // Multa de 2% sobre R$ 50 = R$ 1,00; juros de 0,1% × 5 dias = R$ 0,25.
-    expect(screen.getByText(reais(15125))).toBeTruthy()
+    expect(kpi('Saldo devedor').textContent).toBe(formatarCentavos(15125))
     expect(
       screen.getByText(
         `O combinado continua sendo ${reais(15000)} — a simulação acrescenta ${reais(125)} e não é cobrança.`,
@@ -297,6 +316,18 @@ describe('CarneDoCliente — a venda aberta', () => {
     abrirVenda()
     expect(cabecalho.getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByText('Vencida há 5 dias')).toBeNull()
+  })
+
+  it('o cabeçalho mostra o que falta pagar da venda, não o total; com a simulação, com encargos', () => {
+    render(<CarneDoCliente dados={PADRAO()} />)
+    const cabecalho = screen.getByRole('button', { name: /Venda de 20\/08\/2026/ })
+
+    // R$ 300 em 3×100, com R$ 150 pagos.
+    expect(cabecalho.textContent).toContain(formatarCentavos(15000))
+    expect(cabecalho.textContent).not.toContain(formatarCentavos(30000))
+
+    fireEvent.click(screen.getByRole('checkbox'))
+    expect(cabecalho.textContent).toContain(formatarCentavos(15125))
   })
 
   it('venda com itens lista cada um, com quantidade, valor unitário e subtotal, antes das parcelas', () => {
@@ -399,6 +430,10 @@ describe('CarneDoCliente — a venda aberta', () => {
     render(<CarneDoCliente dados={dados([cancelada], parcelasDe(cancelada), [])} permiteEscrita />)
 
     expect(screen.getByText('Cancelada em 01/10/2026')).toBeTruthy()
+    // Na cancelada não há restante: o cabeçalho segue mostrando o total da venda.
+    expect(
+      screen.getByRole('button', { name: /Venda de 20\/08\/2026/ }).textContent,
+    ).toContain(formatarCentavos(30000))
     abrirVenda()
     expect(screen.getByText(/Venda cancelada. Não entra no saldo nem nas vencidas/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Cancelar venda' })).toBeNull()
