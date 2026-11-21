@@ -78,6 +78,8 @@ export type Encargos = {
 export type ResumoDaVenda = {
   pagoCentavos: number
   abertoCentavos: number
+  /** O que falta nas parcelas vencidas; a parcial ainda no prazo não entra. */
+  vencidoCentavos: number
   encargosCentavos: number
   totalComEncargosCentavos: number
   parcelasVencidas: number
@@ -236,6 +238,7 @@ export function resumoDaVenda(
 
   let pagoCentavos = 0
   let abertoCentavos = 0
+  let vencidoCentavos = 0
   let encargosCentavos = 0
   let parcelasVencidas = 0
 
@@ -248,6 +251,7 @@ export function resumoDaVenda(
 
     if (estado.situacao === 'vencida') {
       parcelasVencidas += 1
+      vencidoCentavos += estado.restanteCentavos
       const encargos = simularEncargos(
         taxasEfetivas(taxasDaVenda, parcela),
         estado.restanteCentavos,
@@ -260,6 +264,7 @@ export function resumoDaVenda(
   return {
     pagoCentavos,
     abertoCentavos,
+    vencidoCentavos,
     encargosCentavos,
     totalComEncargosCentavos: abertoCentavos + encargosCentavos,
     parcelasVencidas,
@@ -341,6 +346,7 @@ export function montarCarne<V extends VendaConhecida>(
       resumoFinal = {
         ...resumo,
         abertoCentavos: 0,
+        vencidoCentavos: 0,
         encargosCentavos: 0,
         totalComEncargosCentavos: 0,
         parcelasVencidas: 0,
@@ -365,6 +371,7 @@ export function saldoDoCliente(carnes: readonly VendaComCarne[]): ResumoDaVenda 
     (soma, carne) => ({
       pagoCentavos: soma.pagoCentavos + carne.resumo.pagoCentavos,
       abertoCentavos: soma.abertoCentavos + carne.resumo.abertoCentavos,
+      vencidoCentavos: soma.vencidoCentavos + carne.resumo.vencidoCentavos,
       encargosCentavos: soma.encargosCentavos + carne.resumo.encargosCentavos,
       totalComEncargosCentavos:
         soma.totalComEncargosCentavos + carne.resumo.totalComEncargosCentavos,
@@ -374,6 +381,7 @@ export function saldoDoCliente(carnes: readonly VendaComCarne[]): ResumoDaVenda 
     {
       pagoCentavos: 0,
       abertoCentavos: 0,
+      vencidoCentavos: 0,
       encargosCentavos: 0,
       totalComEncargosCentavos: 0,
       parcelasVencidas: 0,

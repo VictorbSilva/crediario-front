@@ -192,6 +192,7 @@ describe('situacaoDaVenda', () => {
   const base = {
     pagoCentavos: 0,
     abertoCentavos: 0,
+    vencidoCentavos: 0,
     encargosCentavos: 0,
     totalComEncargosCentavos: 0,
     parcelasVencidas: 0,

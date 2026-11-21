@@ -44,7 +44,7 @@ const BIA = cliente('bia', 13, 'Bia Souza', { arquivado: true, pendente: true })
 
 const CARNE_VAZIO = {
   carnes: [], pagamentos: [], carregando: false, confianca: 'confiavel', erro: null, falhas: [],
-  saldo: { pagoCentavos: 0, abertoCentavos: 0, encargosCentavos: 0, totalComEncargosCentavos: 0, parcelasVencidas: 0, quitada: true },
+  saldo: { pagoCentavos: 0, abertoCentavos: 0, vencidoCentavos: 0, encargosCentavos: 0, totalComEncargosCentavos: 0, parcelasVencidas: 0, quitada: true },
   hoje: '2026-10-15', estadoSync: 'sincronizado', pendentes: 0, descartarFalha: vi.fn(),
   registrarVenda: vi.fn(), registrarPagamento: vi.fn(), cancelarPagamento: vi.fn(), cancelarVenda: vi.fn(),
 } as CarneDoCliente

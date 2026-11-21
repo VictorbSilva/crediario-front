@@ -409,6 +409,22 @@ describe('resumoDaVenda', () => {
 
     expect(metade.encargosCentavos).toBeLessThan(inteira.encargosCentavos)
   })
+
+  it('em atraso conta só o que falta da vencida paga pela metade, não a parcela a vencer', () => {
+    // R$ 150 cobrem a 1ª inteira e metade da 2ª; a 3ª ainda vai vencer.
+    const resumo = resumoDaVenda(carne, [pagamento({ valorCentavos: 15000 })], taxas, HOJE)
+
+    expect(resumo.vencidoCentavos).toBe(5000)
+    expect(resumo.abertoCentavos).toBe(15000)
+  })
+
+  it('parcela paga em parte que ainda não venceu não entra no atraso', () => {
+    // R$ 250 quitam as duas vencidas e deixam a 3ª parcial, ainda no prazo.
+    const resumo = resumoDaVenda(carne, [pagamento({ valorCentavos: 25000 })], taxas, HOJE)
+
+    expect(resumo.vencidoCentavos).toBe(0)
+    expect(resumo.abertoCentavos).toBe(5000)
+  })
 })
 
 describe('montarCarne', () => {
@@ -471,9 +487,11 @@ describe('montarCarne', () => {
     expect(ativa.resumo.parcelasVencidas).toBe(2)
     expect(ativa.resumo.encargosCentavos).toBeGreaterThan(0)
     expect(cancelada.cancelada).toBe(true)
+    expect(ativa.resumo.vencidoCentavos).toBe(15000)
     expect(cancelada.resumo).toEqual({
       pagoCentavos: ativa.resumo.pagoCentavos,
       abertoCentavos: 0,
+      vencidoCentavos: 0,
       encargosCentavos: 0,
       totalComEncargosCentavos: 0,
       parcelasVencidas: 0,
@@ -580,6 +598,23 @@ describe('saldoDoCliente', () => {
     expect(saldoDoCliente(montarCarne(vendas, parcelas, [], HOJE)).abertoCentavos).toBe(20000)
   })
 
+  it('soma o atraso de todas as vendas ativas e ignora o da cancelada', () => {
+    const vendas = [
+      { id: 'v1', dataVenda: '2026-04-19', numeroParcelas: 1, cancelada: true },
+      { id: 'v2', dataVenda: '2026-05-19', numeroParcelas: 1 },
+      { id: 'v3', dataVenda: '2026-06-19', numeroParcelas: 1 },
+    ]
+    const parcelas = [
+      { ...parcela({ id: 'a', vencimento: '2026-06-19' }), saleId: 'v1' },
+      { ...parcela({ id: 'b', vencimento: '2026-07-19' }), saleId: 'v2' },
+      { ...parcela({ id: 'c', vencimento: '2026-08-19' }), saleId: 'v3' },
+    ]
+    const pagamentos = [{ ...pagamento({ id: 'g1', valorCentavos: 4000 }), saleId: 'v3' }]
+
+    // v2 deve R$ 100 vencidos; v3, R$ 60; os R$ 100 da cancelada não entram.
+    expect(saldoDoCliente(montarCarne(vendas, parcelas, pagamentos, HOJE)).vencidoCentavos).toBe(16000)
+  })
+
   it('só chama de quitado quando todos os carnês fecharam', () => {
     const vendas = [{ id: 'v1', dataVenda: '2026-04-19', numeroParcelas: 1 }]
     const parcelas = [{ ...parcela({ id: 'a' }), saleId: 'v1' }]
@@ -592,6 +627,7 @@ describe('saldoDoCliente', () => {
   it('devolve quitado para cliente sem venda nenhuma', () => {
     expect(saldoDoCliente([]).quitada).toBe(true)
     expect(saldoDoCliente([]).abertoCentavos).toBe(0)
+    expect(saldoDoCliente([]).vencidoCentavos).toBe(0)
   })
 })
 

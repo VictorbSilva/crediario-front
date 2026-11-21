@@ -184,13 +184,20 @@ export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProxima
         </Nota>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi
           rotulo="Saldo devedor"
           valor={formatarCentavos(
             simulando ? saldo.totalComEncargosCentavos : saldo.abertoCentavos,
           )}
           tom={simulando ? 'alerta' : 'neutro'}
+        />
+        <Kpi
+          rotulo="Em atraso"
+          valor={formatarCentavos(
+            simulando ? saldo.vencidoCentavos + saldo.encargosCentavos : saldo.vencidoCentavos,
+          )}
+          tom={saldo.vencidoCentavos > 0 ? 'perigo' : 'neutro'}
         />
         <Kpi rotulo="Vendas em aberto" valor={String(emAberto)} />
         <Kpi
