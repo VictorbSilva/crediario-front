@@ -4,9 +4,13 @@ import { deleteDoc, deleteField, doc, serverTimestamp, setDoc, updateDoc } from 
 import type { Firestore } from 'firebase/firestore'
 import {
   EMPRESA,
+  EMPRESA_TREINO,
   UID_DONO,
   UID_INTRUSO,
+  UID_TESTE,
+  caminhoMembro,
   criarAmbiente,
+  membroValido,
   pagamentoValido,
   parcelaValida,
   vendaValida,
@@ -35,6 +39,19 @@ function bancoIntruso(): Firestore {
   return ambiente.authenticatedContext(UID_INTRUSO).firestore() as unknown as Firestore
 }
 
+const UID_FUNCIONARIO = 'funcionario-1'
+
+function bancoFuncionario(): Firestore {
+  return ambiente.authenticatedContext(UID_FUNCIONARIO).firestore() as unknown as Firestore
+}
+
+function bancoTeste(): Firestore {
+  return ambiente.authenticatedContext(UID_TESTE).firestore() as unknown as Firestore
+}
+
+// As três chaves de antes da permissão de cancelar — o membro gravado até aqui.
+const SEM_CANCELAR = { financeiro: false, caixaDoDia: true, exportar: false }
+
 const venda = (id = 'v1') => `businesses/${EMPRESA}/sales/${id}`
 const parcela = (id = 'p1') => `businesses/${EMPRESA}/installments/${id}`
 const pagamento = (id = 'g1') => `businesses/${EMPRESA}/payments/${id}`
@@ -44,6 +61,10 @@ async function semear(caminho: string, dados: Record<string, unknown>) {
     const banco = contexto.firestore() as unknown as Firestore
     await setDoc(doc(banco, caminho), { ...dados, criadoEm: new Date(), atualizadoEm: new Date() })
   })
+}
+
+async function semearFuncionario(permissoes: Record<string, unknown>) {
+  await semear(caminhoMembro(UID_FUNCIONARIO), membroValido({ permissoes }))
 }
 
 describe('sales — criação', () => {
@@ -256,6 +277,66 @@ describe('sales — cancelamento', () => {
         canceladaEm: '2026-10-13',
         atualizadoEm: serverTimestamp(),
       }))).toBe('negado')
+  })
+})
+
+describe('sales — permissão de cancelar', () => {
+  const cancelamento = () => ({
+    cancelada: true,
+    canceladaEm: '2026-10-13',
+    atualizadoEm: serverTimestamp(),
+  })
+
+  const taxas = () => ({
+    multaTipo: 'fixo',
+    multaFixaCentavos: 500,
+    atualizadoEm: serverTimestamp(),
+  })
+
+  it('membro com cancelar: true cancela a venda', async () => {
+    await semearFuncionario({ ...SEM_CANCELAR, cancelar: true })
+    await semear(venda(), vendaValida())
+    expect(await veredito(updateDoc(doc(bancoFuncionario(), venda()), cancelamento()))).toBe('permitido')
+  })
+
+  it('membro gravado sem a chave cancelar não cancela', async () => {
+    await semearFuncionario(SEM_CANCELAR)
+    await semear(venda(), vendaValida())
+    expect(await veredito(updateDoc(doc(bancoFuncionario(), venda()), cancelamento()))).toBe('negado')
+  })
+
+  it('membro com cancelar: false não cancela', async () => {
+    await semearFuncionario({ ...SEM_CANCELAR, cancelar: false })
+    await semear(venda(), vendaValida())
+    expect(await veredito(updateDoc(doc(bancoFuncionario(), venda()), cancelamento()))).toBe('negado')
+  })
+
+  it('o dono cancela sem documento em membros', async () => {
+    await semear(venda(), vendaValida())
+    expect(await veredito(updateDoc(doc(bancoDono(), venda()), cancelamento()))).toBe('permitido')
+  })
+
+  it('a conta de testes cancela na loja-treino sem documento em membros', async () => {
+    const caminho = `businesses/${EMPRESA_TREINO}/sales/v1`
+    await semear(caminho, vendaValida())
+    expect(await veredito(updateDoc(doc(bancoTeste(), caminho), cancelamento()))).toBe('permitido')
+  })
+
+  it('membro sem a permissão ainda cria venda', async () => {
+    await semearFuncionario(SEM_CANCELAR)
+    expect(await veredito(setDoc(doc(bancoFuncionario(), venda()), vendaValida()))).toBe('permitido')
+  })
+
+  it('membro sem a permissão ainda muda as taxas de simulação', async () => {
+    await semearFuncionario(SEM_CANCELAR)
+    await semear(venda(), vendaValida())
+    expect(await veredito(updateDoc(doc(bancoFuncionario(), venda()), taxas()))).toBe('permitido')
+  })
+
+  it('membro sem a permissão ainda muda as taxas de venda já cancelada', async () => {
+    await semearFuncionario(SEM_CANCELAR)
+    await semear(venda(), vendaValida({ cancelada: true, canceladaEm: '2026-10-13' }))
+    expect(await veredito(updateDoc(doc(bancoFuncionario(), venda()), taxas()))).toBe('permitido')
   })
 })
 
@@ -571,5 +652,42 @@ describe('payments', () => {
   it('nunca apaga', async () => {
     await semear(pagamento(), pagamentoValido())
     expect(await veredito(deleteDoc(doc(bancoDono(), pagamento())))).toBe('negado')
+  })
+})
+
+describe('payments — permissão de cancelar', () => {
+  const cancelamento = () => ({
+    cancelado: true,
+    canceladoEm: '2026-09-22',
+    atualizadoEm: serverTimestamp(),
+  })
+
+  it('membro com cancelar: true cancela o pagamento', async () => {
+    await semearFuncionario({ ...SEM_CANCELAR, cancelar: true })
+    await semear(pagamento(), pagamentoValido())
+    expect(await veredito(updateDoc(doc(bancoFuncionario(), pagamento()), cancelamento()))).toBe('permitido')
+  })
+
+  it('membro gravado sem a chave cancelar não cancela', async () => {
+    await semearFuncionario(SEM_CANCELAR)
+    await semear(pagamento(), pagamentoValido())
+    expect(await veredito(updateDoc(doc(bancoFuncionario(), pagamento()), cancelamento()))).toBe('negado')
+  })
+
+  it('membro com cancelar: false não cancela', async () => {
+    await semearFuncionario({ ...SEM_CANCELAR, cancelar: false })
+    await semear(pagamento(), pagamentoValido())
+    expect(await veredito(updateDoc(doc(bancoFuncionario(), pagamento()), cancelamento()))).toBe('negado')
+  })
+
+  it('a conta de testes cancela na loja-treino sem documento em membros', async () => {
+    const caminho = `businesses/${EMPRESA_TREINO}/payments/g1`
+    await semear(caminho, pagamentoValido())
+    expect(await veredito(updateDoc(doc(bancoTeste(), caminho), cancelamento()))).toBe('permitido')
+  })
+
+  it('membro sem a permissão ainda registra pagamento', async () => {
+    await semearFuncionario(SEM_CANCELAR)
+    expect(await veredito(setDoc(doc(bancoFuncionario(), pagamento()), pagamentoValido()))).toBe('permitido')
   })
 })
