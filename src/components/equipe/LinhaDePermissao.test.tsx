@@ -15,7 +15,7 @@ const CAIXA: DescricaoDePermissao = {
   grupo: 'ver',
 }
 
-// Nenhuma permissão de hoje tem risco: a primeira é a de cancelar, da tarefa 13.
+// "Cancelar vendas e pagamentos" é hoje a única permissão com risco.
 const ARRISCADA: DescricaoDePermissao = { ...CAIXA, rotulo: 'Permissão arriscada', risco: true }
 
 function montar(permissao: DescricaoDePermissao, ligado = false) {

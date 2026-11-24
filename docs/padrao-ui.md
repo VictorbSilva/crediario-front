@@ -23,6 +23,18 @@ o grupo, as etiquetas e os perfis Cobrador e Gerente saem dessa lista sozinhos.
 A chave nova também precisa existir no tipo `Permissoes` e na regra de `membros`, mas isso é
 dado, não UI: ver `docs/armadilhas.md`.
 
+### Permissões existentes
+
+Uma linha por item de `DESCRICAO_DAS_PERMISSOES`, na ordem da tela. Permissão nova entra primeiro
+em `DESCRICAO_DAS_PERMISSOES` e depois nesta lista. O perfil Gerente liga todas.
+
+| Chave | Rótulo | Grupo | Ícone | Risco |
+| --- | --- | --- | --- | --- |
+| `financeiro` | Financeiro geral | ver | `Wallet` | não |
+| `caixaDoDia` | Caixa do dia | ver | `CalendarDays` | não |
+| `exportar` | Exportar dados | fazer | `Download` | não |
+| `cancelar` | Cancelar vendas e pagamentos | fazer | `Ban` | sim |
+
 ### Título de seção
 
 `text-xs font-bold uppercase tracking-wider text-slate-600`. Exemplo: "Permissões", no topo do
