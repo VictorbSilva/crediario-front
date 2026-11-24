@@ -28,9 +28,20 @@ service cloud.firestore {
       return autenticado() && exists(caminho) && get(caminho).data.get('ativo', false) == true;
     }
 
+    function membroPodeCancelar(businessId) {
+      let caminho = /databases/$(database)/documents/businesses/$(businessId)/membros/$(request.auth.uid);
+      return membroAtivo(businessId)
+        && get(caminho).data.get('permissoes', {}).get('cancelar', false) == true;
+    }
+
     function podeAcessar(businessId) {
       return ehDono() || ehTesteNoTreino(businessId) || pertenceAEmpresa(businessId)
         || membroAtivo(businessId);
+    }
+
+    function podeCancelar(businessId) {
+      return ehDono() || ehTesteNoTreino(businessId) || pertenceAEmpresa(businessId)
+        || membroPodeCancelar(businessId);
     }
 
     match /businesses/{businessId} {
@@ -116,11 +127,12 @@ service cloud.firestore {
             && dados().email.matches('^[^@\\s]+@[^@\\s]+$')
             && dados().ativo is bool
             && dados().permissoes is map
-            && dados().permissoes.keys().hasOnly(['financeiro', 'caixaDoDia', 'exportar'])
+            && dados().permissoes.keys().hasOnly(['financeiro', 'caixaDoDia', 'exportar', 'cancelar'])
             && dados().permissoes.keys().hasAll(['financeiro', 'caixaDoDia', 'exportar'])
             && dados().permissoes.financeiro is bool
             && dados().permissoes.caixaDoDia is bool
             && dados().permissoes.exportar is bool
+            && dados().permissoes.get('cancelar', false) is bool
             && autoriaValida();
         }
 
@@ -364,7 +376,10 @@ service cloud.firestore {
           && tiposValidos()
           && carimboDeEdicao()
           && imutaveisPreservados()
-          && cancelamentoValido();
+          && cancelamentoValido()
+          && (anterior().get('cancelada', false) == true
+              || dados().get('cancelada', false) == false
+              || podeCancelar(businessId));
 
         allow delete: if false;
       }
@@ -495,7 +510,8 @@ service cloud.firestore {
           && obrigatoriosPresentes()
           && tiposValidos()
           && carimboDeEdicao()
-          && soCancelaNuncaReescreve();
+          && soCancelaNuncaReescreve()
+          && podeCancelar(businessId);
 
         allow delete: if false;
       }

@@ -206,6 +206,36 @@ describe('membros — campos e tipos', () => {
     expect(await criar(membroValido({ permissoes: { financeiro: false, caixaDoDia: false } }))).toBe('negado')
   })
 
+  it('aceita permissoes com as quatro chaves, cancelar incluída', async () => {
+    const permissoes = { financeiro: false, caixaDoDia: true, exportar: false, cancelar: true }
+    expect(await criar(membroValido({ permissoes }))).toBe('permitido')
+  })
+
+  it('aceita permissoes com as três chaves de antes, sem cancelar', async () => {
+    const permissoes = { financeiro: false, caixaDoDia: true, exportar: false }
+    expect(await criar(membroValido({ permissoes }))).toBe('permitido')
+  })
+
+  it('aceita o app anterior regravando as três chaves num membro que já tem cancelar', async () => {
+    await semearMembro(UID_FUNCIONARIO, EMPRESA, {
+      permissoes: { financeiro: false, caixaDoDia: true, exportar: false, cancelar: true },
+    })
+    const mudanca = edicao({ permissoes: { financeiro: true, caixaDoDia: true, exportar: false } })
+    expect(await veredito(updateDoc(doc(bancoDe(UID_DONO), caminhoMembro(UID_FUNCIONARIO)), mudanca))).toBe('permitido')
+  })
+
+  it('recusa cancelar que não é bool', async () => {
+    const base = { financeiro: false, caixaDoDia: false, exportar: false }
+    expect(await criar(membroValido({ permissoes: { ...base, cancelar: 'sim' } }))).toBe('negado')
+    expect(await criar(membroValido({ permissoes: { ...base, cancelar: 1 } }))).toBe('negado')
+    expect(await criar(membroValido({ permissoes: { ...base, cancelar: null } }))).toBe('negado')
+  })
+
+  it('recusa uma quinta chave em permissoes', async () => {
+    const permissoes = { financeiro: false, caixaDoDia: false, exportar: false, cancelar: true, apagar: true }
+    expect(await criar(membroValido({ permissoes }))).toBe('negado')
+  })
+
   it('recusa permissoes que não é mapa', async () => {
     expect(await criar(membroValido({ permissoes: ['financeiro'] }))).toBe('negado')
   })

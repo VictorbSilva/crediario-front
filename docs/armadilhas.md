@@ -368,6 +368,21 @@ combinados continua sendo `imutaveisPreservados()`, que também vale no update q
 > recusa `cancelada` pela lista fechada, e offline essa recusa chega horas depois, longe de
 > quem tocou no botão.
 
+**Quem cancela** (24/11/2026). Desde a permissão `cancelar` em `membros`, cancelar exige
+`podeCancelar(businessId)`: o dono, a conta de testes na `loja-treino`, a conta com o claim
+`businessId` ou o membro ativo com `cancelar: true` (ver "Permissão de cancelar", na seção de
+`membros`). Nas duas coleções, a cláusula nova entra no `allow update`, depois das que já
+existiam:
+
+- `payments` — `&& podeCancelar(businessId)` direto, porque o único update permitido já é o
+  cancelamento (`soCancelaNuncaReescreve()`).
+- `sales` — `&& (anterior().get('cancelada', false) == true || dados().get('cancelada', false)
+  == false || podeCancelar(businessId))`. Os dois primeiros ramos são os updates que não
+  cancelam: mudar as taxas de uma venda já cancelada e mudar as taxas de uma venda que continua
+  não cancelada. Só sobra para `podeCancelar()` o update que leva `cancelada` de false para
+  true. Sem o primeiro ramo, o membro sem a permissão deixaria de mudar as taxas de venda já
+  cancelada (teste `membro sem a permissão ainda muda as taxas de venda já cancelada`).
+
 **Itens da venda e venda semanal** (pedido do dono em 30/10/2026). Dois campos novos em
 `sales`, opcionais e imutáveis depois de criados, como o resto do plano:
 
@@ -498,8 +513,9 @@ Campos, todos obrigatórios e numa lista fechada:
 - `email` — string de 3 a 254 caracteres que casa com `^[^@\s]+@[^@\s]+$`: um `@` só, sem
   espaço. Imutável depois de criado.
 - `ativo` — bool. É o que abre ou fecha a loja para o funcionário.
-- `permissoes` — mapa com exatamente `financeiro`, `caixaDoDia` e `exportar`, os três bool.
-  Chave a mais ou a menos é negada.
+- `permissoes` — mapa com `financeiro`, `caixaDoDia` e `exportar`, os três obrigatórios, e
+  `cancelar`, opcional desde 24/11/2026 (ver "Permissão de cancelar", abaixo). Todos bool.
+  Chave fora dessas quatro é negada, e faltar uma das três primeiras também.
 - `criadoEm`, `atualizadoEm`, `atualizadoPor` — os mesmos carimbos e a mesma autoria das outras
   coleções. `criadoEm` é imutável.
 
@@ -519,12 +535,13 @@ para se dar `financeiro: true` ou se reativar. Não há `delete`, pelo mesmo mot
 projeto: desligar um funcionário é `ativo: false`, e o documento continua lá como histórico.
 
 > **AVISO**
-> **As permissões não são barreira de segurança.** `financeiro`, `caixaDoDia` e `exportar` só
-> escondem telas no app. A regra das quatro coleções confere apenas se a conta é membro ativo,
-> porque o funcionário precisa ler `sales` e `payments` para ver o carnê do cliente que está
-> cobrando. Um funcionário com `financeiro: false` que chame a API direto lê as vendas e os
-> pagamentos da loja toda. Se um dia for preciso barrar isso de verdade, a mudança é na regra
-> de cada coleção, não no mapa.
+> **Três das quatro permissões não são barreira de segurança.** `financeiro`, `caixaDoDia` e
+> `exportar` só escondem telas no app. A regra das quatro coleções confere apenas se a conta é
+> membro ativo, porque o funcionário precisa ler `sales` e `payments` para ver o carnê do
+> cliente que está cobrando. Um funcionário com `financeiro: false` que chame a API direto lê as
+> vendas e os pagamentos da loja toda. Se um dia for preciso barrar isso de verdade, a mudança é
+> na regra de cada coleção, não no mapa. A exceção é `cancelar`, a única que a regra confere
+> (ver "Permissão de cancelar", abaixo).
 
 **Custo no plano Spark.** `membroAtivo()` faz `exists()` e `get()` do documento do membro, e
 isso conta **1 leitura por requisição do funcionário**, somada às leituras dos documentos que
@@ -559,6 +576,84 @@ data fixa, para o teste `recusa trocar criadoEm no update` comparar com um valor
 — referente a firestore.rules, `membroAtivo()` e `match /membros/{uid}`;
 tests/regras/membros.test.ts; tests/regras/acesso.test.ts,
 `describe('acesso — funcionário via membros')`
+
+### Permissão de cancelar — acrescentada em 24/11/2026
+
+Decisão do Victor em 19/11/2026: cancelar venda e cancelar pagamento vira uma permissão
+editável, como as outras três, que o dono liga ou desliga na tela Equipe. **É a única das quatro
+que a regra confere**, porque é a única que barra uma escrita: as outras escondem telas de
+leitura, e a leitura o funcionário precisa ter de qualquer jeito (AVISO acima).
+
+O que ela barra, e o que não:
+
+| Operação do membro ativo                         | sem `cancelar` | `cancelar: true` |
+| ------------------------------------------------ | -------------- | ---------------- |
+| criar venda, registrar pagamento                 | aceita         | aceita           |
+| mudar as taxas de simulação da venda             | aceita         | aceita           |
+| cancelar venda (`cancelada` de false para true)  | negada         | aceita           |
+| cancelar pagamento (o único update de `payments`) | negada         | aceita           |
+
+O dono, a conta de testes na `loja-treino` e a conta com o claim `businessId` cancelam como
+antes, sem documento em `membros`. Na regra, isso são dois helpers no topo do arquivo:
+
+- `membroPodeCancelar(businessId)` — `membroAtivo(businessId)` e
+  `get(caminho).data.get('permissoes', {}).get('cancelar', false) == true`, com o mesmo
+  `caminho` de `membroAtivo()`.
+- `podeCancelar(businessId)` — `ehDono() || ehTesteNoTreino() || pertenceAEmpresa() ||
+  membroPodeCancelar()`, na mesma ordem de `podeAcessar()`, pelo mesmo motivo: o `||` para no
+  primeiro verdadeiro, e o dono e a conta de testes não pagam leitura.
+
+O uso em `sales` e `payments` está na seção
+[firestore.rules — sales, installments e payments](#firestorerules--sales-installments-e-payments).
+
+**Por que `cancelar` é opcional.** Os membros gravados até aqui não têm a chave, e um aparelho
+com o app anterior continua gravando o mapa com três chaves. Se a chave fosse obrigatória, a
+regra recusaria toda gravação do app anterior em `membros`, e offline essa recusa chega horas
+depois, longe de quem tocou no botão. Por isso `hasAll` continua com as três, e **ausente vale
+`false`**: a regra lê sempre `.get('cancelar', false)`, na validação
+(`dados().permissoes.get('cancelar', false) is bool`) e em `membroPodeCancelar()`. Ler
+`.cancelar` direto daria erro no membro sem a chave, pelo mesmo motivo do AVISO de `cancelada`
+na seção de `sales`; na validação, esse erro recusaria todo mapa de três chaves.
+
+> **AVISO**
+> **O app anterior apaga o `cancelar` ao editar as permissões.** `alterarPermissoes`, em
+> `src/data/useEquipe.ts`, grava `permissoes` inteiro com `updateDoc`, e um mapa gravado assim
+> substitui o anterior, não se mistura com ele. Se o dono der `cancelar: true` num aparelho e
+> depois mexer nas permissões do mesmo funcionário num aparelho com o app anterior, o mapa volta
+> com três chaves e o funcionário perde a permissão de cancelar, sem aviso. A regra aceita isso
+> de propósito, porque é o que torna a chave opcional (teste `aceita o app anterior regravando
+> as três chaves num membro que já tem cancelar`).
+
+> **AVISO**
+> **Cancelamento na fila offline de quem perdeu a permissão é recusado em silêncio.** A regra
+> confere a permissão quando a escrita chega ao servidor, não quando foi feita. Um funcionário
+> com `cancelar: true` cancela um pagamento sem internet; antes de o aparelho sincronizar, o dono
+> desliga a permissão. Quando a fila sobe, o update volta `permission-denied`, o SDK desfaz a
+> escrita otimista e o pagamento reaparece como não cancelado. A falha só fica registrada no
+> estado React do hook montado naquele momento e não sobrevive ao app fechado (ver o `CLAUDE.md`
+> sobre escritas sem `await`). É o mesmo comportamento do AVISO de desativação, acima.
+
+**Custo no plano Spark: nenhuma leitura a mais.** Num cancelamento do funcionário, a regra lê o
+documento do membro em `podeAcessar()` e de novo em `podeCancelar()`: `exists()` e `get()` de
+`membroAtivo()`, duas vezes, mais o `get()` de `membroPodeCancelar()`. É sempre o mesmo
+documento, e a página de preços do Firestore diz: *"You are only charged one read per dependent
+document even if your rules refer to that document more than once."* A requisição continua
+custando 1 leitura do documento do membro, como qualquer outra do funcionário. Para o limite de
+chamadas, o que vale é a página de condições das regras: 10 chamadas de acesso por requisição de
+um documento só (20 num lote), e *"some document access calls may be cached, and cached calls do
+not count towards the limits"*. Mesmo que nenhuma das chamadas repetidas viesse do cache, são
+cinco, abaixo das 10. Conferido em 24/11/2026 em
+<https://firebase.google.com/docs/firestore/pricing> (seção "Cloud Firestore Security Rules") e
+<https://firebase.google.com/docs/firestore/security/rules-conditions> ("Access call limits").
+
+> **AVISO**
+> **Ordem de publicação.** Ainda não há funcionário em produção, então publicar esta regra não
+> recusa nada de ninguém. Pelo AVISO de ordem de publicação acima, publicar de uma branch que
+> tenha esta regra **e** todas as que já estão no ar.
+
+— referente a firestore.rules, `membroPodeCancelar()`, `podeCancelar()` e `match /membros/{uid}`;
+tests/regras/membros.test.ts, `describe('membros — campos e tipos')`; tests/regras/vendas.test.ts,
+`describe('sales — permissão de cancelar')` e `describe('payments — permissão de cancelar')`
 
 ## tests/regras/ambiente.ts — `veredito`
 
