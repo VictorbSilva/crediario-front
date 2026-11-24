@@ -12,7 +12,8 @@ const formas: Record<FormaDePagamento, string> = {
 
 type LivroDePagamentosProps = Readonly<{
   pagamentos: readonly Pagamento[]
-  aoCancelar: (pagamento: Pagamento, quando: string) => void
+  /** Ausente para quem não tem a permissão de cancelar: a lista fica, os botões não. */
+  aoCancelar?: (pagamento: Pagamento, quando: string) => void
 }>
 
 /**
@@ -63,7 +64,7 @@ export function LivroDePagamentos({ pagamentos, aoCancelar }: LivroDePagamentosP
                 <StatusPill>
                   Cancelado{pagamento.canceladoEm ? ` em ${dataBonita(pagamento.canceladoEm)}` : ''}
                 </StatusPill>
-              ) : confirmando === pagamento.id ? (
+              ) : !aoCancelar ? null : confirmando === pagamento.id ? (
                 <span className="ml-auto flex items-center gap-2 text-xs">
                   <span className="text-slate-600">Cancelar este lançamento?</span>
                   <button
@@ -98,9 +99,11 @@ export function LivroDePagamentos({ pagamentos, aoCancelar }: LivroDePagamentosP
         })}
       </ul>
 
-      <p className="mt-2 text-xs text-slate-600">
-        Cancelar registra o estorno; o atraso volta a contar do vencimento original.
-      </p>
+      {aoCancelar ? (
+        <p className="mt-2 text-xs text-slate-600">
+          Cancelar registra o estorno; o atraso volta a contar do vencimento original.
+        </p>
+      ) : null}
     </div>
   )
 }

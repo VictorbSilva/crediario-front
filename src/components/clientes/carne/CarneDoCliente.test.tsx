@@ -2,6 +2,8 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CarneDoCliente as DadosDoCarne } from '@/data/useCarne'
+import { PERMISSOES_DO_DONO } from '@/lib/acesso'
+import type { Acesso } from '@/lib/acesso'
 import { formatarCentavos } from '@/lib/dinheiro'
 import { montarCarne, saldoDoCliente } from '@/lib/parcelas'
 import { instalarDialogo } from '@/test/dialogo'
@@ -10,9 +12,21 @@ import { CarneDoCliente } from './CarneDoCliente'
 import { ListaDeParcelas } from './ListaDeParcelas'
 
 vi.mock('html-to-image', () => ({ toBlob: vi.fn(() => new Promise(() => {})) }))
+const simulado = vi.hoisted(() => ({ acesso: null as Acesso | null }))
+
 vi.mock('@/data/useClientes', () => ({
   useClientes: () => ({ clientes: [{ id: 'ana', numero: 12, nome: 'Ana' }] }),
 }))
+vi.mock('@/data/useAcesso', () => ({ useAcesso: () => simulado.acesso }))
+
+const DONO: Acesso = { estado: 'liberado', dono: true, permissoes: PERMISSOES_DO_DONO }
+
+function funcionario(cancelar: boolean): Acesso {
+  return {
+    estado: 'liberado', dono: false,
+    permissoes: { financeiro: false, caixaDoDia: false, exportar: false, cancelar },
+  }
+}
 
 const HOJE = '2026-10-15'
 
@@ -88,6 +102,7 @@ function digitar(rotulo: string | RegExp, valor: string) {
 }
 
 beforeEach(() => {
+  simulado.acesso = DONO
   instalarDialogo()
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date(2026, 9, 15, 12))
@@ -662,6 +677,65 @@ describe('CarneDoCliente — livro de pagamentos', () => {
     fireEvent.click(within(pix).getByRole('button', { name: 'Cancelar' }))
     fireEvent.click(within(pix).getByRole('button', { name: 'Cancelar' }))
     expect(carne.cancelarPagamento).toHaveBeenCalledWith(expect.objectContaining({ id: 'pg1' }), HOJE)
+  })
+})
+
+describe('CarneDoCliente — permissão de cancelar', () => {
+  const livroVariado = () =>
+    dados([V1], parcelasDe(V1), [
+      pagamento('pg1', 'v1'),
+      pagamento('pg0', 'v1', { data: '2026-09-01', valorCentavos: 2000, forma: 'dinheiro', cancelado: true, canceladoEm: '2026-09-02' }),
+      pagamento('pg2', 'v1', { data: '2026-10-01', valorCentavos: 1000, forma: 'cartao', pendente: true }),
+    ])
+  const livro = () => screen.getByText('Pagamentos recebidos').parentElement as HTMLElement
+
+  it('o dono e o funcionário com a permissão veem o livro com os cancelar', () => {
+    for (const acesso of [DONO, funcionario(true)]) {
+      simulado.acesso = acesso
+      render(<CarneDoCliente dados={livroVariado()} permiteEscrita />)
+      abrirVenda()
+
+      const pix = within(livro()).getAllByRole('listitem')[1]
+      expect(within(pix).getByRole('button', { name: 'Cancelar' })).toBeTruthy()
+      expect(within(livro()).getByText(/Cancelar registra o estorno/)).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Cancelar venda' })).toBeTruthy()
+      cleanup()
+    }
+  })
+
+  it('sem a permissão, o funcionário vê o livro inteiro, sem cancelar nada, e ainda registra pagamento', () => {
+    simulado.acesso = funcionario(false)
+    render(<CarneDoCliente dados={livroVariado()} permiteEscrita />)
+    abrirVenda()
+
+    const itens = within(livro()).getAllByRole('listitem')
+    expect(itens.map((li) => li.textContent)).toEqual([
+      expect.stringContaining('01/10/2026 · Cartão'),
+      expect.stringContaining('12/09/2026 · Pix'),
+      expect.stringContaining('01/09/2026 · Dinheiro'),
+    ])
+    expect(itens[0].textContent).toContain(formatarCentavos(1000))
+    expect(within(itens[0]).getByText('Pendente')).toBeTruthy()
+    expect(itens[1].textContent).toContain(formatarCentavos(15000))
+    expect(within(itens[2]).getByText(reais(2000)).className).toContain('line-through')
+    expect(within(itens[2]).getByText('Cancelado em 02/09/2026')).toBeTruthy()
+
+    expect(within(livro()).queryAllByRole('button')).toHaveLength(0)
+    expect(within(livro()).queryByText(/Cancelar registra o estorno/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancelar venda' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Registrar pagamento' }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Nova venda' })).toBeTruthy()
+  })
+
+  it('o painel só de leitura continua sem o livro, mesmo para quem pode cancelar', () => {
+    simulado.acesso = funcionario(true)
+    render(<CarneDoCliente dados={livroVariado()} />)
+    abrirVenda()
+
+    expect(screen.queryByText('Pagamentos recebidos')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancelar venda' })).toBeNull()
   })
 })
 
