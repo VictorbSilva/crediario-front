@@ -44,7 +44,9 @@ type VendaExpansivelProps = Readonly<{
   aberta: boolean
   aoAlternar: () => void
   aoAbrirDocumento: () => void
-  /** Ausentes no painel lateral, que é só leitura. */
+  /** Falso no painel lateral, que é só leitura e não mostra o livro de pagamentos. */
+  mostrarPagamentos: boolean
+  /** Ausentes no painel lateral; os dois de cancelar, também sem a permissão de cancelar. */
   aoRegistrarPagamento?: (venda: Venda, item: ParcelaComEstado) => void
   aoCancelarPagamento?: (pagamento: Pagamento, quando: string) => void
   aoCancelarVenda?: (venda: Venda) => void
@@ -58,6 +60,7 @@ export function VendaExpansivel({
   aberta,
   aoAlternar,
   aoAbrirDocumento,
+  mostrarPagamentos,
   aoRegistrarPagamento,
   aoCancelarPagamento,
   aoCancelarVenda,
@@ -168,7 +171,7 @@ export function VendaExpansivel({
             </>
           )}
 
-          {aoCancelarPagamento ? (
+          {mostrarPagamentos ? (
             <LivroDePagamentos
               pagamentos={pagamentos.filter((p) => p.saleId === venda.id)}
               aoCancelar={aoCancelarPagamento}

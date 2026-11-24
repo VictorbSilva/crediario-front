@@ -8,8 +8,10 @@ import { VendaExpansivel } from '@/components/clientes/carne/VendaExpansivel'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Kpi } from '@/components/ui/Kpi'
 import { Nota } from '@/components/ui/Nota'
+import { useAcesso } from '@/data/useAcesso'
 import type { CarneDoCliente as DadosDoCarne } from '@/data/useCarne'
 import { useClientes } from '@/data/useClientes'
+import { podeVer } from '@/lib/acesso'
 import type { EntradaRecibo } from '@/lib/carne'
 import { formatarCentavos, parseReaisParaCentavos } from '@/lib/dinheiro'
 import type { ParcelaComEstado } from '@/lib/parcelas'
@@ -33,6 +35,8 @@ type CarneDoClienteProps = Readonly<{
 
 export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProximaCobranca }: CarneDoClienteProps) {
   const { clientes } = useClientes()
+  const acesso = useAcesso()
+  const podeCancelar = permiteEscrita && podeVer(acesso, 'cancelar')
   const {
     carnes,
     pagamentos,
@@ -252,8 +256,9 @@ export function CarneDoCliente({ dados, permiteEscrita = false, aoDefinirProxima
                     })
                 : undefined
             }
-            aoCancelarPagamento={permiteEscrita ? cancelarPagamento : undefined}
-            aoCancelarVenda={permiteEscrita ? cancelarVenda : undefined}
+            mostrarPagamentos={permiteEscrita}
+            aoCancelarPagamento={podeCancelar ? cancelarPagamento : undefined}
+            aoCancelarVenda={podeCancelar ? cancelarVenda : undefined}
             aoAbrirDocumento={() => setDocumentoId(carne.venda.id)}
           />
         ))}

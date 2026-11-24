@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CarneDoCliente } from '@/data/useCarne'
+import { PERMISSOES_DO_DONO } from '@/lib/acesso'
 import { instalarDialogo } from '@/test/dialogo'
 import type { Cliente } from '@/types/cliente'
 import { ClientePage } from './ClientePage'
@@ -31,6 +32,9 @@ vi.mock('@/data/useClientes', () => ({
   }),
 }))
 vi.mock('@/data/useCarne', () => ({ useCarne: simulado.useCarne }))
+vi.mock('@/data/useAcesso', () => ({
+  useAcesso: () => ({ estado: 'liberado', dono: true, permissoes: PERMISSOES_DO_DONO }),
+}))
 
 function cliente(id: string, numero: number, nome: string, extras: Partial<Cliente> = {}): Cliente {
   return {
