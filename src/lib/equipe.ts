@@ -8,7 +8,7 @@ export const LIMITES_MEMBRO = { nome: 80, email: 254, senhaMinima: 6 } as const
 // que o do RE2 da regra, então o que passa aqui passa lá.
 const PADRAO_EMAIL = /^[^@\s]+@[^@\s]+$/
 
-const CHAVES_DE_PERMISSOES = ['financeiro', 'caixaDoDia', 'exportar'] as const
+const CHAVES_DE_PERMISSOES = ['financeiro', 'caixaDoDia', 'exportar', 'cancelar'] as const
 
 export type GrupoDePermissao = 'ver' | 'fazer'
 
@@ -17,7 +17,7 @@ export type DescricaoDePermissao = {
   rotulo: string
   descricao: string
   grupo: GrupoDePermissao
-  /** Pinta a linha no tom de perigo. Nenhuma permissão de hoje usa. */
+  /** Pinta a linha no tom de perigo. Hoje só a de cancelar usa. */
   risco?: true
 }
 
@@ -44,6 +44,13 @@ export const DESCRICAO_DAS_PERMISSOES: readonly DescricaoDePermissao[] = [
     rotulo: 'Exportar dados',
     descricao: 'Planilha de clientes e backup completo',
     grupo: 'fazer',
+  },
+  {
+    chave: 'cancelar',
+    rotulo: 'Cancelar vendas e pagamentos',
+    descricao: 'Cancelamento não se desfaz',
+    grupo: 'fazer',
+    risco: true,
   },
 ]
 
@@ -100,12 +107,16 @@ export function normalizarEmail(email: string): string {
   return email.trim().toLowerCase()
 }
 
-/** Só as três chaves, que é o que a regra aceita: `hasOnly` e `hasAll` juntos. */
+/**
+ * Só as quatro chaves, que o app novo sempre grava. A regra aceita também as três antigas,
+ * só por compatibilidade com o app anterior.
+ */
 export function copiarPermissoes(permissoes: Permissoes): Permissoes {
   return {
     financeiro: permissoes.financeiro,
     caixaDoDia: permissoes.caixaDoDia,
     exportar: permissoes.exportar,
+    cancelar: permissoes.cancelar,
   }
 }
 

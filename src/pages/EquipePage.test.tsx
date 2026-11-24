@@ -17,7 +17,7 @@ const simulado = vi.hoisted(() => ({
 vi.mock('@/data/useEquipe', () => ({ useEquipe: () => simulado.equipe }))
 vi.mock('@/data/useAcesso', () => ({ useAcesso: () => simulado.acesso }))
 
-const NENHUMA: Permissoes = { financeiro: false, caixaDoDia: false, exportar: false }
+const NENHUMA: Permissoes = { financeiro: false, caixaDoDia: false, exportar: false, cancelar: false }
 
 function membro(uid: string, nome: string, extras: Partial<Membro> = {}): Membro {
   return {
@@ -25,7 +25,7 @@ function membro(uid: string, nome: string, extras: Partial<Membro> = {}): Membro
   }
 }
 
-const ANA = membro('ana', 'Ana Lima', { permissoes: { financeiro: false, caixaDoDia: true, exportar: false } })
+const ANA = membro('ana', 'Ana Lima', { permissoes: { ...NENHUMA, caixaDoDia: true } })
 const BRUNO = membro('bruno', 'Bruno Reis', { ativo: false })
 
 function equipe(extras: Partial<Equipe> = {}): Equipe {
@@ -126,14 +126,16 @@ describe('EquipePage — lista', () => {
   it('mostra no cartão uma etiqueta por permissão ligada, na ordem das permissões', () => {
     simulado.equipe = equipe({
       membros: [
-        membro('caio', 'Caio Melo', { permissoes: { financeiro: false, caixaDoDia: true, exportar: true } }),
-        membro('dora', 'Dora Luz', { permissoes: { financeiro: true, caixaDoDia: false, exportar: false } }),
+        membro('caio', 'Caio Melo', { permissoes: { ...NENHUMA, caixaDoDia: true, exportar: true } }),
+        membro('dora', 'Dora Luz', { permissoes: { ...NENHUMA, financeiro: true } }),
+        membro('eva', 'Eva Rocha', { permissoes: { ...NENHUMA, exportar: true, cancelar: true } }),
       ],
     })
     render(<EquipePage />)
 
     expect(etiquetas(cartao('Caio Melo'))).toEqual(['Caixa do dia', 'Exportar dados'])
     expect(etiquetas(cartao('Dora Luz'))).toEqual(['Financeiro geral'])
+    expect(etiquetas(cartao('Eva Rocha'))).toEqual(['Exportar dados', 'Cancelar vendas e pagamentos'])
   })
 
   it('ativo sem nenhuma permissão: o cartão diz "Sem permissões extras"', () => {
@@ -147,7 +149,7 @@ describe('EquipePage — lista', () => {
 
   it('desativado: o cartão não mostra etiquetas', () => {
     simulado.equipe = equipe({
-      membros: [membro('bruno', 'Bruno Reis', { ativo: false, permissoes: { financeiro: true, caixaDoDia: false, exportar: false } })],
+      membros: [membro('bruno', 'Bruno Reis', { ativo: false, permissoes: { ...NENHUMA, financeiro: true } })],
     })
     render(<EquipePage />)
 
@@ -203,14 +205,14 @@ describe('EquipePage — lista', () => {
 })
 
 describe('EquipePage — novo funcionário', () => {
-  it('abre com nome, e-mail, senha escondida e as três permissões desmarcadas', () => {
+  it('abre com nome, e-mail, senha escondida e as quatro permissões desmarcadas', () => {
     render(<EquipePage />)
     const dialogo = abrirCadastro()
 
     expect(campo(/^Nome/).value).toBe('')
     expect(campo(/^E-mail/).value).toBe('')
     expect(campo(/^Senha/).type).toBe('password')
-    for (const rotulo of ['Financeiro geral', 'Caixa do dia', 'Exportar dados']) {
+    for (const rotulo of ['Financeiro geral', 'Caixa do dia', 'Exportar dados', 'Cancelar vendas e pagamentos']) {
       expect(interruptor(dialogo, rotulo).getAttribute('aria-checked')).toBe('false')
     }
     expect(within(dialogo).getByRole('button', { name: 'Cobrador' }).getAttribute('aria-pressed')).toBe('true')
@@ -359,9 +361,23 @@ describe('EquipePage — novo funcionário', () => {
       nome: '  Carla Dias ',
       email: 'Carla@Loja.com',
       senha: 'segredo1',
-      permissoes: { financeiro: false, caixaDoDia: true, exportar: false },
+      permissoes: { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false },
     })
     expect(await screen.findByText('A conta de Carla está pronta')).toBeTruthy()
+  })
+
+  it('marcar Cancelar na criação cadastra com cancelar ligado', async () => {
+    render(<EquipePage />)
+    const dialogo = abrirCadastro()
+
+    preencherCadastro()
+    fireEvent.click(interruptor(dialogo, 'Cancelar vendas e pagamentos'))
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+
+    expect(simulado.equipe.cadastrar).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ permissoes: { ...NENHUMA, cancelar: true } }),
+    )
+    await screen.findByText('A conta de Carla está pronta')
   })
 
   it('criada a conta, o mesmo card mostra o acesso, com o e-mail como a conta foi criada', async () => {
@@ -520,9 +536,22 @@ describe('EquipePage — gerenciar funcionário', () => {
     fireEvent.click(salvar(dialogo))
 
     expect(simulado.equipe.alterarPermissoes).toHaveBeenCalledExactlyOnceWith('ana', {
-      financeiro: false, caixaDoDia: false, exportar: true,
+      financeiro: false, caixaDoDia: false, exportar: true, cancelar: false,
     })
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('marcar Cancelar ao gerenciar grava cancelar ligado, sem mexer nas outras', () => {
+    render(<EquipePage />)
+    const dialogo = gerenciar('Ana Lima')
+
+    expect(interruptor(dialogo, 'Cancelar vendas e pagamentos').getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(interruptor(dialogo, 'Cancelar vendas e pagamentos'))
+    fireEvent.click(salvar(dialogo))
+
+    expect(simulado.equipe.alterarPermissoes).toHaveBeenCalledExactlyOnceWith('ana', {
+      financeiro: false, caixaDoDia: true, exportar: false, cancelar: true,
+    })
   })
 
   it('sem mudança, um envio do formulário não grava', () => {
@@ -608,7 +637,7 @@ describe('EquipePage — zona de risco e reativação', () => {
     fireEvent.click(within(confirmacao).getByRole('button', { name: 'Desativar' }))
 
     expect(simulado.equipe.alterarPermissoes).toHaveBeenCalledExactlyOnceWith('ana', {
-      financeiro: false, caixaDoDia: true, exportar: true,
+      financeiro: false, caixaDoDia: true, exportar: true, cancelar: false,
     })
     expect(simulado.equipe.definirAtivo).toHaveBeenCalledExactlyOnceWith('ana', false)
     expect(ordemDe(simulado.equipe.alterarPermissoes)).toBeLessThan(ordemDe(simulado.equipe.definirAtivo))
@@ -663,7 +692,7 @@ describe('EquipePage — zona de risco e reativação', () => {
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Reativar acesso' }))
 
     expect(simulado.equipe.alterarPermissoes).toHaveBeenCalledExactlyOnceWith('bruno', {
-      financeiro: true, caixaDoDia: false, exportar: false,
+      financeiro: true, caixaDoDia: false, exportar: false, cancelar: false,
     })
     expect(simulado.equipe.definirAtivo).toHaveBeenCalledExactlyOnceWith('bruno', true)
     expect(ordemDe(simulado.equipe.alterarPermissoes)).toBeLessThan(ordemDe(simulado.equipe.definirAtivo))
@@ -680,7 +709,7 @@ describe('item Equipe no menu', () => {
 
   it('aparece para o dono', () => {
     const dono: Acesso = {
-      estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true },
+      estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true, cancelar: true },
     }
 
     expect(rotulosDoMenu(dono)).toContain('Equipe')
@@ -688,7 +717,7 @@ describe('item Equipe no menu', () => {
 
   it('some para quem não é dono, mesmo com todas as permissões', () => {
     const funcionario: Acesso = {
-      estado: 'liberado', dono: false, permissoes: { financeiro: true, caixaDoDia: true, exportar: true },
+      estado: 'liberado', dono: false, permissoes: { financeiro: true, caixaDoDia: true, exportar: true, cancelar: true },
     }
 
     expect(rotulosDoMenu(funcionario)).toEqual(['Clientes', 'Rotas', 'Financeiro'])

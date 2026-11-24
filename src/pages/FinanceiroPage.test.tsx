@@ -26,13 +26,13 @@ vi.mock('@/data/useClientes', () => ({ useClientes: () => ({ clientes: simulado.
 vi.mock('@/data/useAcesso', () => ({ useAcesso: () => simulado.acesso }))
 
 const DONO: Acesso = {
-  estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true },
+  estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true, cancelar: true },
 }
 
 function membro(permissoes: Partial<Permissoes>): Acesso {
   return {
     estado: 'liberado', dono: false,
-    permissoes: { financeiro: false, caixaDoDia: false, exportar: false, ...permissoes },
+    permissoes: { financeiro: false, caixaDoDia: false, exportar: false, cancelar: false, ...permissoes },
   }
 }
 

@@ -53,7 +53,7 @@ function montar() {
   return renderHook(() => useAcesso(), { wrapper: AcessoProvider })
 }
 
-const permissoes = { financeiro: false, caixaDoDia: true, exportar: false }
+const permissoes = { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false }
 
 beforeEach(() => {
   simulado.uid = 'funcionario-1'

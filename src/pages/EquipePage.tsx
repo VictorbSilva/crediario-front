@@ -24,7 +24,7 @@ const ENTRADA_VAZIA: EntradaNovoMembro = {
   nome: '',
   email: '',
   senha: '',
-  permissoes: { financeiro: false, caixaDoDia: false, exportar: false },
+  permissoes: { financeiro: false, caixaDoDia: false, exportar: false, cancelar: false },
 }
 
 type CampoDeTexto = 'nome' | 'email' | 'senha'

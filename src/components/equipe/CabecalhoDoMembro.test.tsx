@@ -7,7 +7,7 @@ import { CabecalhoDoMembro } from './CabecalhoDoMembro'
 function membro(extras: Partial<Membro> = {}): Membro {
   return {
     uid: 'ana', nome: 'Ana Lima', email: 'ana.lima@loja.com', ativo: true,
-    permissoes: { financeiro: false, caixaDoDia: false, exportar: false }, pendente: false, ...extras,
+    permissoes: { financeiro: false, caixaDoDia: false, exportar: false, cancelar: false }, pendente: false, ...extras,
   }
 }
 

@@ -23,6 +23,18 @@ o grupo, as etiquetas e os perfis Cobrador e Gerente saem dessa lista sozinhos.
 A chave nova também precisa existir no tipo `Permissoes` e na regra de `membros`, mas isso é
 dado, não UI: ver `docs/armadilhas.md`.
 
+### Permissões existentes
+
+Uma linha por item de `DESCRICAO_DAS_PERMISSOES`, na ordem da tela. Permissão nova entra primeiro
+em `DESCRICAO_DAS_PERMISSOES` e depois nesta lista. O perfil Gerente liga todas.
+
+| Chave | Rótulo | Grupo | Ícone | Risco |
+| --- | --- | --- | --- | --- |
+| `financeiro` | Financeiro geral | ver | `Wallet` | não |
+| `caixaDoDia` | Caixa do dia | ver | `CalendarDays` | não |
+| `exportar` | Exportar dados | fazer | `Download` | não |
+| `cancelar` | Cancelar vendas e pagamentos | fazer | `Ban` | sim |
+
 ### Título de seção
 
 `text-xs font-bold uppercase tracking-wider text-slate-600`. Exemplo: "Permissões", no topo do
@@ -48,8 +60,8 @@ toque no texto ou no ícone vira um clique no botão, e o toque no próprio bot�
 ### Tom de risco
 
 Para permissão com `risco: true`: fundo da linha `bg-danger-soft`, título e descrição
-`text-danger` e o ícone num quadrado `bg-white text-danger`. Hoje nenhuma permissão usa esse tom.
-A primeira será a de cancelar.
+`text-danger` e o ícone num quadrado `bg-white text-danger`. Hoje só "Cancelar vendas e
+pagamentos" usa esse tom.
 
 ### "Sempre liberado"
 

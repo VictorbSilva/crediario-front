@@ -11,7 +11,7 @@ import {
 } from './acesso'
 import type { Acesso, Permissoes } from './acesso'
 
-const permissoes = { financeiro: false, caixaDoDia: true, exportar: false }
+const permissoes = { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false }
 
 describe('literais do dono', () => {
   it('são os mesmos de ehDono() e ehTesteNoTreino() no firestore.rules', () => {
@@ -20,8 +20,8 @@ describe('literais do dono', () => {
     expect(EMPRESA_TREINO).toBe('loja-treino')
   })
 
-  it('o dono tem as três permissões', () => {
-    expect(PERMISSOES_DO_DONO).toEqual({ financeiro: true, caixaDoDia: true, exportar: true })
+  it('o dono tem as quatro permissões', () => {
+    expect(PERMISSOES_DO_DONO).toEqual({ financeiro: true, caixaDoDia: true, exportar: true, cancelar: true })
   })
 })
 
@@ -100,8 +100,30 @@ describe('acessoDoMembro', () => {
     expect(acesso).toEqual({
       estado: 'liberado',
       dono: false,
-      permissoes: { financeiro: false, caixaDoDia: false, exportar },
+      permissoes: { financeiro: false, caixaDoDia: false, exportar, cancelar: false },
     })
+  })
+
+  it.each([
+    ['true', true, true],
+    ['texto "true"', false, 'true'],
+    ['número 1', false, 1],
+    ['false', false, false],
+  ])('cancelar %s é lido como %s', (_rotulo, esperado, cancelar) => {
+    const acesso = acessoDoMembro({
+      existe: true,
+      doCache: false,
+      dados: { ativo: true, permissoes: { ...permissoes, cancelar } },
+    })
+
+    expect(acesso).toEqual({ estado: 'liberado', dono: false, permissoes: { ...permissoes, cancelar: esperado } })
+  })
+
+  it('membro antigo, sem a chave cancelar, não pode cancelar e mantém as outras', () => {
+    const antigas = { financeiro: true, caixaDoDia: true, exportar: true }
+    const acesso = acessoDoMembro({ existe: true, doCache: false, dados: { ativo: true, permissoes: antigas } })
+
+    expect(acesso).toEqual({ estado: 'liberado', dono: false, permissoes: { ...antigas, cancelar: false } })
   })
 
   it('existe sem dados lidos é desativado', () => {
@@ -116,7 +138,7 @@ function membro(permissoes: Permissoes): Acesso {
   return { estado: 'liberado', dono: false, permissoes }
 }
 
-const NENHUMA: Permissoes = { financeiro: false, caixaDoDia: false, exportar: false }
+const NENHUMA: Permissoes = { financeiro: false, caixaDoDia: false, exportar: false, cancelar: false }
 
 describe('podeVer', () => {
   it('o dono vê tudo', () => {
@@ -125,9 +147,10 @@ describe('podeVer', () => {
     expect(podeVer(dono, 'financeiro')).toBe(true)
     expect(podeVer(dono, 'caixaDoDia')).toBe(true)
     expect(podeVer(dono, 'exportar')).toBe(true)
+    expect(podeVer(dono, 'cancelar')).toBe(true)
   })
 
-  it.each(['financeiro', 'caixaDoDia', 'exportar'] as const)('o membro vê %s só quando ela é true', (chave) => {
+  it.each(['financeiro', 'caixaDoDia', 'exportar', 'cancelar'] as const)('o membro vê %s só quando ela é true', (chave) => {
     expect(podeVer(membro({ ...NENHUMA, [chave]: true }), chave)).toBe(true)
     expect(podeVer(membro(NENHUMA), chave)).toBe(false)
   })

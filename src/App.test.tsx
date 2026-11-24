@@ -31,14 +31,14 @@ beforeEach(() => {
   vi.stubEnv('VITE_BUSINESS_ID', 'loja-treino')
   vi.stubEnv('VITE_USE_FIREBASE_EMULATORS', '')
   simulado.acesso = {
-    estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true },
+    estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true, cancelar: true },
   }
 })
 
 function membro(permissoes: Partial<Permissoes>): Acesso {
   return {
     estado: 'liberado', dono: false,
-    permissoes: { financeiro: false, caixaDoDia: false, exportar: false, ...permissoes },
+    permissoes: { financeiro: false, caixaDoDia: false, exportar: false, cancelar: false, ...permissoes },
   }
 }
 
