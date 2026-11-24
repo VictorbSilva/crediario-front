@@ -48,8 +48,8 @@ toque no texto ou no ícone vira um clique no botão, e o toque no próprio bot�
 ### Tom de risco
 
 Para permissão com `risco: true`: fundo da linha `bg-danger-soft`, título e descrição
-`text-danger` e o ícone num quadrado `bg-white text-danger`. Hoje nenhuma permissão usa esse tom.
-A primeira será a de cancelar.
+`text-danger` e o ícone num quadrado `bg-white text-danger`. Hoje só "Cancelar vendas e
+pagamentos" usa esse tom.
 
 ### "Sempre liberado"
 

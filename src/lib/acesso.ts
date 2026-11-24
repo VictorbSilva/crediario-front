@@ -4,9 +4,14 @@ export const UID_DONO = 'zQKH3lJ6mtYu5uE32PeHcUGZEEs1'
 export const UID_TESTE = 'B3HGx0RggpXWzy400742432aLw72'
 export const EMPRESA_TREINO = 'loja-treino'
 
-export type Permissoes = { financeiro: boolean; caixaDoDia: boolean; exportar: boolean }
+export type Permissoes = { financeiro: boolean; caixaDoDia: boolean; exportar: boolean; cancelar: boolean }
 
-export const PERMISSOES_DO_DONO: Permissoes = { financeiro: true, caixaDoDia: true, exportar: true }
+export const PERMISSOES_DO_DONO: Permissoes = {
+  financeiro: true,
+  caixaDoDia: true,
+  exportar: true,
+  cancelar: true,
+}
 
 export type Acesso =
   | { estado: 'carregando' }
@@ -23,6 +28,8 @@ function permissoesLidas(valor: unknown): Permissoes {
     financeiro: mapa.financeiro === true,
     caixaDoDia: mapa.caixaDoDia === true,
     exportar: mapa.exportar === true,
+    // Membro gravado pelo app anterior não tem a chave: fica sem poder cancelar.
+    cancelar: mapa.cancelar === true,
   }
 }
 

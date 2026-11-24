@@ -23,8 +23,8 @@ vi.mock('@/lib/equipe', async (importOriginal) => {
   }
 })
 
-const NENHUMA: Permissoes = { financeiro: false, caixaDoDia: false, exportar: false }
-const TODAS: Permissoes = { financeiro: true, caixaDoDia: true, exportar: true }
+const NENHUMA: Permissoes = { financeiro: false, caixaDoDia: false, exportar: false, cancelar: false }
+const TODAS: Permissoes = { financeiro: true, caixaDoDia: true, exportar: true, cancelar: true }
 
 function montar(permissoes: Permissoes) {
   const aoMudar = vi.fn()
@@ -99,8 +99,24 @@ describe('SeletorDePermissoes — estrutura', () => {
     expect(within(ver).getByRole('switch', { name: 'Financeiro geral' })).toBeTruthy()
     expect(within(ver).getByRole('switch', { name: 'Caixa do dia' })).toBeTruthy()
     expect(within(ver).getByText('Total a receber, vencidos e clientes em atraso')).toBeTruthy()
-    expect(within(fazer).getAllByRole('switch')).toHaveLength(1)
+    expect(within(fazer).getAllByRole('switch')).toHaveLength(2)
     expect(within(fazer).getByRole('switch', { name: 'Exportar dados' })).toBeTruthy()
+  })
+
+  it('Cancelar é a última linha de "Pode fazer", no tom de risco', () => {
+    render(<SeletorDePermissoes permissoes={NENHUMA} aoMudar={vi.fn()} />)
+
+    const fazer = screen.getByRole('group', { name: 'Pode fazer' })
+    const nomes = within(fazer).getAllByRole('switch').map((botao) => botao.getAttribute('aria-labelledby'))
+    const rotulos = nomes.map((id) => document.getElementById(id ?? '')?.textContent)
+    expect(rotulos).toEqual(['Exportar dados', 'Cancelar vendas e pagamentos'])
+
+    const cancelar = within(fazer).getByText('Cancelar vendas e pagamentos').closest('label') as HTMLElement
+    expect(cancelar.className).toContain('bg-danger-soft')
+    expect(within(cancelar).getByText('Cancelamento não se desfaz').className).toContain('text-danger')
+
+    const exportar = within(fazer).getByText('Exportar dados').closest('label') as HTMLElement
+    expect(exportar.className).not.toContain('bg-danger-soft')
   })
 
   it('grupo sem nenhuma permissão não aparece', () => {
@@ -116,11 +132,12 @@ describe('SeletorDePermissoes — estrutura', () => {
   })
 
   it('os interruptores mostram as permissões recebidas', () => {
-    render(<SeletorDePermissoes permissoes={{ financeiro: false, caixaDoDia: true, exportar: false }} aoMudar={vi.fn()} />)
+    render(<SeletorDePermissoes permissoes={{ ...NENHUMA, caixaDoDia: true, cancelar: true }} aoMudar={vi.fn()} />)
 
     expect(interruptor('Financeiro geral').getAttribute('aria-checked')).toBe('false')
     expect(interruptor('Caixa do dia').getAttribute('aria-checked')).toBe('true')
     expect(interruptor('Exportar dados').getAttribute('aria-checked')).toBe('false')
+    expect(interruptor('Cancelar vendas e pagamentos').getAttribute('aria-checked')).toBe('true')
   })
 })
 
@@ -146,9 +163,12 @@ describe('SeletorDePermissoes — perfis', () => {
 
     rerender(<SeletorDePermissoes permissoes={{ ...NENHUMA, exportar: true }} aoMudar={vi.fn()} />)
     expect(pressionados().map((botao) => botao.textContent)).toEqual(['Personalizado'])
+
+    rerender(<SeletorDePermissoes permissoes={{ ...TODAS, cancelar: false }} aoMudar={vi.fn()} />)
+    expect(pressionados().map((botao) => botao.textContent)).toEqual(['Personalizado'])
   })
 
-  it('Gerente liga tudo e Cobrador desliga tudo', () => {
+  it('Gerente liga as quatro, inclusive cancelar, e Cobrador desliga tudo', () => {
     const aoMudar = montar({ ...NENHUMA, caixaDoDia: true })
 
     fireEvent.click(perfil('Gerente'))
@@ -181,7 +201,7 @@ describe('SeletorDePermissoes — interruptores', () => {
 
     fireEvent.click(interruptor('Caixa do dia'))
 
-    expect(aoMudar).toHaveBeenCalledExactlyOnceWith({ financeiro: false, caixaDoDia: true, exportar: true })
+    expect(aoMudar).toHaveBeenCalledExactlyOnceWith({ financeiro: false, caixaDoDia: true, exportar: true, cancelar: false })
   })
 
   it('os perfis ligam e desligam os interruptores, e mexer num depois de Cobrador vira Personalizado', () => {
@@ -190,7 +210,7 @@ describe('SeletorDePermissoes — interruptores', () => {
       screen.getAllByRole('switch').filter((botao) => botao.getAttribute('aria-checked') === 'true').length
 
     fireEvent.click(perfil('Gerente'))
-    expect(ligados()).toBe(3)
+    expect(ligados()).toBe(4)
     expect(perfil('Gerente').getAttribute('aria-pressed')).toBe('true')
 
     fireEvent.click(perfil('Cobrador'))

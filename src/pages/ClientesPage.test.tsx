@@ -100,7 +100,7 @@ beforeEach(() => {
   simulado.larga = true
   simulado.clientes = estado([JOAO, MARIA, ZECA])
   simulado.acesso = {
-    estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true },
+    estado: 'liberado', dono: true, permissoes: { financeiro: true, caixaDoDia: true, exportar: true, cancelar: true },
   }
   simulado.useCarne.mockReset().mockReturnValue({ carnes: [], carregando: false, erro: null })
   simulado.carneDaEmpresa = {
@@ -440,7 +440,7 @@ describe('ClientesPage — avisos e diálogos', () => {
 
   it('sem a permissão de exportar, o botão some e o "Novo cliente" continua', () => {
     simulado.acesso = {
-      estado: 'liberado', dono: false, permissoes: { financeiro: true, caixaDoDia: true, exportar: false },
+      estado: 'liberado', dono: false, permissoes: { financeiro: true, caixaDoDia: true, exportar: false, cancelar: false },
     }
     montar()
 
@@ -450,7 +450,7 @@ describe('ClientesPage — avisos e diálogos', () => {
 
   it('com a permissão de exportar, o membro vê o botão', () => {
     simulado.acesso = {
-      estado: 'liberado', dono: false, permissoes: { financeiro: false, caixaDoDia: false, exportar: true },
+      estado: 'liberado', dono: false, permissoes: { financeiro: false, caixaDoDia: false, exportar: true, cancelar: false },
     }
     montar()
 

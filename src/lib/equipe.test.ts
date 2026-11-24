@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DESCRICAO_DAS_PERMISSOES,
   LIMITES_MEMBRO,
+  copiarPermissoes,
   gerarSenha,
   mensagemDeAcesso,
   mesmasPermissoes,
@@ -20,7 +21,7 @@ function entrada(extra: Partial<EntradaNovoMembro> = {}): EntradaNovoMembro {
     nome: 'Maria Cobradora',
     email: 'maria@loja.com',
     senha: 'segredo',
-    permissoes: { financeiro: false, caixaDoDia: true, exportar: false },
+    permissoes: { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false },
     ...extra,
   }
 }
@@ -83,9 +84,9 @@ describe('validarNovoMembro', () => {
   })
 
   it('recusa permissões com chave a mais, chave a menos ou valor que não é bool', () => {
-    const comChaveAMais = { financeiro: true, caixaDoDia: true, exportar: true, admin: true }
-    const semExportar = { financeiro: true, caixaDoDia: true }
-    const comTexto = { financeiro: 'sim', caixaDoDia: true, exportar: true }
+    const comChaveAMais = { financeiro: true, caixaDoDia: true, exportar: true, cancelar: true, admin: true }
+    const semExportar = { financeiro: true, caixaDoDia: true, cancelar: true }
+    const comTexto = { financeiro: 'sim', caixaDoDia: true, exportar: true, cancelar: true }
 
     for (const permissoes of [comChaveAMais, semExportar, comTexto, null]) {
       const erros = validarNovoMembro(
@@ -95,9 +96,24 @@ describe('validarNovoMembro', () => {
     }
   })
 
-  it('aceita qualquer combinação dos três bool, inclusive todos desligados', () => {
-    const permissoes = { financeiro: false, caixaDoDia: false, exportar: false }
-    expect(validarNovoMembro(entrada({ permissoes }))).toEqual({})
+  it('exige a chave cancelar, e só como bool: o app novo sempre grava as quatro', () => {
+    const tresAntigas = { financeiro: true, caixaDoDia: true, exportar: true }
+    const cancelarTexto = { ...tresAntigas, cancelar: 'true' }
+
+    for (const permissoes of [tresAntigas, cancelarTexto]) {
+      const erros = validarNovoMembro(
+        entrada({ permissoes: permissoes as unknown as EntradaNovoMembro['permissoes'] }),
+      )
+      expect(erros.permissoes).toBe('Permissões inválidas.')
+    }
+  })
+
+  it('aceita qualquer combinação dos quatro bool, inclusive todos desligados', () => {
+    const desligadas = { financeiro: false, caixaDoDia: false, exportar: false, cancelar: false }
+    const soCancelar = { ...desligadas, cancelar: true }
+
+    expect(validarNovoMembro(entrada({ permissoes: desligadas }))).toEqual({})
+    expect(validarNovoMembro(entrada({ permissoes: soCancelar }))).toEqual({})
   })
 
   it('devolve todos os erros de uma vez', () => {
@@ -123,7 +139,7 @@ describe('montarCamposMembro', () => {
       nome: 'Maria Cobradora',
       email: 'maria@loja.com',
       ativo: true,
-      permissoes: { financeiro: false, caixaDoDia: true, exportar: false },
+      permissoes: { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false },
       atualizadoPor: 'abc12345',
     })
   })
@@ -135,14 +151,22 @@ describe('montarCamposMembro', () => {
     expect(JSON.stringify(campos)).not.toContain('segredo')
   })
 
-  it('copia só as três chaves de permissões, que é o que a regra aceita', () => {
-    const permissoes = { financeiro: true, caixaDoDia: false, exportar: true, extra: true }
+  it('copia só as quatro chaves de permissões, que é o que a regra aceita', () => {
+    const permissoes = { financeiro: true, caixaDoDia: false, exportar: true, cancelar: true, extra: true }
     const campos = montarCamposMembro(
       entrada({ permissoes: permissoes as EntradaNovoMembro['permissoes'] }),
       { dispositivo: 'abc12345' },
     )
 
-    expect(campos.permissoes).toEqual({ financeiro: true, caixaDoDia: false, exportar: true })
+    expect(campos.permissoes).toEqual({ financeiro: true, caixaDoDia: false, exportar: true, cancelar: true })
+  })
+})
+
+describe('copiarPermissoes', () => {
+  it.each([true, false])('copia as quatro chaves, com cancelar %s', (cancelar) => {
+    const permissoes = { financeiro: false, caixaDoDia: true, exportar: false, cancelar, extra: true }
+
+    expect(copiarPermissoes(permissoes)).toEqual({ financeiro: false, caixaDoDia: true, exportar: false, cancelar })
   })
 })
 
@@ -165,7 +189,7 @@ describe('mensagemDoErroDeCadastro', () => {
 })
 
 describe('DESCRICAO_DAS_PERMISSOES', () => {
-  it('descreve as três permissões, na ordem da tela, com grupo e sem risco', () => {
+  it('descreve as quatro permissões, na ordem da tela, com grupo; só cancelar tem risco', () => {
     expect(DESCRICAO_DAS_PERMISSOES).toEqual([
       {
         chave: 'financeiro',
@@ -185,17 +209,26 @@ describe('DESCRICAO_DAS_PERMISSOES', () => {
         descricao: 'Planilha de clientes e backup completo',
         grupo: 'fazer',
       },
+      {
+        chave: 'cancelar',
+        rotulo: 'Cancelar vendas e pagamentos',
+        descricao: 'Cancelamento não se desfaz',
+        grupo: 'fazer',
+        risco: true,
+      },
     ])
   })
 })
 
 describe('permissoesDoPerfil', () => {
   it('Cobrador desliga todas as permissões', () => {
-    expect(permissoesDoPerfil('cobrador')).toEqual({ financeiro: false, caixaDoDia: false, exportar: false })
+    expect(permissoesDoPerfil('cobrador')).toEqual({
+      financeiro: false, caixaDoDia: false, exportar: false, cancelar: false,
+    })
   })
 
-  it('Gerente liga todas as permissões', () => {
-    expect(permissoesDoPerfil('gerente')).toEqual({ financeiro: true, caixaDoDia: true, exportar: true })
+  it('Gerente liga as quatro permissões, inclusive cancelar', () => {
+    expect(permissoesDoPerfil('gerente')).toEqual({ financeiro: true, caixaDoDia: true, exportar: true, cancelar: true })
   })
 
   it('devolve um objeto novo a cada chamada', () => {
@@ -205,15 +238,17 @@ describe('permissoesDoPerfil', () => {
 
 describe('perfilDe', () => {
   it('tudo desligado é Cobrador e tudo ligado é Gerente', () => {
-    expect(perfilDe({ financeiro: false, caixaDoDia: false, exportar: false })).toBe('cobrador')
-    expect(perfilDe({ financeiro: true, caixaDoDia: true, exportar: true })).toBe('gerente')
+    expect(perfilDe({ financeiro: false, caixaDoDia: false, exportar: false, cancelar: false })).toBe('cobrador')
+    expect(perfilDe({ financeiro: true, caixaDoDia: true, exportar: true, cancelar: true })).toBe('gerente')
   })
 
   it.each([
-    { financeiro: true, caixaDoDia: false, exportar: false },
-    { financeiro: false, caixaDoDia: true, exportar: false },
-    { financeiro: false, caixaDoDia: false, exportar: true },
-    { financeiro: true, caixaDoDia: true, exportar: false },
+    { financeiro: true, caixaDoDia: false, exportar: false, cancelar: false },
+    { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false },
+    { financeiro: false, caixaDoDia: false, exportar: true, cancelar: false },
+    { financeiro: false, caixaDoDia: false, exportar: false, cancelar: true },
+    { financeiro: true, caixaDoDia: true, exportar: false, cancelar: false },
+    { financeiro: true, caixaDoDia: true, exportar: true, cancelar: false },
   ])('qualquer mistura é Personalizado: %j', (permissoes) => {
     expect(perfilDe(permissoes)).toBe('personalizado')
   })
@@ -319,13 +354,13 @@ describe('mensagemDeAcesso', () => {
 })
 
 describe('mesmasPermissoes', () => {
-  const BASE = { financeiro: true, caixaDoDia: false, exportar: true }
+  const BASE = { financeiro: true, caixaDoDia: false, exportar: true, cancelar: false }
 
   it('iguais chave por chave são as mesmas, mesmo em objetos diferentes', () => {
     expect(mesmasPermissoes(BASE, { ...BASE })).toBe(true)
   })
 
-  it.each(['financeiro', 'caixaDoDia', 'exportar'] as const)('uma diferença em %s já basta', (chave) => {
+  it.each(['financeiro', 'caixaDoDia', 'exportar', 'cancelar'] as const)('uma diferença em %s já basta', (chave) => {
     expect(mesmasPermissoes(BASE, { ...BASE, [chave]: !BASE[chave] })).toBe(false)
   })
 

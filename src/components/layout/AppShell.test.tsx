@@ -12,7 +12,7 @@ import { SyncBadge } from './SyncBadge'
 const LIBERADO: Acesso = {
   estado: 'liberado',
   dono: true,
-  permissoes: { financeiro: true, caixaDoDia: true, exportar: true },
+  permissoes: { financeiro: true, caixaDoDia: true, exportar: true, cancelar: true },
 }
 
 const simulado = vi.hoisted(() => ({
@@ -84,7 +84,7 @@ describe('AppShell', () => {
 
   it('membro sem financeiro nem caixa do dia não vê Financeiro em nenhuma das duas navegações', () => {
     simulado.acesso = {
-      estado: 'liberado', dono: false, permissoes: { financeiro: false, caixaDoDia: false, exportar: true },
+      estado: 'liberado', dono: false, permissoes: { financeiro: false, caixaDoDia: false, exportar: true, cancelar: false },
     }
     montar('/rotas')
 

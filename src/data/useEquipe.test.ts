@@ -72,7 +72,7 @@ const MARIA = {
   nome: 'Maria',
   email: 'maria@loja.com',
   ativo: true,
-  permissoes: { financeiro: false, caixaDoDia: true, exportar: false },
+  permissoes: { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false },
   criadoEm: 'ontem',
   atualizadoEm: 'ontem',
   atualizadoPor: 'outro',
@@ -83,7 +83,7 @@ function entrada(extra: Partial<EntradaNovoMembro> = {}): EntradaNovoMembro {
     nome: ' Maria ',
     email: ' Maria@Loja.com ',
     senha: 'segredo',
-    permissoes: { financeiro: false, caixaDoDia: true, exportar: false },
+    permissoes: { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false },
     ...extra,
   }
 }
@@ -160,7 +160,7 @@ describe('useEquipe — leitura', () => {
         nome: 'Maria',
         email: 'maria@loja.com',
         ativo: true,
-        permissoes: { financeiro: false, caixaDoDia: true, exportar: false },
+        permissoes: { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false },
         pendente: false,
       },
       {
@@ -168,7 +168,7 @@ describe('useEquipe — leitura', () => {
         nome: 'João',
         email: 'joao@loja.com',
         ativo: false,
-        permissoes: { financeiro: false, caixaDoDia: true, exportar: false },
+        permissoes: { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false },
         pendente: true,
       },
     ])
@@ -186,8 +186,25 @@ describe('useEquipe — leitura', () => {
 
     expect(result.current.membros[0]).toMatchObject({
       ativo: false,
-      permissoes: { financeiro: false, caixaDoDia: false, exportar: false },
+      permissoes: { financeiro: false, caixaDoDia: false, exportar: false, cancelar: false },
     })
+  })
+
+  it('cancelar só vale true quando é exatamente true, e falta no membro antigo vale false', () => {
+    const { result } = renderHook(() => useEquipe())
+    const antigas = { financeiro: true, caixaDoDia: true, exportar: true }
+
+    emitir([
+      { id: 'uid-pode', dados: { ...MARIA, permissoes: { ...antigas, cancelar: true } } },
+      { id: 'uid-texto', dados: { ...MARIA, permissoes: { ...antigas, cancelar: 'true' } } },
+      { id: 'uid-antigo', dados: { ...MARIA, permissoes: antigas } },
+    ])
+
+    expect(result.current.membros.map(({ uid, permissoes }) => [uid, permissoes])).toEqual([
+      ['uid-pode', { ...antigas, cancelar: true }],
+      ['uid-texto', { ...antigas, cancelar: false }],
+      ['uid-antigo', { ...antigas, cancelar: false }],
+    ])
   })
 
   it('erro de leitura avisa e para de carregar', () => {
@@ -233,7 +250,7 @@ describe('useEquipe — cadastrar', () => {
         nome: 'Maria',
         email: 'maria@loja.com',
         ativo: true,
-        permissoes: { financeiro: false, caixaDoDia: true, exportar: false },
+        permissoes: { financeiro: false, caixaDoDia: true, exportar: false, cancelar: false },
         atualizadoPor: 'abc12345',
         criadoEm: CARIMBO,
         atualizadoEm: CARIMBO,
@@ -328,16 +345,16 @@ describe('useEquipe — cadastrar', () => {
 })
 
 describe('useEquipe — alterar', () => {
-  it('alterarPermissoes grava só as três chaves, o carimbo e o dispositivo', () => {
+  it('alterarPermissoes grava só as quatro chaves, o carimbo e o dispositivo', () => {
     const { result } = renderHook(() => useEquipe())
-    const permissoes = { financeiro: true, caixaDoDia: false, exportar: true, extra: true }
+    const permissoes = { financeiro: true, caixaDoDia: false, exportar: true, cancelar: true, extra: true }
 
     act(() => result.current.alterarPermissoes('uid-da-maria', permissoes))
 
     expect(simulado.updateDoc).toHaveBeenCalledExactlyOnceWith(
       { caminho: ['businesses', 'loja-treino', 'membros', 'uid-da-maria'] },
       {
-        permissoes: { financeiro: true, caixaDoDia: false, exportar: true },
+        permissoes: { financeiro: true, caixaDoDia: false, exportar: true, cancelar: true },
         atualizadoEm: CARIMBO,
         atualizadoPor: 'abc12345',
       },

@@ -49,6 +49,7 @@ function paraMembro(documento: QueryDocumentSnapshot<DocumentData>): Membro {
       financeiro: permissoes.financeiro === true,
       caixaDoDia: permissoes.caixaDoDia === true,
       exportar: permissoes.exportar === true,
+      cancelar: permissoes.cancelar === true,
     },
     pendente: documento.metadata.hasPendingWrites,
   }

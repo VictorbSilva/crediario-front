@@ -82,7 +82,7 @@ describe('CampoDeSenha', () => {
     expect(screen.getByRole('button', { name: 'Esconder a senha' })).toBeTruthy()
     expect(validarNovoMembro({
       nome: 'Ana', email: 'ana@loja.com', senha: senha().value,
-      permissoes: { financeiro: false, caixaDoDia: false, exportar: false },
+      permissoes: { financeiro: false, caixaDoDia: false, exportar: false, cancelar: false },
     })).toEqual({})
   })
 

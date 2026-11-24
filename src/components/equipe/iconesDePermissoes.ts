@@ -1,4 +1,4 @@
-import { CalendarDays, Download, Wallet } from 'lucide-react'
+import { Ban, CalendarDays, Download, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Permissoes } from '@/lib/acesso'
 
@@ -7,4 +7,5 @@ export const ICONES_DAS_PERMISSOES: Record<keyof Permissoes, LucideIcon> = {
   financeiro: Wallet,
   caixaDoDia: CalendarDays,
   exportar: Download,
+  cancelar: Ban,
 }
